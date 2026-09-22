@@ -15,6 +15,7 @@ use crate::menu::SideMenu;
 use crate::player::{self, Controls};
 use crate::render::{Draw, Renderer};
 use crate::style;
+use crate::viewmodel::Viewmodel;
 use crate::world::{Game, Look, Model, Placed};
 
 /// Seconds a fade to or from black takes.
@@ -60,6 +61,8 @@ enum Then {
 pub struct DeadSignal {
     game: Game,
     renderer: Option<Renderer>,
+    /// The arms, once loaded.
+    viewmodel: Option<Viewmodel>,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
@@ -80,6 +83,7 @@ impl DeadSignal {
         Self {
             game: Game::new(),
             renderer: None,
+            viewmodel: None,
             screen: Screen::Title,
             title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
@@ -126,6 +130,9 @@ impl DeadSignal {
             Screen::Run => {
                 let yaw = (-(START_LOOK.x - START.0)).atan2(-(START_LOOK.z - START.1));
                 self.game.spawn_player(START.0, START.1, yaw);
+                if let Some(vm) = &mut self.viewmodel {
+                    vm.reset();
+                }
                 cx.request(ShellRequest::LockPointer(true));
             }
             Screen::Title => {
@@ -271,6 +278,11 @@ impl Host for DeadSignal {
             None => {}
         }
         self.place_camera(clock.time);
+        if self.screen == Screen::Run
+            && let (Some(vm), Some((body, view))) = (&mut self.viewmodel, self.game.player())
+        {
+            vm.update(&view, &body, clock.dt);
+        }
         if self.black > 0.0 {
             let screen = ui.clip();
             ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, self.black));
@@ -290,6 +302,10 @@ impl AppHost for DeadSignal {
             Ok(props) => self.game.spawn_props(props),
             Err(e) => log_error!("title scene: {e}"),
         }
+        match assets::load_rigged(&mut renderer, "arms") {
+            Ok(rig) => self.viewmodel = Some(Viewmodel::new(rig)),
+            Err(e) => log_error!("arms: {e}"),
+        }
         renderer.upload(gpu);
         self.renderer = Some(renderer);
     }
@@ -301,6 +317,11 @@ impl AppHost for DeadSignal {
             renderer.draw(Draw { mesh: model.0, model: placed.0, emissive: look.emissive, fog: look.fog });
         }
         let time = self.game.clock().time;
+        if self.screen == Screen::Run
+            && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
+        {
+            renderer.draw_viewmodel(vm.draw(&view, time));
+        }
         renderer.render(cx, &self.camera, &style::AIR, time);
     }
 }

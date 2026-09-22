@@ -34,7 +34,7 @@ const SNAP_DOWN: f64 = 0.35;
 pub const BOUNDS: f64 = 115.0;
 
 /// Radians of turn per count of raw mouse motion.
-pub const SENSITIVITY: f64 = 0.0018;
+pub const SENSITIVITY: f64 = 0.0015;
 const PITCH_LIMIT: f64 = 1.55;
 /// Vertical field of view, and how much wider it goes at a full sprint.
 pub const FOV: f64 = 65.0;

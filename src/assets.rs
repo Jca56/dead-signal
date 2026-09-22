@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use lntrn_math::{Mat4, Vec3};
 use lntrn_model::{Gltf, Mode};
 
-use crate::render::{MeshId, Renderer, Vertex};
+use crate::render::{MAX_JOINTS, MeshId, Renderer, SkinnedMeshId, SkinnedVertex, Vertex};
 
 /// One object of a model file, ready to draw.
 #[derive(Clone, Debug)]
@@ -72,6 +72,45 @@ fn props(renderer: &mut Renderer, gltf: &Gltf, path: &Path) -> Vec<Prop> {
         out.push(Prop { name, mesh: renderer.add_mesh(&vertices), model, triangles });
     }
     out
+}
+
+/// A skinned model: its mesh on the GPU, and the file itself for its
+/// bones and animations.
+pub struct Rigged {
+    pub mesh: SkinnedMeshId,
+    pub gltf: Gltf,
+    pub skin: usize,
+}
+
+/// Load `models/<name>.glb`, whose first skinned mesh is the model.
+pub fn load_rigged(renderer: &mut Renderer, name: &str) -> Result<Rigged, String> {
+    let path = root().join("models").join(format!("{name}.glb"));
+    let gltf = Gltf::load(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let node = gltf.nodes.iter().find(|n| n.skin.is_some() && n.mesh.is_some()).ok_or_else(|| format!("{}: no skinned mesh", path.display()))?;
+    let (skin, mesh) = (node.skin.unwrap_or(0), node.mesh.unwrap_or(0));
+    if gltf.skins[skin].joints.len() > MAX_JOINTS {
+        return Err(format!("{}: {} bones, at most {MAX_JOINTS}", path.display(), gltf.skins[skin].joints.len()));
+    }
+    let mut vertices = Vec::new();
+    for p in gltf.meshes[mesh].primitives.iter().filter(|p| p.mode == Mode::Triangles) {
+        let base = p.material.and_then(|m| gltf.materials.get(m)).map_or([1.0; 4], |m| m.base_color);
+        for tri in p.indices.chunks_exact(3) {
+            let corner = |k: usize| tri[k] as usize;
+            let pos = [0, 1, 2].map(|k| p.positions[corner(k)]);
+            let v = pos.map(|a| Vec3::new(f64::from(a[0]), f64::from(a[1]), f64::from(a[2])));
+            let n = (v[1] - v[0]).cross(v[2] - v[0]).normalize();
+            if !n.x.is_finite() {
+                continue;
+            }
+            for (k, &at) in pos.iter().enumerate() {
+                let c = p.colors.get(corner(k)).copied().unwrap_or([1.0; 4]);
+                let joints = p.joints.get(corner(k)).map_or([0; 4], |j| j.map(u32::from));
+                let weights = p.weights.get(corner(k)).copied().unwrap_or([1.0, 0.0, 0.0, 0.0]);
+                vertices.push(SkinnedVertex { pos: at, normal: [n.x as f32, n.y as f32, n.z as f32], color: [c[0] * base[0], c[1] * base[1], c[2] * base[2], c[3] * base[3]], joints, weights });
+            }
+        }
+    }
+    Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })
 }
 
 /// The height of the highest triangle under `(x, z)`, if any.

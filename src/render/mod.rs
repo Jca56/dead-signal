@@ -2,7 +2,12 @@
 //! buffer at load (a normal per face, so the low poly facets show), drawn
 //! instanced with a model matrix each, over a sky that fades into the
 //! same fog. The frame is multisampled on targets of our own and resolved
-//! into the window's image; the UI draws on top of it afterwards.
+//! into the window's image; the UI draws on top of it afterwards. The
+//! viewmodel (the arms) goes between: see `skinned.rs`.
+
+mod skinned;
+
+pub use skinned::{MAX_JOINTS, SkinnedDraw, SkinnedMeshId, SkinnedVertex};
 
 use lntrn_app::wgpu;
 use lntrn_app::wgpu::util::DeviceExt;
@@ -11,6 +16,8 @@ use lntrn_core::bytes::{Pod, bytes_of, slice_as_bytes};
 use lntrn_math::{Color, Mat4, Vec3};
 
 use crate::camera::Camera;
+
+use skinned::Skinned;
 
 const SAMPLES: u32 = 4;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -115,7 +122,14 @@ pub struct Renderer {
     instance_cap: usize,
     frame: Vec<(MeshId, Instance)>,
     targets: Option<Targets>,
+    skinned: Skinned,
+    viewmodel: Option<SkinnedDraw>,
 }
+
+/// The viewmodel's vertical field of view: fixed, so the arms keep their
+/// shape whatever the world's view does (a sprint widens only the world).
+const VIEWMODEL_FOV: f64 = 55.0;
+const VIEWMODEL_NEAR: f64 = 0.01;
 
 fn color4(c: Color, a: f64) -> [f32; 4] {
     let l = c.to_linear();
@@ -177,7 +191,8 @@ impl Renderer {
         });
         let instance_cap = 64;
         let instances = Self::instance_buffer(gpu, instance_cap);
-        Self { format, sky, world, globals, bind, staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None }
+        let skinned = Skinned::new(gpu, format);
+        Self { format, sky, world, globals, bind, staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodel: None }
     }
 
     fn instance_buffer(gpu: &Gpu, cap: usize) -> wgpu::Buffer {
@@ -193,8 +208,19 @@ impl Renderer {
         MeshId(self.meshes.len() - 1)
     }
 
+    /// Keep a skinned mesh (the arms) for the viewmodel pass.
+    pub fn add_skinned_mesh(&mut self, vertices: &[SkinnedVertex]) -> SkinnedMeshId {
+        self.skinned.add_mesh(vertices)
+    }
+
+    /// Draw this over the world this frame, in camera space.
+    pub fn draw_viewmodel(&mut self, d: SkinnedDraw) {
+        self.viewmodel = Some(d);
+    }
+
     /// Send every mesh added so far to the GPU.
     pub fn upload(&mut self, gpu: &Gpu) {
+        self.skinned.upload(gpu);
         self.vertices = Some(gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("vertices"), contents: slice_as_bytes(&self.staged), usage: wgpu::BufferUsages::VERTEX }));
     }
 
@@ -245,6 +271,9 @@ impl Renderer {
             }
         }
         self.frame.clear();
+        let vm_proj = Mat4::perspective_infinite_reverse_z(VIEWMODEL_FOV.to_radians(), aspect, VIEWMODEL_NEAR);
+        let viewmodel = self.viewmodel.take();
+        self.skinned.prepare(gpu, viewmodel.as_ref(), vm_proj, (right, up, forward), air);
 
         let this: &'f Renderer = self;
         let backbuffer = cx.backbuffer;
@@ -255,8 +284,8 @@ impl Renderer {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &targets.color,
                     depth_slice: None,
-                    resolve_target: Some(views.get(backbuffer)),
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Discard },
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &targets.depth,
@@ -276,6 +305,25 @@ impl Renderer {
                     pass.draw(range.first..range.first + range.count, *first..*first + *count);
                 }
             }
+            drop(pass);
+            // The viewmodel, over the world with depth of its own, and the
+            // whole picture resolved into the window's image.
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viewmodel"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &targets.color,
+                    depth_slice: None,
+                    resolve_target: Some(views.get(backbuffer)),
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Discard },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &targets.depth,
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Discard }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            this.skinned.draw(&mut pass);
         });
     }
 

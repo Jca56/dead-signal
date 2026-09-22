@@ -7,6 +7,7 @@ mod menu;
 mod player;
 mod render;
 mod style;
+mod viewmodel;
 mod world;
 
 use lntrn_app::{AppConfig, run};

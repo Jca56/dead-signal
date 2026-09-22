@@ -1,0 +1,373 @@
+"""The survivor's arms, as the camera sees them: both forearms and hands
+up in a loose guard, in a worn field jacket and fingerless gloves.
+
+Run headless from the project root:
+    /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/arms.py
+
+Writes assets/models/arms.glb: one skinned mesh on an armature, and an
+"Idle" breathing loop. Built in camera space: the eye at the origin,
+looking down Blender's +Y (the exporter makes that glTF's -Z), +Z up, +X
+right. The mesh is modelled in the guard pose, which is the rest pose, so
+nothing moves until an animation says so.
+
+Bones per side (.R / .L): upper_arm > forearm > hand > thumb1 > thumb2,
+index1 > index2, fingers1 > fingers2 (middle, ring and little finger
+move as one). All under "root".
+"""
+
+import math
+import os
+
+import bmesh
+import bpy
+from mathutils import Matrix, Vector
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, "..", "models", "arms.glb")
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.context.scene.render.fps = 30
+
+# Colours (sRGB, as in the title scene).
+SLEEVE = (0.30, 0.29, 0.20)
+SLEEVE_SHADE = (0.25, 0.24, 0.17)
+CUFF = (0.36, 0.34, 0.24)
+GLOVE = (0.10, 0.09, 0.08)
+GLOVE_SEAM = (0.16, 0.14, 0.12)
+SKIN = (0.62, 0.46, 0.37)
+
+SIDES = 8
+
+
+def norm(v):
+    return v.normalized()
+
+
+# ---- the guard pose, right side (the left is its mirror) ----------------------------
+
+SHOULDER = Vector((0.29, -0.22, -0.26))
+ELBOW = Vector((0.29, 0.10, -0.31))
+WRIST = Vector((0.21, 0.33, -0.10))
+# The left hand sits a little further forward, a boxer's lead.
+LEAD = Vector((0.0, 0.035, 0.012))
+
+
+def hand_frame(wrist, elbow, side):
+    """Forward (to the knuckles), back (the back of the hand's normal) and
+    thumb (towards the thumb) for a hand at `wrist`."""
+    fwd = norm((wrist - elbow).normalized() + Vector((0, 0.1, 0.35)))
+    # The back of the hand faces up (a touch out): the fingers curl away
+    # underneath, and the eye sees knuckles and thumbs, as in a guard.
+    back = Vector((0.25 * side, -0.1, 1.0))
+    back = norm(back - fwd * back.dot(fwd))
+    thumb = norm(fwd.cross(back)) * -side
+    return fwd, back, thumb
+
+
+def rotate(v, axis, degrees):
+    return Matrix.Rotation(math.radians(degrees), 3, axis) @ v
+
+
+# ---- mesh building -----------------------------------------------------------------
+
+class Builder:
+    """A bmesh with a colour per face and bone weights per vertex."""
+
+    def __init__(self):
+        self.bm = bmesh.new()
+        self.col = self.bm.loops.layers.color.new("Col")
+        self.deform = self.bm.verts.layers.deform.verify()
+        self.groups = []
+
+    def group(self, name):
+        if name not in self.groups:
+            self.groups.append(name)
+        return self.groups.index(name)
+
+    def vert(self, co, weights):
+        v = self.bm.verts.new(co)
+        for name, w in weights.items():
+            v[self.deform][self.group(name)] = w
+        return v
+
+    def face(self, verts, colour):
+        f = self.bm.faces.new(verts)
+        for loop in f.loops:
+            loop[self.col] = (*colour, 1.0)
+        return f
+
+    def ring(self, centre, axis, a_dir, a, b, weights, spin=0.0):
+        """`SIDES` points round `centre`, perpendicular to `axis`: an
+        ellipse `a` across `a_dir` and `b` across the third direction."""
+        u = norm(a_dir - axis * a_dir.dot(axis))
+        w = axis.cross(u)
+        pts = []
+        for k in range(SIDES):
+            t = spin + k / SIDES * math.tau
+            pts.append(self.vert(centre + u * (math.cos(t) * a) + w * (math.sin(t) * b), weights))
+        return pts
+
+    def tube(self, rings, colours, cap_start=True, cap_end=True):
+        """Join rings with quads; `colours[i]` paints the band after ring i.
+        Refuses rings whose first points are turned apart: a corkscrew."""
+        for i in range(len(rings) - 1):
+            r0, r1 = rings[i], rings[i + 1]
+            twist = twist_degrees(r0, r1)
+            if twist > 30.0:
+                raise ValueError(f"rings {i} and {i + 1} twist {twist:.0f} degrees")
+            for k in range(SIDES):
+                n = (k + 1) % SIDES
+                c = colours[i]
+                if isinstance(c, list):
+                    c = c[k]
+                self.face((r0[k], r0[n], r1[n], r1[k]), c)
+        if cap_start:
+            self.face(list(reversed(rings[0])), colours[0] if not isinstance(colours[0], list) else colours[0][0])
+        if cap_end:
+            last = colours[-1] if not isinstance(colours[-1], list) else colours[-1][0]
+            self.face(rings[-1], last)
+
+
+def twist_degrees(r0, r1):
+    """How far point 0 of one ring is turned from point 0 of the next, seen
+    down the tube between them."""
+    c0 = sum((v.co for v in r0), Vector()) / len(r0)
+    c1 = sum((v.co for v in r1), Vector()) / len(r1)
+    axis = c1 - c0
+    if axis.length < 1e-6:
+        return 0.0
+    axis.normalize()
+    u0 = r0[0].co - c0
+    u1 = r1[0].co - c1
+    u0 -= axis * u0.dot(axis)
+    u1 -= axis * u1.dot(axis)
+    if u0.length < 1e-6 or u1.length < 1e-6:
+        return 0.0
+    return math.degrees(u0.angle(u1))
+
+
+def banded(a, b):
+    """Alternate two shades round a tube, so the facets read as cloth folds."""
+    return [a if k % 2 == 0 else b for k in range(SIDES)]
+
+
+def arm(b, side, suffix):
+    """One arm: sleeve, cuff, wrist, gloved hand, fingers, thumb."""
+    shoulder = Vector((SHOULDER.x * side, SHOULDER.y, SHOULDER.z))
+    elbow = Vector((ELBOW.x * side, ELBOW.y, ELBOW.z))
+    wrist = Vector((WRIST.x * side, WRIST.y, WRIST.z))
+    if side < 0:
+        elbow += LEAD
+        wrist += LEAD
+    up = f"upper_arm{suffix}"
+    fore = f"forearm{suffix}"
+    hand = f"hand{suffix}"
+    bones = {}
+
+    # Every ring from the shoulder to the knuckles starts from the same
+    # direction (the back of the hand), so point k of one ring meets point
+    # k of the next: no corkscrew.
+    fwd, back, thumb_dir = hand_frame(wrist, elbow, side)
+    across = thumb_dir
+    ref = back
+
+    # Sleeve: upper arm into forearm, bending at the elbow.
+    d_up = norm(elbow - shoulder)
+    d_fore = norm(wrist - elbow)
+    bend = norm(d_up + d_fore)
+    rings = [
+        b.ring(shoulder, d_up, ref, 0.058, 0.062, {up: 1.0}),
+        b.ring(shoulder.lerp(elbow, 0.6), d_up, ref, 0.056, 0.060, {up: 1.0}),
+        b.ring(elbow, bend, ref, 0.055, 0.057, {up: 0.5, fore: 0.5}),
+        b.ring(elbow.lerp(wrist, 0.45), d_fore, ref, 0.046, 0.050, {fore: 1.0}),
+        b.ring(elbow.lerp(wrist, 0.80), d_fore, ref, 0.042, 0.045, {fore: 1.0}),
+        # The rolled cuff: a thick band.
+        b.ring(elbow.lerp(wrist, 0.82), d_fore, ref, 0.048, 0.051, {fore: 1.0}),
+        b.ring(elbow.lerp(wrist, 0.92), d_fore, ref, 0.047, 0.050, {fore: 1.0}),
+        b.ring(elbow.lerp(wrist, 0.93), d_fore, ref, 0.031, 0.034, {fore: 1.0}),
+    ]
+    sleeve = banded(SLEEVE, SLEEVE_SHADE)
+    b.tube(rings, [sleeve, sleeve, sleeve, sleeve, CUFF, CUFF, CUFF], cap_start=True, cap_end=True)
+
+    # The wrist: a sliver of skin between cuff and glove.
+    wrist_rings = [
+        b.ring(elbow.lerp(wrist, 0.92), d_fore, ref, 0.027, 0.030, {fore: 1.0}),
+        b.ring(wrist, fwd, ref, 0.024, 0.031, {fore: 0.4, hand: 0.6}),
+    ]
+    b.tube(wrist_rings, [SKIN], cap_start=False, cap_end=False)
+
+    # The palm: a flattened block from wrist to knuckles, the glove's
+    # mouth a little over the wrist.
+    knuckles = wrist + fwd * 0.085
+    palm = [
+        b.ring(wrist - fwd * 0.012, fwd, ref, 0.026, 0.035, {fore: 0.4, hand: 0.6}),
+        b.ring(wrist + fwd * 0.05, fwd, ref, 0.021, 0.043, {hand: 1.0}),
+        b.ring(knuckles, fwd, ref, 0.019, 0.044, {hand: 1.0}),
+    ]
+    b.tube(palm, [GLOVE_SEAM, GLOVE], cap_start=True, cap_end=True)
+
+    # Fingers, half curled: the first joint turns down 60°, the next 70° more.
+    palm_side = -back
+    curl_axis = norm(fwd.cross(palm_side))
+
+    def finger(base, lengths, radius, first, second, name1, name2):
+        d1 = rotate(fwd, curl_axis, first)
+        d2 = rotate(fwd, curl_axis, first + second)
+        mid = base + d1 * lengths[0]
+        tip = mid + d2 * lengths[1]
+        rings = [
+            b.ring(base, d1, across, radius, radius * 0.9, {name1: 1.0}),
+            b.ring(mid, norm(d1 + d2), across, radius * 0.95, radius * 0.85, {name1: 0.5, name2: 0.5}),
+            b.ring(mid + d2 * lengths[1] * 0.35, d2, across, radius * 0.9, radius * 0.8, {name2: 1.0}),
+            b.ring(tip, d2, across, radius * 0.75, radius * 0.7, {name2: 1.0}),
+        ]
+        # Glove to the middle joint, bare skin beyond: fingerless.
+        b.tube(rings, [GLOVE, GLOVE, SKIN], cap_start=False, cap_end=True)
+        return base, mid, tip
+
+    i1, i2 = f"index1{suffix}", f"index2{suffix}"
+    f1, f2 = f"fingers1{suffix}", f"fingers2{suffix}"
+    index = finger(knuckles + across * 0.028 + back * 0.002, (0.042, 0.038), 0.0105, 62, 72, i1, i2)
+    bones[i1] = (index[0], index[1], hand)
+    bones[i2] = (index[1], index[2], i1)
+    first = None
+    for k, (offset, length) in enumerate(((0.008, 0.046), (-0.012, 0.043), (-0.030, 0.036))):
+        base = knuckles + across * offset - fwd * (0.004 * k)
+        f = finger(base, (length, length * 0.85), 0.0105 - 0.0008 * k, 60 + 4 * k, 72, f1, f2)
+        if first is None:
+            first = f
+    bones[f1] = (first[0], first[1], hand)
+    bones[f2] = (first[1], first[2], f1)
+
+    # The thumb: from the heel of the hand, across the front of the fist.
+    t1, t2 = f"thumb1{suffix}", f"thumb2{suffix}"
+    t_base = wrist + fwd * 0.028 + across * 0.036 + palm_side * 0.008
+    t_d1 = norm(fwd * 0.75 + across * 0.35 + palm_side * 0.55)
+    t_d2 = norm(fwd * 0.2 - across * 0.75 + palm_side * 0.55)
+    t_mid = t_base + t_d1 * 0.040
+    t_tip = t_mid + t_d2 * 0.034
+    # One starting direction for all its rings, square to its bend.
+    t_ref = norm(t_d1.cross(t_d2))
+    rings = [
+        b.ring(t_base, t_d1, t_ref, 0.014, 0.012, {hand: 0.5, t1: 0.5}),
+        b.ring(t_mid, norm(t_d1 + t_d2), t_ref, 0.012, 0.011, {t1: 0.5, t2: 0.5}),
+        b.ring(t_mid + t_d2 * 0.012, t_d2, t_ref, 0.0115, 0.0105, {t2: 1.0}),
+        b.ring(t_tip, t_d2, t_ref, 0.009, 0.008, {t2: 1.0}),
+    ]
+    b.tube(rings, [GLOVE, GLOVE, SKIN], cap_start=True, cap_end=True)
+    bones[t1] = (t_base, t_mid, hand)
+    bones[t2] = (t_mid, t_tip, t1)
+
+    bones[up] = (shoulder, elbow, "root")
+    bones[fore] = (elbow, wrist, up)
+    bones[hand] = (wrist, knuckles, fore)
+    return bones
+
+
+# ---- armature, mesh, animation -----------------------------------------------------
+
+def build():
+    b = Builder()
+    bones = {}
+    bones.update(arm(b, 1.0, ".R"))
+    bones.update(arm(b, -1.0, ".L"))
+
+    # Every ring runs round its axis the same way whichever side it is on,
+    # so every face already winds outward.
+    mesh = bpy.data.meshes.new("Arms")
+    b.bm.to_mesh(mesh)
+    b.bm.free()
+    attrs = mesh.color_attributes
+    attrs.active_color = attrs["Col"]
+    attrs.render_color_index = attrs.find("Col")
+
+    material = bpy.data.materials.new("Flat")
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    bsdf = nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = 1.0
+    vc = nodes.new("ShaderNodeVertexColor")
+    vc.layer_name = "Col"
+    material.node_tree.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
+    mesh.materials.append(material)
+
+    arm_data = bpy.data.armatures.new("Rig")
+    rig = bpy.data.objects.new("Rig", arm_data)
+    bpy.context.scene.collection.objects.link(rig)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    root = arm_data.edit_bones.new("root")
+    root.head = (0, 0, 0)
+    root.tail = (0, 0.05, 0)
+    made = {"root": root}
+    # Parents before children.
+    pending = dict(bones)
+    while pending:
+        for name, (head, tail, parent) in list(pending.items()):
+            if parent in made:
+                e = arm_data.edit_bones.new(name)
+                e.head = head
+                e.tail = tail
+                e.parent = made[parent]
+                made[name] = e
+                del pending[name]
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    obj = bpy.data.objects.new("Arms", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    for name in b.groups:
+        obj.vertex_groups.new(name=name)
+    obj.parent = rig
+    mod = obj.modifiers.new("Rig", "ARMATURE")
+    mod.object = rig
+    return rig
+
+
+def idle(rig):
+    """A slow breath: the arms rise and settle, the hands ease, over three
+    seconds, back where they began."""
+    action = bpy.data.actions.new("Idle")
+    rig.animation_data_create()
+    rig.animation_data.action = action
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="POSE")
+    pose = rig.pose.bones
+    for pb in pose:
+        pb.rotation_mode = "QUATERNION"
+    keys = [(1, 0.0), (46, 1.0), (91, 0.0)]
+    for frame, t in keys:
+        for suffix, s in ((".R", 1.0), (".L", -1.0)):
+            pb = pose[f"upper_arm{suffix}"]
+            pb.rotation_quaternion = Matrix.Rotation(math.radians(-1.6 * t), 4, "X").to_quaternion()
+            pb.keyframe_insert("rotation_quaternion", frame=frame)
+            pb = pose[f"hand{suffix}"]
+            pb.rotation_quaternion = Matrix.Rotation(math.radians(2.5 * t * s), 4, "Z").to_quaternion()
+            pb.keyframe_insert("rotation_quaternion", frame=frame)
+            for f in ("fingers1", "index1"):
+                pb = pose[f"{f}{suffix}"]
+                pb.rotation_quaternion = Matrix.Rotation(math.radians(4.0 * t), 4, "X").to_quaternion()
+                pb.keyframe_insert("rotation_quaternion", frame=frame)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.context.scene.frame_start = 1
+    bpy.context.scene.frame_end = 91
+
+
+def main():
+    rig = build()
+    idle(rig)
+    bpy.ops.export_scene.gltf(
+        filepath=os.path.abspath(OUT),
+        export_format="GLB",
+        export_yup=True,
+        export_apply=False,
+        export_animations=True,
+        export_animation_mode="ACTIONS",
+        export_skins=True,
+        export_vertex_color="ACTIVE",
+        export_normals=True,
+    )
+    mesh = bpy.data.objects["Arms"].data
+    print(f"arms: {len(mesh.polygons)} faces, {len(rig.data.bones)} bones -> {os.path.abspath(OUT)}")
+
+
+main()
