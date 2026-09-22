@@ -14,11 +14,15 @@ import math
 import os
 import random
 
+import sys
+
 import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from terrain import height, in_clearing  # noqa: E402
 OUT = os.path.join(HERE, "..", "models", "title_scene.glb")
 
 rng = random.Random(1987)
@@ -60,18 +64,6 @@ POLE = srgb(0.27, 0.21, 0.16)
 
 SIZE = 260.0
 CELLS = 52
-
-
-def height(x, y):
-    """Metres above zero at a point: gentle hills, flat in the clearing,
-    rising to ridges at the edges so the horizon is never a straight line."""
-    h = 1.6 * math.sin(x * 0.045 + 0.7) * math.cos(y * 0.038 - 0.3)
-    h += 0.8 * math.sin(x * 0.11 + y * 0.07)
-    h += 0.4 * math.sin(x * 0.23 - y * 0.19 + 1.3)
-    r = math.hypot(x, y - 20.0)
-    h *= min(1.0, 0.25 + r / 60.0)
-    edge = max(0.0, r - 70.0)
-    return h + (edge / 25.0) ** 2 * 3.0
 
 
 def face_colours(bm, layer, pick):
@@ -220,9 +212,19 @@ SHACK.z = height(SHACK.x, SHACK.y)
 KEEP_OUT = [(0.0, 5.0, 22.0), (TOWER.x, TOWER.y, 10.0), (SHACK.x, SHACK.y, 8.0), (6.0, 25.0, 9.0)]
 
 
+# Where the trees and poles ended up, for their collision shapes.
+PINE_SPOTS = []
+DEAD_SPOTS = []
+POLE_SPOTS = []
+
+
 def pines(flat):
     bm = bmesh.new()
     layer = colour_layer(bm)
+    # A tree on the proving ground is still grown (so it draws the same
+    # random numbers and every other tree stays put), into a mesh thrown away.
+    junk = bmesh.new()
+    junk_layer = colour_layer(junk)
     placed = 0
     while placed < 170:
         x = rng.uniform(-120, 120)
@@ -232,15 +234,19 @@ def pines(flat):
         placed += 1
         s = rng.uniform(0.8, 1.5)
         base = Vector((x, y, height(x, y) - 0.2))
-        add_cone(bm, layer, base, 0.35 * s, 0.25 * s, 2.0 * s, 6, BARK)
+        into, into_layer = (junk, junk_layer) if in_clearing(x, y) else (bm, layer)
+        if into is bm:
+            PINE_SPOTS.append((base, s))
+        add_cone(into, into_layer, base, 0.35 * s, 0.25 * s, 2.0 * s, 6, BARK)
         tiers = rng.choice((3, 3, 4))
         z = 1.4 * s
         r = 2.6 * s
         for t in range(tiers):
             colour = PINE if t % 2 == 0 else PINE_DARK
-            add_cone(bm, layer, base + Vector((0, 0, z)), r, 0, 3.4 * s, 7, colour, spin=rng.uniform(0, math.tau))
+            add_cone(into, into_layer, base + Vector((0, 0, z)), r, 0, 3.4 * s, 7, colour, spin=rng.uniform(0, math.tau))
             z += 1.9 * s
             r *= 0.74
+    junk.free()
     return new_object("Pines", bm, flat)
 
 
@@ -257,6 +263,7 @@ def dead_trees(flat):
         s = rng.uniform(0.9, 1.4)
         base = Vector((x, y, height(x, y) - 0.2))
         top = base + Vector((rng.uniform(-0.6, 0.6), rng.uniform(-0.6, 0.6), 7.0 * s))
+        DEAD_SPOTS.append((base, top, s))
         beam(bm, layer, base, top, 0.4 * s, DEAD_WOOD)
         for _ in range(3):
             t = rng.uniform(0.4, 0.85)
@@ -270,6 +277,8 @@ def dead_trees(flat):
 def rocks(flat):
     bm = bmesh.new()
     layer = colour_layer(bm)
+    junk = bmesh.new()
+    junk_layer = colour_layer(junk)
     for _ in range(45):
         x = rng.uniform(-90, 90)
         y = rng.uniform(-40, 110)
@@ -278,15 +287,20 @@ def rocks(flat):
         s = rng.uniform(0.5, 1.8)
         m = Matrix.Translation((x, y, height(x, y) - 0.2 * s)) @ Matrix.Rotation(rng.uniform(0, math.tau), 4, "Z")
         m = m @ Matrix.Diagonal((s * rng.uniform(1.0, 1.6), s, s * rng.uniform(0.5, 0.8), 1.0))
-        rock = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=1.0, matrix=m)
+        into, into_layer = (junk, junk_layer) if in_clearing(x, y) else (bm, layer)
+        rock = bmesh.ops.create_icosphere(into, subdivisions=1, radius=1.0, matrix=m)
         for v in rock["verts"]:
             v.co += Vector((rng.uniform(-0.15, 0.15) for _ in range(3))) * s
-        faces = {f for v in rock["verts"] for f in v.link_faces}
+        # In a fixed order (a set's is not), so the shading is the same
+        # every time the scene is built.
+        into.faces.index_update()
+        faces = sorted({f for v in rock["verts"] for f in v.link_faces}, key=lambda f: f.index)
         for f in faces:
             c = jitter(ROCK, 0.12)
             for loop in f.loops:
-                loop[layer] = (*c, 1.0)
-    return new_object("Rocks", bm, flat)
+                loop[into_layer] = (*c, 1.0)
+    junk.free()
+    return new_object("SOLID_Rocks", bm, flat)
 
 
 TOWER_HEIGHT = 42.0
@@ -358,10 +372,47 @@ def poles(flat):
         x = SHACK.x - 10.0 - k * 3.5
         base = Vector((x, y, height(x, y) - 0.3))
         lean = Vector((rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), 8.5))
+        POLE_SPOTS.append((base, base + lean))
         beam(bm, layer, base, base + lean, 0.28, POLE)
         top = base + lean * 0.93
         beam(bm, layer, top + Vector((-1.2, 0.2, 0)), top + Vector((1.2, -0.2, 0)), 0.16, POLE)
     return new_object("Poles", bm, flat)
+
+
+# ---- collision ---------------------------------------------------------------
+#
+# Invisible shapes the game stands on and bumps into, named COL_*. Built
+# after everything seen, so nothing here can change the random numbers
+# the visible scene was made from.
+
+def solids(flat):
+    bm = bmesh.new()
+    layer = colour_layer(bm)
+    grey = (0.5, 0.5, 0.5)
+    # Pines: a metre-wide column through the trunk and lower branches.
+    for base, s in PINE_SPOTS:
+        add_cone(bm, layer, base, 0.5, 0.5, 6.0 * s, 8, grey)
+    for base, top, s in DEAD_SPOTS:
+        beam(bm, layer, base, top, 0.45 * s, grey)
+    for base, top in POLE_SPOTS:
+        beam(bm, layer, base, top, 0.32, grey)
+    # The shack as a box, with its drum and crate.
+    turn = Matrix.Rotation(math.radians(18), 4, "Z")
+    at = Matrix.Translation(SHACK) @ turn
+    add_box(bm, layer, at @ Matrix.Translation((0, 0, 1.5)), (4.4, 3.4, 3.2), grey)
+    add_cone(bm, layer, at @ Vector((-1.5, -2.3, 0)), 0.45, 0.45, 0.95, 8, grey)
+    add_box(bm, layer, at @ Matrix.Translation((2.6, -1.4, 0.4)) @ Matrix.Rotation(0.4, 4, "Z"), (0.9, 0.9, 0.8), grey)
+    # The tower's legs, and the X braces of its lowest panels: room to walk
+    # in under the braces and stand inside it.
+    half = lambda z: 2.6 - 1.9 * (z / TOWER_HEIGHT)  # noqa: E731
+    corners = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
+    rings = [[TOWER + Vector((cx * half(z), cy * half(z), z)) for cx, cy in corners] for z in (0.0, TOWER_HEIGHT / 10, TOWER_HEIGHT * 0.3)]
+    for c in range(4):
+        n = (c + 1) % 4
+        beam(bm, layer, rings[0][c], rings[2][c], 0.4, grey)
+        beam(bm, layer, rings[0][c], rings[1][n], 0.18, grey)
+        beam(bm, layer, rings[0][n], rings[1][c], 0.18, grey)
+    return new_object("COL_Solids", bm, flat)
 
 
 def main():
@@ -374,6 +425,7 @@ def main():
     beacon(glow)
     shack(flat)
     poles(flat)
+    solids(flat)
     bpy.ops.export_scene.gltf(
         filepath=os.path.abspath(OUT),
         export_format="GLB",

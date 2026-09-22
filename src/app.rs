@@ -5,14 +5,15 @@
 
 use lntrn_app::lntrn_render::{Gpu, Images};
 use lntrn_app::{AppHost, RenderCx, wgpu};
-use lntrn_core::log_error;
+use lntrn_core::{log_error, log_info};
 use lntrn_math::{Color, Vec2, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
 use crate::assets;
 use crate::camera::Camera;
 use crate::menu::SideMenu;
-use crate::player::{self, Controls};
+use crate::head;
+use crate::player::Controls;
 use crate::render::{Draw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
@@ -220,7 +221,7 @@ impl DeadSignal {
             Screen::Run => {
                 let alpha = self.game.alpha();
                 if let Some((body, view)) = self.game.player() {
-                    self.camera.position = player::eye_position(&view, &body, alpha);
+                    self.camera.position = head::eye_position(&view, &body, alpha);
                     self.camera.yaw = view.yaw;
                     self.camera.pitch = view.pitch;
                     self.camera.fov_y = view.fov_y();
@@ -298,10 +299,13 @@ impl Host for DeadSignal {
 impl AppHost for DeadSignal {
     fn init_gpu(&mut self, gpu: &Gpu, format: wgpu::TextureFormat, _: &mut Images) {
         let mut renderer = Renderer::new(gpu, format);
-        match assets::load(&mut renderer, "title_scene") {
-            Ok(props) => self.game.spawn_props(props),
-            Err(e) => log_error!("title scene: {e}"),
+        for scene in ["title_scene", "proving_ground"] {
+            match assets::load(&mut renderer, scene) {
+                Ok(props) => self.game.spawn_props(props),
+                Err(e) => log_error!("{scene}: {e}"),
+            }
         }
+        log_info!("world: {} solid triangles", self.game.solid_count());
         match assets::load_rigged(&mut renderer, "arms") {
             Ok(rig) => self.viewmodel = Some(Viewmodel::new(rig)),
             Err(e) => log_error!("arms: {e}"),

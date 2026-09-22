@@ -14,7 +14,8 @@ use crate::render::{MAX_JOINTS, MeshId, Renderer, SkinnedMeshId, SkinnedVertex, 
 #[derive(Clone, Debug)]
 pub struct Prop {
     pub name: String,
-    pub mesh: MeshId,
+    /// What is drawn; `None` for a collision shape (named `COL_*`).
+    pub mesh: Option<MeshId>,
     pub model: Mat4,
     /// Its triangles in world space, for standing on (the ground).
     pub triangles: Vec<[Vec3; 3]>,
@@ -69,7 +70,8 @@ fn props(renderer: &mut Renderer, gltf: &Gltf, path: &Path) -> Vec<Prop> {
             .map(|t| [t[0], t[1], t[2]])
             .collect();
         let name = node.name.clone().unwrap_or_else(|| format!("{}#{i}", path.display()));
-        out.push(Prop { name, mesh: renderer.add_mesh(&vertices), model, triangles });
+        let mesh = (!name.starts_with("COL_")).then(|| renderer.add_mesh(&vertices));
+        out.push(Prop { name, mesh, model, triangles });
     }
     out
 }

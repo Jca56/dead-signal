@@ -1,13 +1,17 @@
-//! The player: a body that walks, sprints, crouches and jumps over the
-//! ground at a fixed 60 steps a second, and the view riding on it (eye
-//! height, head bob, the dip on landing, the sprint's wider view), which
-//! moves every frame. Snappy: full speed in a tenth of a second, a quick
-//! pop of a jump, a little steering in the air.
+//! The player's body: an upright capsule that walks, sprints, crouches and
+//! jumps through the world's solids at a fixed 60 steps a second. Snappy:
+//! full speed in a tenth of a second, a quick pop of a jump, a little
+//! steering in the air. It slides along walls, walks up steps as tall as
+//! [`STEP_UP`] and down stairs without leaving them, climbs slopes up to
+//! 45° and slides back off steeper ones, and will not stand up where there
+//! is no room. The view that rides on it is in `head.rs`.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
 
-use crate::world::{Clock, Ground};
+use crate::collide::{Capsule, Contacts, Solids};
+use crate::head::View;
+use crate::world::Solid;
 
 pub const WALK: f64 = 6.0;
 pub const SPRINT: f64 = 9.0;
@@ -18,27 +22,27 @@ const FRICTION: f64 = 70.0;
 /// How much of the ground's grip there is in the air.
 const AIR_CONTROL: f64 = 0.3;
 const GRAVITY: f64 = 20.0;
+/// The fastest a body falls, m/s.
+const MAX_FALL: f64 = 40.0;
 pub const JUMP_HEIGHT: f64 = 1.2;
 /// Grace, seconds: a jump pressed just before landing still happens, and
 /// one pressed just after walking off an edge does too.
 const JUMP_BUFFER: f64 = 0.1;
 const COYOTE: f64 = 0.1;
-/// Eye heights, metres, and how fast the eye moves between them.
-pub const EYE_STAND: f64 = 1.7;
-pub const EYE_CROUCH: f64 = 1.1;
-const EYE_RATE: f64 = 20.0;
-/// How far below the feet the ground may drop and still be walked down
-/// onto rather than fallen off (a downhill stride).
-const SNAP_DOWN: f64 = 0.35;
+/// The body: its width, and its height standing and crouched.
+pub const RADIUS: f64 = 0.35;
+pub const STAND_HEIGHT: f64 = 1.8;
+pub const CROUCH_HEIGHT: f64 = 1.2;
+/// The tallest step walked straight up; also how far the ground may drop
+/// away underfoot and still be followed down (a stair, a hillside).
+pub const STEP_UP: f64 = 0.4;
+/// Drops under this are the ground's own shape, followed without the eye
+/// gliding after them; bigger ones are stairs.
+const STAIR: f64 = 0.15;
+/// How far at a time a body is lowered looking for the floor.
+const SNAP_STEP: f64 = 0.025;
 /// The world ends this far from its middle, either way.
 pub const BOUNDS: f64 = 115.0;
-
-/// Radians of turn per count of raw mouse motion.
-pub const SENSITIVITY: f64 = 0.0015;
-const PITCH_LIMIT: f64 = 1.55;
-/// Vertical field of view, and how much wider it goes at a full sprint.
-pub const FOV: f64 = 65.0;
-const SPRINT_FOV: f64 = 4.0;
 
 /// The one step every fixed update takes, seconds.
 pub const STEP: f64 = 1.0 / 60.0;
@@ -66,16 +70,22 @@ pub struct Body {
     /// Seconds since last on the ground, and since jump was pressed.
     pub airborne: f64,
     pub jump_wait: Option<f64>,
+    /// Crouch, as asked for (C toggles it) and as it is (no room to stand
+    /// keeps a body down).
+    pub want_crouch: bool,
     pub crouched: bool,
     pub sprinting: bool,
     /// How hard it has landed since the view last looked (m/s down,
     /// summed): the view takes it, so each landing dips once.
     pub landed: f64,
+    /// How far stairs have moved it up (or down) since the view last
+    /// looked, metres: the view glides after.
+    pub stepped: f64,
 }
 
 impl Body {
     pub fn at(pos: Vec3) -> Self {
-        Self { pos, prev: pos, vel: Vec3::ZERO, grounded: true, airborne: 0.0, jump_wait: None, crouched: false, sprinting: false, landed: 0.0 }
+        Self { pos, prev: pos, vel: Vec3::ZERO, grounded: true, airborne: 0.0, jump_wait: None, want_crouch: false, crouched: false, sprinting: false, landed: 0.0, stepped: 0.0 }
     }
 
     pub fn speed_flat(&self) -> f64 {
@@ -83,41 +93,13 @@ impl Body {
     }
 }
 
-/// Which way the player faces, and how the view sits on the body.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct View {
-    pub yaw: f64,
-    pub pitch: f64,
-    pub eye: f64,
-    /// Head bob: where in the stride, and how much of it shows (0–1).
-    pub bob_phase: f64,
-    pub bob_amount: f64,
-    /// The landing dip, metres (negative is down), and its speed.
-    pub dip: f64,
-    pub dip_vel: f64,
-    /// 0–1: how much of the sprint's wider view is on.
-    pub sprint_amount: f64,
-}
-
-impl View {
-    pub fn facing(yaw: f64) -> Self {
-        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, sprint_amount: 0.0 }
-    }
-
-    /// Turn by raw mouse counts.
-    pub fn look(&mut self, counts: Vec2) {
-        self.yaw -= counts.x * SENSITIVITY;
-        self.pitch = (self.pitch - counts.y * SENSITIVITY).clamp(-PITCH_LIMIT, PITCH_LIMIT);
-    }
-
-    pub fn fov_y(&self) -> f64 {
-        (FOV + SPRINT_FOV * self.sprint_amount).to_radians()
-    }
-}
-
 /// The player, of whom there is one while a run is on.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Player;
+
+pub fn capsule(crouched: bool) -> Capsule {
+    Capsule { radius: RADIUS, height: if crouched { CROUCH_HEIGHT } else { STAND_HEIGHT } }
+}
 
 /// `from` moved towards `to` by at most `max`.
 fn towards(from: Vec2, to: Vec2, max: f64) -> Vec2 {
@@ -126,20 +108,92 @@ fn towards(from: Vec2, to: Vec2, max: f64) -> Vec2 {
     if len <= max || len == 0.0 { to } else { from + d * (max / len) }
 }
 
-/// One fixed step of the body: steer, fall, jump, land.
-pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, ground: &Ground, dt: f64) {
+fn flat(v: Vec3) -> Vec2 {
+    Vec2::new(v.x, v.z)
+}
+
+/// Take away the part of `vel` going into what was touched.
+fn clip(vel: &mut Vec3, contacts: &Contacts) {
+    for n in &contacts.normals {
+        let into = vel.dot(*n);
+        if into < 0.0 {
+            *vel -= *n * into;
+        }
+    }
+    if contacts.floor.is_some() && vel.y < 0.0 {
+        vel.y = 0.0;
+    }
+}
+
+/// Move a capsule from `start` at `vel` for `dt`, in steps no longer than
+/// half its radius (so nothing is passed through), sliding along what it
+/// meets. Where it ends, what it touched, and what is left of `vel`.
+fn slide(solids: &Solids, cap: Capsule, start: Vec3, vel: Vec3, dt: f64) -> (Vec3, Contacts, Vec3) {
+    let steps = ((vel * dt).length() / (cap.radius * 0.5)).ceil().clamp(1.0, 16.0) as usize;
+    let h = dt / steps as f64;
+    let (mut pos, mut vel) = (start, vel);
+    let mut contacts = Contacts::default();
+    for _ in 0..steps {
+        pos += vel * h;
+        let c = solids.resolve(cap, &mut pos);
+        clip(&mut vel, &c);
+        contacts.merge(c);
+    }
+    (pos, contacts, vel)
+}
+
+/// Lower a capsule by up to `max` onto a floor: where it stands, or `None`
+/// with no floor that close below.
+fn snap_down(solids: &Solids, cap: Capsule, from: Vec3, max: f64) -> Option<(Vec3, Contacts)> {
+    // Fine steps: lowered too far at once onto an edge, the first touch
+    // (walkable) is passed for a lower one (steep), and the edge is lost.
+    let steps = (max / SNAP_STEP).ceil().max(1.0) as usize;
+    let mut p = from;
+    for _ in 0..steps {
+        p.y -= max / steps as f64;
+        let mut q = p;
+        let c = solids.resolve(cap, &mut q);
+        if c.floor.is_some() {
+            return Some((q, c));
+        }
+        p = q;
+    }
+    None
+}
+
+/// Try the move again from a step higher, then back down onto what is
+/// there: how a body walks up a stair instead of into it. It reaches at
+/// least half its radius forward, or a slow walk would never get far
+/// enough over a step's edge to stand on it.
+fn step_up(solids: &Solids, cap: Capsule, start: Vec3, vel: Vec3, dt: f64) -> Option<(Vec3, Contacts, Vec3)> {
+    let up = start + Vec3::new(0.0, STEP_UP, 0.0);
+    if !solids.fits(cap, up) {
+        return None; // no headroom
+    }
+    let flat_vel = Vec3::new(vel.x, 0.0, vel.z);
+    let reach = flat_vel.length() * dt;
+    let min_reach = cap.radius * 0.5;
+    let push = if reach > 1e-9 && reach < min_reach { min_reach / reach } else { 1.0 };
+    let (over, _, _) = slide(solids, cap, up, flat_vel * push, dt);
+    let (landed, contacts) = snap_down(solids, cap, over, STEP_UP + 0.05)?;
+    // As tall as the point stood on, not as high as the capsule rests.
+    let rise = contacts.floor_top.unwrap_or(landed.y) - start.y;
+    (0.02..=STEP_UP + 0.01).contains(&rise).then_some((landed, contacts, flat_vel))
+}
+
+/// One fixed step of the body: steer, jump, fall, and move through the
+/// solids.
+pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &Solids, dt: f64) {
     body.prev = body.pos;
     if std::mem::take(&mut controls.crouch_toggle) {
-        body.crouched = !body.crouched;
+        body.want_crouch = !body.want_crouch;
     }
-    if std::mem::take(&mut controls.jump) {
-        body.jump_wait = Some(0.0);
+    // Sprinting is forward only, and stands you up (if there is room).
+    if controls.sprint && controls.walk.y > 0.0 {
+        body.want_crouch = false;
     }
-    // Sprinting is forward only, and stands you up.
-    body.sprinting = controls.sprint && controls.walk.y > 0.0;
-    if body.sprinting {
-        body.crouched = false;
-    }
+    body.crouched = body.want_crouch || (body.crouched && !solids.fits(capsule(false), body.pos));
+    body.sprinting = controls.sprint && controls.walk.y > 0.0 && !body.crouched;
     let speed = if body.crouched { CROUCH } else if body.sprinting { SPRINT } else { WALK };
 
     // The keys, turned to face where the player looks, on the flat.
@@ -150,25 +204,30 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, ground: &Gr
     if wish.length() > 1.0 {
         wish = wish.normalize();
     }
-    let flat = Vec2::new(body.vel.x, body.vel.z);
+    let now = flat(body.vel);
     let moving = wish != Vec2::ZERO;
-    let flat = if body.grounded {
-        towards(flat, wish * speed, if moving { ACCEL } else { FRICTION } * dt)
+    let steer = if body.grounded {
+        towards(now, wish * speed, if moving { ACCEL } else { FRICTION } * dt)
     } else if moving {
-        towards(flat, wish * speed.max(flat.length()), ACCEL * AIR_CONTROL * dt)
+        towards(now, wish * speed.max(now.length()), ACCEL * AIR_CONTROL * dt)
     } else {
-        flat
+        now
     };
-    body.vel.x = flat.x;
-    body.vel.z = flat.y;
+    body.vel.x = steer.x;
+    body.vel.z = steer.y;
 
-    // Jump, with a little grace either side of the ground.
+    // Jump, with a little grace either side of the ground, and room above.
+    if std::mem::take(&mut controls.jump) {
+        body.jump_wait = Some(0.0);
+    }
+    let mut jumped = false;
     if let Some(waited) = body.jump_wait {
-        if body.airborne <= COYOTE && body.vel.y <= 0.0 {
+        if body.airborne <= COYOTE && body.vel.y <= 0.0 && solids.fits(capsule(body.crouched), body.pos + Vec3::new(0.0, 0.05, 0.0)) {
             body.vel.y = (2.0 * GRAVITY * JUMP_HEIGHT).sqrt();
             body.grounded = false;
             body.airborne = COYOTE + dt;
             body.jump_wait = None;
+            jumped = true;
         } else if waited + dt > JUMP_BUFFER {
             body.jump_wait = None;
         } else {
@@ -176,157 +235,72 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, ground: &Gr
         }
     }
     if !body.grounded {
-        body.vel.y -= GRAVITY * dt;
+        body.vel.y = (body.vel.y - GRAVITY * dt).max(-MAX_FALL);
     }
-    body.pos += body.vel * dt;
-    body.pos.x = body.pos.x.clamp(-BOUNDS, BOUNDS);
-    body.pos.z = body.pos.z.clamp(-BOUNDS, BOUNDS);
+    let falling = -body.vel.y;
 
-    // Stand on the ground: land on it, or follow it down a slope.
-    let floor = ground.height_at(body.pos.x, body.pos.z).unwrap_or(0.0);
-    let was_grounded = body.grounded;
-    if body.pos.y <= floor {
-        if !was_grounded {
-            body.landed += -body.vel.y;
+    let cap = capsule(body.crouched);
+    let start = body.pos;
+    let (mut pos, mut contacts, mut vel) = slide(solids, cap, start, body.vel, dt);
+
+    // Blocked while walking: perhaps it is a step. Tried at the speed
+    // asked for, not what the wall left of it (which is next to nothing
+    // after a frame against the step).
+    let asked = Vec3::new(wish.x * speed, 0.0, wish.y * speed);
+    let wanted = asked.length() * dt;
+    if body.grounded && !jumped && contacts.wall && wanted > 1e-6 {
+        // Progress the way the keys point: pushed back counts as none, not
+        // as the distance it went backwards.
+        let dir = flat(asked) * (1.0 / flat(asked).length());
+        let went = flat(pos - start).dot(dir);
+        if went < wanted * 0.8
+            && let Some((p, c, v)) = step_up(solids, cap, start, asked, dt)
+            && flat(p - start).dot(dir) > went + 1e-4
+        {
+            body.stepped += p.y - start.y;
+            (pos, contacts, vel) = (p, c, v);
         }
-        body.pos.y = floor;
-        body.vel.y = 0.0;
-        body.grounded = true;
-    } else if was_grounded && body.vel.y <= 0.0 && body.pos.y - floor <= SNAP_DOWN {
-        body.pos.y = floor;
-        body.vel.y = 0.0;
-    } else {
-        body.grounded = false;
     }
-    body.airborne = if body.grounded { 0.0 } else { body.airborne + dt };
+
+    // On the ground, or following it down a stair or a slope.
+    let mut grounded = contacts.floor.is_some() && vel.y <= 0.0;
+    if !grounded
+        && body.grounded
+        && !jumped
+        && vel.y <= 0.0
+        && let Some((p, _)) = snap_down(solids, cap, pos, STEP_UP)
+    {
+        let drop = p.y - pos.y;
+        if -drop > STAIR {
+            body.stepped += drop;
+        }
+        pos = p;
+        grounded = true;
+    }
+    if grounded {
+        if !body.grounded {
+            body.landed += falling.max(0.0);
+        }
+        vel.y = 0.0;
+    }
+    pos.x = pos.x.clamp(-BOUNDS, BOUNDS);
+    pos.z = pos.z.clamp(-BOUNDS, BOUNDS);
+    body.pos = pos;
+    body.vel = vel;
+    body.grounded = grounded;
+    body.airborne = if grounded { 0.0 } else { body.airborne + dt };
 }
 
-fn step_players(mut controls: ResMut<Controls>, ground: Res<Ground>, mut players: Query<(&mut Body, &View), With<Player>>) {
+fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, mut players: Query<(&mut Body, &View), With<Player>>) {
     for (mut body, view) in &mut players {
-        step_body(&mut body, view.yaw, &mut controls, &ground, STEP);
+        step_body(&mut body, view.yaw, &mut controls, &solid.0, STEP);
     }
 }
 
-/// The view's motion, every frame: eye height, bob, landing dip, sprint.
-pub fn settle_view(view: &mut View, body: &mut Body, dt: f64) {
-    let eye = if body.crouched { EYE_CROUCH } else { EYE_STAND };
-    view.eye += (eye - view.eye) * (1.0 - (-EYE_RATE * dt).exp());
-
-    let speed = body.speed_flat();
-    let striding = body.grounded && speed > 0.5;
-    let target = if striding { (speed / WALK).min(1.5) } else { 0.0 };
-    view.bob_amount += (target - view.bob_amount) * (1.0 - (-10.0 * dt).exp());
-    // About a stride every 1.5 metres.
-    view.bob_phase += dt * speed / 1.5 * std::f64::consts::PI;
-
-    let hit = std::mem::take(&mut body.landed);
-    if hit > 0.0 {
-        view.dip_vel -= (hit * 0.25).min(3.0);
-    }
-    // A spring back to rest, damped just short of wobbling.
-    let accel = -90.0 * view.dip - 16.0 * view.dip_vel;
-    view.dip_vel += accel * dt;
-    view.dip = (view.dip + view.dip_vel * dt).clamp(-0.3, 0.1);
-
-    let sprint = if body.sprinting && speed > WALK { 1.0 } else { 0.0 };
-    view.sprint_amount += (sprint - view.sprint_amount) * (1.0 - (-8.0 * dt).exp());
-}
-
-/// Where the eye is: on the body (between its last two steps by `alpha`),
-/// raised to eye height, bobbing and dipping.
-pub fn eye_position(view: &View, body: &Body, alpha: f64) -> Vec3 {
-    let feet = body.prev + (body.pos - body.prev) * alpha;
-    let bob_y = (view.bob_phase * 2.0).sin() * 0.035 * view.bob_amount;
-    let bob_x = view.bob_phase.cos() * 0.025 * view.bob_amount;
-    let (s, c) = view.yaw.sin_cos();
-    let right = Vec3::new(c, 0.0, -s);
-    feet + Vec3::new(0.0, view.eye + bob_y + view.dip, 0.0) + right * bob_x
-}
-
-fn settle_views(clock: Res<Clock>, mut players: Query<(&mut View, &mut Body), With<Player>>) {
-    for (mut view, mut body) in &mut players {
-        settle_view(&mut view, &mut body, clock.dt);
-    }
-}
-
-/// Add the player's systems: the body to the fixed steps, the view to
-/// every frame.
-pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
+/// Add the body's system to the fixed steps.
+pub fn install(fixed: &mut Schedule) {
     fixed.add_systems(step_players);
-    frame.add_systems(settle_views);
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn flat_ground() -> Ground {
-        let a = Vec3::new(-200.0, 0.0, -200.0);
-        let b = Vec3::new(200.0, 0.0, -200.0);
-        let c = Vec3::new(200.0, 0.0, 200.0);
-        let d = Vec3::new(-200.0, 0.0, 200.0);
-        Ground(vec![[a, c, b], [a, d, c]])
-    }
-
-    fn steps(body: &mut Body, controls: &mut Controls, ground: &Ground, n: usize) {
-        for _ in 0..n {
-            step_body(body, 0.0, controls, ground, STEP);
-        }
-    }
-
-    #[test]
-    fn walks_up_to_speed_in_a_tenth_of_a_second() {
-        let g = flat_ground();
-        let mut body = Body::at(Vec3::ZERO);
-        let mut c = Controls { walk: Vec2::new(0.0, 1.0), ..Default::default() };
-        steps(&mut body, &mut c, &g, 6);
-        assert!((body.speed_flat() - WALK).abs() < 1e-9, "full speed after 0.1 s, got {}", body.speed_flat());
-        assert!(body.vel.z < 0.0, "yaw 0 walks towards -Z");
-        c.walk = Vec2::ZERO;
-        steps(&mut body, &mut c, &g, 6);
-        assert_eq!(body.speed_flat(), 0.0, "and stops as quick");
-        assert!(body.grounded && body.pos.y == 0.0);
-    }
-
-    #[test]
-    fn a_jump_rises_its_height_and_lands() {
-        let g = flat_ground();
-        let mut body = Body::at(Vec3::ZERO);
-        let mut c = Controls { jump: true, ..Default::default() };
-        let mut top: f64 = 0.0;
-        for _ in 0..120 {
-            step_body(&mut body, 0.0, &mut c, &g, STEP);
-            top = top.max(body.pos.y);
-        }
-        assert!((top - JUMP_HEIGHT).abs() < 0.08, "peak {top}");
-        assert!(body.grounded && body.landed > 5.0, "landed at {}", body.landed);
-    }
-
-    #[test]
-    fn sprint_is_forward_only_and_stands_you_up() {
-        let g = flat_ground();
-        let mut body = Body::at(Vec3::ZERO);
-        let mut c = Controls { walk: Vec2::new(0.0, -1.0), sprint: true, crouch_toggle: true, ..Default::default() };
-        steps(&mut body, &mut c, &g, 30);
-        assert!(body.crouched && (body.speed_flat() - CROUCH).abs() < 1e-9, "backwards: no sprint, still crouched");
-        c.walk = Vec2::new(0.0, 1.0);
-        steps(&mut body, &mut c, &g, 30);
-        assert!(!body.crouched && (body.speed_flat() - SPRINT).abs() < 1e-9);
-    }
-
-    #[test]
-    fn a_landing_dips_the_view_and_it_springs_back() {
-        let mut view = View::facing(0.0);
-        let mut body = Body::at(Vec3::ZERO);
-        body.landed = 8.0;
-        settle_view(&mut view, &mut body, STEP);
-        assert_eq!(body.landed, 0.0, "taken once");
-        let mut low: f64 = 0.0;
-        for _ in 0..120 {
-            settle_view(&mut view, &mut body, STEP);
-            low = low.min(view.dip);
-        }
-        assert!(low < -0.05 && low > -0.2, "dipped {low}");
-        assert!(view.dip.abs() < 0.005, "back at rest, {}", view.dip);
-    }
-}
+mod tests;

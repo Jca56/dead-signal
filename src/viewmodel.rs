@@ -7,7 +7,8 @@
 use lntrn_math::{Mat4, Quat, Transform, Vec2, Vec3};
 
 use crate::assets::Rigged;
-use crate::player::{Body, EYE_CROUCH, EYE_STAND, View};
+use crate::head::{EYE_CROUCH, EYE_STAND, View};
+use crate::player::Body;
 use crate::render::SkinnedDraw;
 
 /// Seconds of turn the arms lag by, and the most they may lag, radians.

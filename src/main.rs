@@ -3,6 +3,8 @@
 mod app;
 mod assets;
 mod camera;
+mod collide;
+mod head;
 mod menu;
 mod player;
 mod render;

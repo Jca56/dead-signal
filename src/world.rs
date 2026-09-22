@@ -7,7 +7,9 @@ use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Vec3};
 
 use crate::assets::Prop;
-use crate::player::{self, Body, Controls, Player, View};
+use crate::collide::Solids;
+use crate::head::{self, View};
+use crate::player::{self, Body, Controls, Player};
 use crate::render::MeshId;
 
 /// Where a thing is.
@@ -52,6 +54,10 @@ pub struct Clock {
 #[derive(Resource, Clone, Debug, Default)]
 pub struct Ground(pub Vec<[Vec3; 3]>);
 
+/// Everything solid: what bodies stand on and bump into.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct Solid(pub Solids);
+
 impl Ground {
     pub fn height_at(&self, x: f64, z: f64) -> Option<f64> {
         crate::assets::height_at(&self.0, x, z)
@@ -84,11 +90,13 @@ impl Game {
         let mut world = World::new();
         world.insert_resource(Clock::default());
         world.insert_resource(Ground::default());
+        world.insert_resource(Solid::default());
         world.insert_resource(Controls::default());
         let mut frame = Schedule::default();
         let mut fixed = Schedule::default();
         frame.add_systems(blink);
-        player::install(&mut fixed, &mut frame);
+        player::install(&mut fixed);
+        head::install(&mut frame);
         Self { world, frame, fixed, owed: 0.0, simulating: false }
     }
 
@@ -129,22 +137,30 @@ impl Game {
         (self.owed / player::STEP).clamp(0.0, 1.0)
     }
 
-    /// Put a model file's objects in the world. The object named `Ground`
-    /// is what things stand on; `Beacon` blinks.
+    /// Put a model file's objects in the world. By name: `Ground` is the
+    /// terrain (drawn and solid), `SOLID_*` are drawn and solid, `COL_*` are
+    /// only solid, and `Beacon` blinks.
     pub fn spawn_props(&mut self, props: Vec<Prop>) {
         for p in props {
-            let mut e = self.world.spawn((Placed(p.model), Model(p.mesh), Look::default()));
-            match p.name.as_str() {
-                "Ground" => {
-                    self.world.resource_mut::<Ground>().0.extend(p.triangles);
-                }
-                "Beacon" => {
-                    // A failing light: two quick flashes, then a long dark.
-                    e.insert((Blink { period: 3.2, lit: vec![(0.0, 0.18), (0.42, 0.55)] }, Look { emissive: 1.0, fog: 0.35 }));
-                }
-                _ => {}
+            let name = p.name.as_str();
+            if name == "Ground" || name.starts_with("SOLID_") || name.starts_with("COL_") {
+                self.world.resource_mut::<Solid>().0.add(&p.triangles);
+            }
+            if name == "Ground" {
+                self.world.resource_mut::<Ground>().0.extend(p.triangles.iter().copied());
+            }
+            let Some(mesh) = p.mesh else { continue };
+            let mut e = self.world.spawn((Placed(p.model), Model(mesh), Look::default()));
+            if name == "Beacon" {
+                // A failing light: two quick flashes, then a long dark.
+                e.insert((Blink { period: 3.2, lit: vec![(0.0, 0.18), (0.42, 0.55)] }, Look { emissive: 1.0, fog: 0.35 }));
             }
         }
+    }
+
+    /// How many solid triangles the world has.
+    pub fn solid_count(&self) -> usize {
+        self.world.resource::<Solid>().0.len()
     }
 
     /// Advance the clock to `now`, take the fixed steps owed by then (while
