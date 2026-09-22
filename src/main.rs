@@ -3,9 +3,10 @@
 mod app;
 mod assets;
 mod camera;
+mod menu;
+mod player;
 mod render;
 mod style;
-mod title;
 mod world;
 
 use lntrn_app::{AppConfig, run};

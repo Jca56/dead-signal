@@ -1,10 +1,13 @@
 //! The game's state as an ECS: what is placed where, how it looks, and
-//! the systems that move it along each frame.
+//! the systems that move it along: some every frame, the simulation in
+//! fixed steps (see [`crate::player::STEP`]) so it runs the same at any
+//! frame rate.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Vec3};
 
 use crate::assets::Prop;
+use crate::player::{self, Body, Controls, Player, View};
 use crate::render::MeshId;
 
 /// Where a thing is.
@@ -68,7 +71,12 @@ fn blink(clock: Res<Clock>, mut lights: Query<(&Blink, &mut Look)>) {
 
 pub struct Game {
     pub world: World,
-    schedule: Schedule,
+    frame: Schedule,
+    fixed: Schedule,
+    /// Simulation time owed, seconds: what the fixed steps have yet to cover.
+    owed: f64,
+    /// Whether the simulation runs (a run that is not paused).
+    pub simulating: bool,
 }
 
 impl Game {
@@ -76,9 +84,49 @@ impl Game {
         let mut world = World::new();
         world.insert_resource(Clock::default());
         world.insert_resource(Ground::default());
-        let mut schedule = Schedule::default();
-        schedule.add_systems(blink);
-        Self { world, schedule }
+        world.insert_resource(Controls::default());
+        let mut frame = Schedule::default();
+        let mut fixed = Schedule::default();
+        frame.add_systems(blink);
+        player::install(&mut fixed, &mut frame);
+        Self { world, frame, fixed, owed: 0.0, simulating: false }
+    }
+
+    /// Put a player on the ground at `(x, z)`, facing `yaw`, in place of
+    /// any there was.
+    pub fn spawn_player(&mut self, x: f64, z: f64, yaw: f64) {
+        self.despawn_player();
+        let y = self.ground().height_at(x, z).unwrap_or(0.0);
+        self.world.spawn((Player, Body::at(Vec3::new(x, y, z)), View::facing(yaw)));
+        *self.world.resource_mut::<Controls>() = Controls::default();
+        self.owed = 0.0;
+    }
+
+    pub fn despawn_player(&mut self) {
+        let players: Vec<Entity> = self.world.query_filtered::<Entity, With<Player>>().iter(&self.world).collect();
+        for e in players {
+            self.world.despawn(e);
+        }
+    }
+
+    /// The player's body and view, if one is about.
+    pub fn player(&mut self) -> Option<(Body, View)> {
+        self.world.query_filtered::<(&Body, &View), With<Player>>().iter(&self.world).next().map(|(b, v)| (*b, *v))
+    }
+
+    /// The player's view, to turn it.
+    pub fn player_view_mut(&mut self) -> Option<Mut<'_, View>> {
+        self.world.query_filtered::<&mut View, With<Player>>().iter_mut(&mut self.world).next()
+    }
+
+    pub fn controls_mut(&mut self) -> Mut<'_, Controls> {
+        self.world.resource_mut::<Controls>()
+    }
+
+    /// How far between its last two steps the simulation is, 0–1: what a
+    /// frame drawn now should blend by.
+    pub fn alpha(&self) -> f64 {
+        (self.owed / player::STEP).clamp(0.0, 1.0)
     }
 
     /// Put a model file's objects in the world. The object named `Ground`
@@ -99,14 +147,22 @@ impl Game {
         }
     }
 
-    /// Advance the clock to `now` and run every system once.
+    /// Advance the clock to `now`, take the fixed steps owed by then (while
+    /// simulating), and run the every-frame systems.
     pub fn tick(&mut self, now: f64) {
         {
             let mut clock = self.world.resource_mut::<Clock>();
             clock.dt = (now - clock.time).clamp(0.0, 0.1);
             clock.time = now;
         }
-        self.schedule.run(&mut self.world);
+        if self.simulating {
+            self.owed += self.clock().dt;
+            while self.owed >= player::STEP {
+                self.fixed.run(&mut self.world);
+                self.owed -= player::STEP;
+            }
+        }
+        self.frame.run(&mut self.world);
     }
 
     pub fn clock(&self) -> Clock {

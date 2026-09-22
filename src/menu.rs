@@ -1,5 +1,6 @@
-//! The title screen: the name and a menu down the left, over the scene.
-//! Mouse or keys (W/S, arrows, Enter) both work.
+//! A menu down the left of the screen, over the scene: a heading, a red
+//! rule, and the items. The title screen and the pause screen are both
+//! one. Mouse or keys (W/S, arrows, Enter) both work.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -7,23 +8,26 @@ use lntrn_ui::{Key, Sense, Ui};
 
 use crate::style;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Choice {
-    Play,
-    Quit,
-}
-
-const ITEMS: [(&str, Choice); 2] = [("PLAY", Choice::Play), ("QUIT", Choice::Quit)];
-
-#[derive(Default)]
-pub struct TitleMenu {
+/// A menu of `T` choices under a heading.
+pub struct SideMenu<T: Copy + 'static> {
+    heading: &'static str,
+    items: &'static [(&'static str, T)],
     selected: usize,
 }
 
-impl TitleMenu {
-    /// Draw the screen; the choice made this frame, if any. `active` is
+impl<T: Copy + 'static> SideMenu<T> {
+    pub const fn new(heading: &'static str, items: &'static [(&'static str, T)]) -> Self {
+        Self { heading, items, selected: 0 }
+    }
+
+    /// Put the highlight back on the first item.
+    pub fn reset(&mut self) {
+        self.selected = 0;
+    }
+
+    /// Draw the menu; the choice made this frame, if any. `active` is
     /// false while a fade is running, so nothing can be picked twice.
-    pub fn draw(&mut self, ui: &mut Ui, active: bool) -> Option<Choice> {
+    pub fn draw(&mut self, ui: &mut Ui, active: bool) -> Option<T> {
         let s = ui.m.scale;
         let screen = ui.clip();
         shade_left(ui, screen);
@@ -32,7 +36,7 @@ impl TitleMenu {
         let title = TextStyle::new((100.0 * s) as f32).bold().family(style::FONT);
         let title_h = f64::from(title.line_height());
         let mut y = screen.min.y + screen.height() * 0.30;
-        ui.text_at("DEAD SIGNAL", &title, Vec2::new(left, y), screen.width(), style::BONE);
+        ui.text_at(self.heading, &title, Vec2::new(left, y), screen.width(), style::BONE);
         y += title_h + 10.0 * s;
         ui.draw.rect(Rect::from_min_size(Vec2::new(left + 5.0 * s, y), Vec2::new(200.0 * s, 5.0 * s)), style::SIGNAL);
         y += 60.0 * s;
@@ -40,7 +44,7 @@ impl TitleMenu {
         let item = TextStyle::new((50.0 * s) as f32).bold().family(style::FONT);
         let item_h = f64::from(item.line_height());
         let mut chosen = None;
-        for (i, (label, choice)) in ITEMS.iter().enumerate() {
+        for (i, (label, choice)) in self.items.iter().enumerate() {
             let w = ui.measure(label, &item) + 60.0 * s;
             let rect = Rect::from_min_size(Vec2::new(left - 40.0 * s, y), Vec2::new(w + 40.0 * s, item_h));
             let r = ui.interact(ui.id(label), rect, Sense::CLICK);
@@ -62,13 +66,13 @@ impl TitleMenu {
             let up = ui.state.take_key(|k| matches!(k.key, Key::ArrowUp | Key::Char('w' | 'W'))).is_some();
             let down = ui.state.take_key(|k| matches!(k.key, Key::ArrowDown | Key::Char('s' | 'S'))).is_some();
             if up {
-                self.selected = (self.selected + ITEMS.len() - 1) % ITEMS.len();
+                self.selected = (self.selected + self.items.len() - 1) % self.items.len();
             }
             if down {
-                self.selected = (self.selected + 1) % ITEMS.len();
+                self.selected = (self.selected + 1) % self.items.len();
             }
             if ui.state.take_key(|k| matches!(k.key, Key::Enter | Key::Char(' '))).is_some() {
-                chosen = Some(ITEMS[self.selected].1);
+                chosen = Some(self.items[self.selected].1);
             }
         }
         chosen

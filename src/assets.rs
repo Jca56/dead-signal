@@ -53,9 +53,9 @@ fn props(renderer: &mut Renderer, gltf: &Gltf, path: &Path) -> Vec<Prop> {
                     continue; // a sliver with no area
                 }
                 let normal = [n.x as f32, n.y as f32, n.z as f32];
-                for k in 0..3 {
+                for (k, &at) in pos.iter().enumerate() {
                     let c = p.colors.get(corner(k)).copied().unwrap_or([1.0; 4]);
-                    vertices.push(Vertex { pos: pos[k], normal, color: [c[0] * base[0], c[1] * base[1], c[2] * base[2], c[3] * base[3]], emissive });
+                    vertices.push(Vertex { pos: at, normal, color: [c[0] * base[0], c[1] * base[1], c[2] * base[2], c[3] * base[3]], emissive });
                 }
             }
         }
