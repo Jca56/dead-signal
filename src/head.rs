@@ -13,7 +13,7 @@ pub const EYE_STAND: f64 = 1.7;
 pub const EYE_CROUCH: f64 = 1.1;
 const EYE_RATE: f64 = 20.0;
 /// Radians of turn per count of raw mouse motion.
-pub const SENSITIVITY: f64 = 0.0015;
+pub const SENSITIVITY: f64 = 0.0013;
 const PITCH_LIMIT: f64 = 1.55;
 /// Vertical field of view, and how much wider it goes at a full sprint.
 pub const FOV: f64 = 65.0;

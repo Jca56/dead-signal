@@ -1,7 +1,9 @@
 //! Where the dead can walk: a grid of one-metre cells over the map, each
 //! either ground a body can stand on (and at what height) or not, probed
 //! from the solids at load. Cells link to their eight neighbours when the
-//! step between them is one a body can take and a diagonal cuts no corner.
+//! way between them is one a body can take (a flight of stairs is many
+//! small steps, probed along its length; a ledge not too high can be
+//! dropped off, one way) and a diagonal cuts no corner.
 //! Paths are found with A* and pulled straight wherever a straight walk
 //! stays on linked ground.
 
@@ -19,6 +21,24 @@ const CELL: f64 = 1.0;
 const SEARCH_LIMIT: usize = 40_000;
 /// How high the probe starts looking down from.
 const SKY: f64 = 80.0;
+/// A body is tried for fit this far above the ground found: on stairs the
+/// next riser is within its reach, and it would step up onto it anyway.
+const FIT_LIFT: f64 = 0.25;
+/// Neighbours this much apart in height, or less, are probed between for a
+/// way of small steps; more is a wall or a drop.
+const CLIMB: f64 = 1.5;
+/// The highest ledge a body will drop off, and what the drop costs a
+/// route (a little over walking, so a stair close by is still taken).
+const DROP: f64 = 3.5;
+const DROP_COST: f64 = 2.0;
+/// How far apart the probes between two cells are.
+const PROBE: f64 = 0.1;
+/// What stepping into a cell at an edge (one not linked all round: beside
+/// a wall, a drop, a ledge) costs over its length, so routes keep to the
+/// middle of a ramp or a pad where there is one.
+const EDGE_COST: f64 = 1.5;
+/// The eight neighbours, in the order their links are kept.
+const AROUND: [(i64, i64); 8] = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)];
 
 pub struct NavGrid {
     /// Cells a side.
@@ -26,6 +46,13 @@ pub struct NavGrid {
     /// The ground's height in each cell, or NaN where there is none a body
     /// can stand on.
     height: Vec<f32>,
+    /// Which of its neighbours (by [`AROUND`]) each cell's ground leads
+    /// onto, a bit each, and which of those ways is a drop.
+    links: Vec<u8>,
+    drops: Vec<u8>,
+    /// The cells at an edge: not walkable to every neighbour (beside a
+    /// wall, a drop, a ledge; a way down doesn't count).
+    edges: Vec<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -56,13 +83,42 @@ impl NavGrid {
                 let from = Vec3::new(wx, SKY, wz);
                 if let Some(hit) = solids.raycast(from, Vec3::new(0.0, -1.0, 0.0), SKY * 2.0)
                     && hit.normal.y >= WALKABLE
-                    && solids.fits(body, hit.point + Vec3::new(0.0, 0.02, 0.0))
+                    && solids.fits(body, hit.point + Vec3::new(0.0, FIT_LIFT, 0.0))
                 {
                     height[z * side + x] = hit.point.y as f32;
                 }
             }
         }
-        Self { side, height }
+        let mut grid = Self { side, height, links: vec![0; side * side], drops: vec![0; side * side], edges: vec![false; side * side] };
+        for z in 0..side {
+            for x in 0..side {
+                let Some(ha) = grid.ground(x, z) else { continue };
+                let (mut walks, mut drops) = (0u8, 0u8);
+                for (k, (dx, dz)) in AROUND.iter().enumerate() {
+                    let Some((nx, nz)) = grid.offset((x, z), *dx, *dz) else { continue };
+                    let Some(hb) = grid.ground(nx, nz) else { continue };
+                    let dh = (ha - hb).abs();
+                    let a = Vec3::new(Self::coord(x), ha, Self::coord(z));
+                    let b = Vec3::new(Self::coord(nx), hb, Self::coord(nz));
+                    if dh <= STEP_UP || (dh <= CLIMB && steps_between(solids, a, b, STEP_UP)) {
+                        walks |= 1 << k;
+                    } else if ha - hb <= DROP && steps_between(solids, a, b, DROP) {
+                        drops |= 1 << k;
+                    }
+                }
+                let i = z * side + x;
+                grid.links[i] = walks | drops;
+                grid.drops[i] = drops;
+                grid.edges[i] = walks != 0xFF;
+            }
+        }
+        grid
+    }
+
+    /// The cell `(dx, dz)` from `c`, if on the grid.
+    fn offset(&self, c: (usize, usize), dx: i64, dz: i64) -> Option<(usize, usize)> {
+        let (x, z) = (c.0 as i64 + dx, c.1 as i64 + dz);
+        (x >= 0 && z >= 0 && (x as usize) < self.side && (z as usize) < self.side).then_some((x as usize, z as usize))
     }
 
     fn coord(i: usize) -> f64 {
@@ -73,6 +129,18 @@ impl NavGrid {
         let x = ((p.x + BOUNDS) / CELL).round();
         let z = ((p.z + BOUNDS) / CELL).round();
         (x >= 0.0 && z >= 0.0 && (x as usize) < self.side && (z as usize) < self.side).then_some((x as usize, z as usize))
+    }
+
+    /// Whether the cell is at an edge: not every neighbour a body could be
+    /// in is one it can step to.
+    fn edge(&self, (x, z): (usize, usize)) -> bool {
+        self.edges[z * self.side + x]
+    }
+
+    /// Whether the way from cell `a` to its neighbour `b` is a drop.
+    fn drop_to(&self, (ax, az): (usize, usize), (bx, bz): (usize, usize)) -> bool {
+        let (dx, dz) = (bx as i64 - ax as i64, bz as i64 - az as i64);
+        AROUND.iter().position(|&d| d == (dx, dz)).is_some_and(|k| self.drops[az * self.side + ax] & (1 << k) != 0)
     }
 
     fn ground(&self, x: usize, z: usize) -> Option<f64> {
@@ -92,8 +160,8 @@ impl NavGrid {
 
     /// Whether a body can walk straight from `a` to `b` on linked ground.
     pub fn clear(&self, a: Vec3, b: Vec3) -> bool {
-        match (self.cell_at(a), self.cell_at(b)) {
-            (Some(ca), Some(cb)) => self.ground(ca.0, ca.1).is_some() && self.straight(ca, cb),
+        match (self.nearest_open(a), self.nearest_open(b)) {
+            (Some(ca), Some(cb)) => self.straight(ca, cb),
             _ => false,
         }
     }
@@ -109,38 +177,37 @@ impl NavGrid {
         self.height.iter().filter(|h| !h.is_nan()).count()
     }
 
-    /// Whether a body can step from cell `a` to its neighbour `b`.
-    fn linked(&self, (ax, az): (usize, usize), (bx, bz): (usize, usize)) -> bool {
-        let (Some(ha), Some(hb)) = (self.ground(ax, az), self.ground(bx, bz)) else { return false };
-        if (ha - hb).abs() > STEP_UP {
-            return false;
-        }
-        // A diagonal needs both cells beside it open: no cutting a corner.
-        ax == bx || az == bz || (self.ground(bx, az).is_some() && self.ground(ax, bz).is_some())
+    /// Whether cell `a`'s ground leads onto its neighbour `b`'s.
+    fn leads(&self, (ax, az): (usize, usize), (bx, bz): (usize, usize)) -> bool {
+        let (dx, dz) = (bx as i64 - ax as i64, bz as i64 - az as i64);
+        AROUND.iter().position(|&d| d == (dx, dz)).is_some_and(|k| self.links[az * self.side + ax] & (1 << k) != 0)
     }
 
-    /// The nearest open cell to `p`, looking a few cells out.
+    /// Whether a body can step from cell `a` to its neighbour `b`: a
+    /// diagonal only where it could as well go round either corner, so
+    /// none is cut past a wall's end or a ramp's side.
+    fn linked(&self, a: (usize, usize), b: (usize, usize)) -> bool {
+        if !self.leads(a, b) {
+            return false;
+        }
+        a.0 == b.0 || a.1 == b.1 || [(b.0, a.1), (a.0, b.1)].iter().all(|&c| self.leads(a, c) && self.leads(c, b))
+    }
+
+    /// The open cell a body with its feet at `p` is in: the nearest, but
+    /// one on the ground at its feet's height before one that isn't (right
+    /// under a ledge, the cell it rounds to may be the ledge's top).
     fn nearest_open(&self, p: Vec3) -> Option<(usize, usize)> {
         let (cx, cz) = self.cell_at(p)?;
-        if self.ground(cx, cz).is_some() {
-            return Some((cx, cz));
-        }
         let mut best: Option<((usize, usize), f64)> = None;
-        for r in 1..=3i64 {
-            for dz in -r..=r {
-                for dx in -r..=r {
-                    let (x, z) = (cx as i64 + dx, cz as i64 + dz);
-                    if x < 0 || z < 0 || x as usize >= self.side || z as usize >= self.side || self.ground(x as usize, z as usize).is_none() {
-                        continue;
-                    }
-                    let d = (dx * dx + dz * dz) as f64;
-                    if best.is_none_or(|(_, b)| d < b) {
-                        best = Some(((x as usize, z as usize), d));
-                    }
+        for dz in -3..=3i64 {
+            for dx in -3..=3i64 {
+                let Some((x, z)) = self.offset((cx, cz), dx, dz) else { continue };
+                let Some(h) = self.ground(x, z) else { continue };
+                let flat = ((Self::coord(x) - p.x).powi(2) + (Self::coord(z) - p.z).powi(2)).sqrt();
+                let score = flat + 4.0 * ((h - p.y).abs() - 0.5).max(0.0);
+                if best.is_none_or(|(_, b)| score < b) {
+                    best = Some(((x, z), score));
                 }
-            }
-            if best.is_some() {
-                break;
             }
         }
         best.map(|(c, _)| c)
@@ -172,17 +239,13 @@ impl NavGrid {
                 return None;
             }
             let here = (cell % self.side, cell / self.side);
-            for (dx, dz) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
-                let (nx, nz) = (here.0 as i64 + dx, here.1 as i64 + dz);
-                if nx < 0 || nz < 0 || nx as usize >= self.side || nz as usize >= self.side {
-                    continue;
-                }
-                let next = (nx as usize, nz as usize);
+            for (dx, dz) in AROUND {
+                let Some(next) = self.offset(here, dx, dz) else { continue };
                 if !self.linked(here, next) {
                     continue;
                 }
                 let step = if dx != 0 && dz != 0 { std::f64::consts::SQRT_2 } else { 1.0 };
-                let c = cost[cell] + step;
+                let c = cost[cell] + step + if self.edge(next) { EDGE_COST } else { 0.0 } + if self.drop_to(here, next) { DROP_COST } else { 0.0 };
                 if c < cost[idx(next)] {
                     cost[idx(next)] = c;
                     came[idx(next)] = cell;
@@ -204,7 +267,8 @@ impl NavGrid {
     }
 
     /// Whether a straight walk from cell `a` to cell `b` stays on linked
-    /// ground, checked cell by cell along it.
+    /// ground, checked cell by cell along it, and keeps off edges on the way
+    /// (a walk along a ledge's line hangs half off it).
     fn straight(&self, a: (usize, usize), b: (usize, usize)) -> bool {
         let (dx, dz) = (b.0 as f64 - a.0 as f64, b.1 as f64 - a.1 as f64);
         let steps = (dx.abs().max(dz.abs()) * 2.0).ceil().max(1.0) as usize;
@@ -212,7 +276,7 @@ impl NavGrid {
         for i in 1..=steps {
             let t = i as f64 / steps as f64;
             let c = ((a.0 as f64 + dx * t).round() as usize, (a.1 as f64 + dz * t).round() as usize);
-            if c != prev && !self.linked(prev, c) {
+            if c != prev && (!self.linked(prev, c) || (c != b && self.edge(c))) {
                 return false;
             }
             prev = c;
@@ -238,6 +302,25 @@ impl NavGrid {
         }
         out
     }
+}
+
+/// Whether the ground from `a` to `b` (too far apart in height for one
+/// step) is a run of small ones (a stair, a steep ramp, not a ledge),
+/// allowing on the way down drops of up to `drop`.
+fn steps_between(solids: &Solids, a: Vec3, b: Vec3, drop: f64) -> bool {
+    let top = a.y.max(b.y) + STEP_UP;
+    let n = ((b - a).length() / PROBE).ceil() as usize;
+    let mut last = a.y;
+    for i in 1..=n {
+        let p = a + (b - a) * (i as f64 / n as f64);
+        let Some(hit) = solids.raycast(Vec3::new(p.x, top, p.z), Vec3::new(0.0, -1.0, 0.0), top - a.y.min(b.y) + 0.5) else { return false };
+        let rise = hit.point.y - last;
+        if rise > STEP_UP || -rise > drop || (hit.normal.y < WALKABLE && rise.abs() > 0.02) {
+            return false;
+        }
+        last = hit.point.y;
+    }
+    (last - b.y).abs() <= STEP_UP
 }
 
 #[cfg(test)]
@@ -276,5 +359,33 @@ mod tests {
         assert!(length > 11.0, "round, not through: {length:.1} m");
         // Up onto the proving ground by its ramp: the pad is reachable.
         assert!(nav.path(Vec3::new(0.0, 0.0, 6.0), Vec3::new(0.0, 0.0, 38.0)).is_some(), "no way onto the pad");
+        // And from the grass behind the building, round and up its stairs
+        // onto its roof: the route climbs the stairs' column (x 3–4.2).
+        let roof = Vec3::new(0.0, 4.16, 45.5);
+        let route = nav.path(Vec3::new(0.0, 0.0, 51.0), roof).expect("no way up onto the roof");
+        assert!((route.last().unwrap().y - 4.16).abs() < 0.1, "ends on the roof: {route:?}");
+        let mut prev = Vec3::new(0.0, 0.0, 51.0);
+        let mut climbed = false;
+        for p in &route {
+            let mut t = 0.0;
+            while t <= 1.0 {
+                let q = prev + (*p - prev) * t;
+                if let Some(h) = nav.height_at(q)
+                    && h > 1.5
+                    && h < 4.0
+                {
+                    climbed |= (3.0..=4.6).contains(&q.x);
+                }
+                t += 0.05;
+            }
+            prev = *p;
+        }
+        assert!(climbed, "reached the roof without the stairs: {route:?}");
+        // But no ledge is a step: not up the pad's 1.1 m edge behind the
+        // building, nor straight up onto the roof.
+        let (edge, below) = (nav.cell_at(Vec3::new(8.0, 0.0, 48.0)).unwrap(), nav.cell_at(Vec3::new(8.0, 0.0, 49.0)).unwrap());
+        assert!(!nav.linked(below, edge), "climbed the pad's edge");
+        let (roof_edge, pad) = (nav.cell_at(Vec3::new(-3.0, 0.0, 45.0)).unwrap(), nav.cell_at(Vec3::new(-4.0, 0.0, 45.0)).unwrap());
+        assert!(!nav.linked(pad, roof_edge), "climbed the wall");
     }
 }

@@ -20,11 +20,15 @@ const SIGHT_HALF: f64 = 55.0;
 /// Closer than this it knows you're there, whichever way it faces.
 const CLOSE: f64 = 2.5;
 /// How far it hears a shot, and another's snarl on seeing the player.
-pub const HEARING: f64 = 40.0;
+pub const HEARING: f64 = 80.0;
 pub const ALERT_RANGE: f64 = 15.0;
 /// It swipes from this close, and the swipe reaches this far.
 pub const ATTACK_RANGE: f64 = 1.4;
 const REACH: f64 = 1.8;
+/// How far above its feet the player's feet can be and still be struck
+/// (standing on a crate: the swipe takes the legs), and how far below.
+const REACH_UP: f64 = 1.0;
+const REACH_DOWN: f64 = 1.2;
 /// Seconds: the swipe, when in it the blow lands, the rest after it.
 const ATTACK_TIME: f64 = 0.9;
 const STRIKE_AT: f64 = 0.4;
@@ -44,6 +48,10 @@ const TURN_HUNT: f64 = 3.0;
 const TURN_IDLE: f64 = 1.5;
 /// How often it finds its way again, seconds.
 const REPATH: f64 = 0.6;
+/// Following a route: this near a turning point it has reached it, and it
+/// aims this far ahead along the leg it's on.
+const ARRIVE: f64 = 0.3;
+const LOOK_AHEAD: f64 = 0.7;
 /// Its eyes, and where it looks for yours, above the feet.
 const EYE: f64 = 1.55;
 const PLAYER_EYE: f64 = 1.5;
@@ -106,6 +114,8 @@ pub struct Zombie {
     pub gait: Gait,
     path: Vec<Vec3>,
     path_goal: Vec3,
+    /// Where the leg of the route it's on began.
+    leg_from: Vec3,
     repath: f64,
     last_seen: Option<Vec3>,
     unseen: f64,
@@ -123,7 +133,7 @@ pub struct Zombie {
 
 impl Zombie {
     pub fn new(yaw: f64, seed: u32) -> Self {
-        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
         let (lo, hi, lunge) = if z.rand() < FAST_SHARE { FAST } else { SLOW };
         let walk = lo + (hi - lo) * z.rand();
@@ -254,7 +264,7 @@ impl Zombie {
                         let to = Vec3::new(p.x - body.pos.x, 0.0, p.z - body.pos.z);
                         let d = to.length();
                         let facing = Vec3::new(-self.yaw.sin(), 0.0, -self.yaw.cos());
-                        if d <= REACH && (d < 1e-6 || facing.dot(to * (1.0 / d)) > 0.5) {
+                        if d <= REACH && level(body.pos, p) && (d < 1e-6 || facing.dot(to * (1.0 / d)) > 0.5) {
                             out.hit = Some(if d > 1e-6 { to * (1.0 / d) } else { facing });
                         }
                     }
@@ -276,7 +286,7 @@ impl Zombie {
                 let target = seen.or(self.last_seen);
                 if let Some(p) = target {
                     let d = Vec2::new(p.x - body.pos.x, p.z - body.pos.z).length();
-                    if seen.is_some() && d <= ATTACK_RANGE && self.cooldown <= 0.0 {
+                    if seen.is_some() && d <= ATTACK_RANGE && level(body.pos, p) && self.cooldown <= 0.0 {
                         out.sounds.push((Sfx::Snarl, 0.8));
                         self.set(State::Attack { t: 0.0, struck: false });
                     } else {
@@ -355,7 +365,9 @@ impl Zombie {
     /// way isn't straight, slowed while it turns.
     #[allow(clippy::too_many_arguments)]
     fn steer(&mut self, body: &Body, target: Vec3, pace: f64, lunge: bool, turn: f64, nav: Option<&NavGrid>, dt: f64) -> Controls {
-        let straight = flat_dist(body.pos, target) < 3.0 || nav.is_none_or(|n| n.clear(body.pos, target));
+        // Close and on its level it just goes; anywhere else the grid
+        // decides (up on a roof over it means going round by the stairs).
+        let straight = (flat_dist(body.pos, target) < 3.0 && level(body.pos, target)) || nav.is_none_or(|n| n.clear(body.pos, target));
         let waypoint = if straight {
             self.path.clear();
             target
@@ -365,12 +377,24 @@ impl Zombie {
             if self.repath <= 0.0 || flat_dist(self.path_goal, target) > 2.0 {
                 self.path = nav.and_then(|n| n.path(body.pos, target)).unwrap_or_default();
                 self.path_goal = target;
+                self.leg_from = body.pos;
                 self.repath = REPATH;
             }
-            while self.path.len() > 1 && flat_dist(body.pos, self.path[0]) < 0.8 {
-                self.path.remove(0);
+            // Each leg is walked along its line, not cut across: a turning
+            // point counts once it's truly reached (or passed), and it aims
+            // a little ahead on the leg, so knocked off it, it steers back
+            // on, and it comes to the foot of a flight of stairs lined up.
+            while self.path.len() > 1 && (flat_dist(body.pos, self.path[0]) < ARRIVE || along(self.leg_from, self.path[0], body.pos) >= 1.0) {
+                self.leg_from = self.path.remove(0);
             }
-            self.path.first().copied().unwrap_or(target)
+            match self.path.first() {
+                Some(&to) => {
+                    let len = flat_dist(self.leg_from, to);
+                    let t = if len > 1e-6 { (along(self.leg_from, to, body.pos) + LOOK_AHEAD / len).clamp(0.0, 1.0) } else { 1.0 };
+                    self.leg_from + (to - self.leg_from) * t
+                }
+                None => target,
+            }
         };
         let off = self.face(waypoint, body, turn, dt);
         let go = pace * off.cos().max(0.0);
@@ -382,6 +406,22 @@ impl Zombie {
 /// same wherever it lands.
 pub fn dealt(damage: f64, head: bool, blow: bool) -> f64 {
     damage * if head && !blow { HEADSHOT } else { 1.0 }
+}
+
+/// How far along the way from `a` to `b` the point `p` is, flat: 0 at `a`,
+/// 1 at `b`.
+fn along(a: Vec3, b: Vec3, p: Vec3) -> f64 {
+    let ab = Vec2::new(b.x - a.x, b.z - a.z);
+    let len2 = ab.dot(ab);
+    if len2 < 1e-9 {
+        return 1.0;
+    }
+    Vec2::new(p.x - a.x, p.z - a.z).dot(ab) / len2
+}
+
+/// Whether feet at `b` are near enough the level of feet at `a` to strike.
+fn level(a: Vec3, b: Vec3) -> bool {
+    (-REACH_DOWN..=REACH_UP).contains(&(b.y - a.y))
 }
 
 fn flat_dist(a: Vec3, b: Vec3) -> f64 {

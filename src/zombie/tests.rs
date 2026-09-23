@@ -78,6 +78,129 @@ fn it_closes_in_and_strikes() {
 }
 
 #[test]
+fn it_cannot_reach_you_up_on_a_roof() {
+    // A 3 m block; the player on it, right at its edge; the dead below.
+    let mut s = floor();
+    s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 3.0, -1.2)));
+    let player = Vec3::new(0.0, 3.0, -1.5);
+    let mut z = Zombie::new(0.0, 11);
+    let mut body = Body::at(Vec3::new(0.0, 0.0, 1.0));
+    let blows = run(&mut z, &mut body, &s, None, Some(player), &[], 6.0);
+    assert_eq!(blows, 0, "struck from below");
+    assert!(!matches!(z.state, State::Attack { .. }), "swiping at the wall");
+    // On a knee-high crate, though, the swipe takes the legs.
+    let mut s = floor();
+    s.add(&box_tris(Vec3::new(-1.0, 0.0, -3.0), Vec3::new(1.0, 0.8, -1.2)));
+    let mut z = Zombie::new(0.0, 11);
+    let mut body = Body::at(Vec3::new(0.0, 0.0, 1.0));
+    assert!(run(&mut z, &mut body, &s, None, Some(Vec3::new(0.0, 0.8, -1.5)), &[], 6.0) > 0, "couldn't reach a crate");
+}
+
+#[test]
+fn it_lines_up_with_stairs_it_comes_at_from_the_side() {
+    // A 1.2 m wide flight of ten steps up onto a platform, climbing -Z;
+    // the player up there, and the dead coming at the flight from off to
+    // its side, where going straight for it means walking into its flank.
+    let mut s = floor();
+    let (rise, run_) = (0.19, 0.29);
+    for k in 0..10 {
+        let z0 = -2.0 - k as f64 * run_;
+        s.add(&box_tris(Vec3::new(0.0, 0.0, z0 - run_), Vec3::new(1.2, (k + 1) as f64 * rise, z0)));
+    }
+    let top = 10.0 * rise;
+    let edge = -2.0 - 10.0 * run_;
+    s.add(&box_tris(Vec3::new(-5.0, 0.0, edge - 6.0), Vec3::new(1.2, top, edge)));
+    let nav = NavGrid::build(&s, capsule(false));
+    let player = Vec3::new(-2.0, top, edge - 3.0);
+    for start in [Vec3::new(6.0, 0.0, -6.0), Vec3::new(5.0, 0.0, -3.5), Vec3::new(-3.0, 0.0, 2.0)] {
+        let mut z = Zombie::new(0.0, 5);
+        let mut body = Body::at(start);
+        z.hurt(1.0, false, false, player);
+        let mut up = false;
+        for _ in 0..30 {
+            run(&mut z, &mut body, &s, Some(&nav), Some(player), &[], 0.5);
+            up |= body.pos.y > top - 0.1;
+        }
+        assert!(up, "from {start:?} it never got up: stuck at {:?}", body.pos);
+    }
+}
+
+#[test]
+fn on_the_real_map_it_climbs_to_you_from_any_side() {
+    let solids = crate::testing::real_world();
+    let nav = NavGrid::build(&solids, capsule(false));
+    let ground = |x: f64, z: f64| Vec3::new(x, nav.height_at(Vec3::new(x, 50.0, z)).unwrap(), z);
+    // Up on the building's roof, and on the landings atop the 30° and 45°
+    // ramps; each come at from around about.
+    let roof = Vec3::new(0.0, 4.16, 45.5);
+    let ramp30 = Vec3::new(3.5, 3.11, 39.0);
+    let ramp45 = Vec3::new(6.0, 3.11, 39.8);
+    let cases = [
+        (roof, ground(6.0, 51.0)),
+        (roof, ground(-6.0, 51.0)),
+        (roof, ground(8.0, 41.0)),
+        (roof, ground(-5.0, 40.0)),
+        (ramp30, ground(9.0, 30.0)),
+        (ramp30, ground(-2.0, 31.0)),
+        (ramp45, ground(11.0, 34.0)),
+        (ramp45, ground(1.0, 30.0)),
+    ];
+    // A shambler and a fast one each.
+    let fast = (1..).find(|&i| Zombie::new(0.0, i).gait.walk > 2.5).unwrap();
+    for ((player, start), seed) in cases.iter().flat_map(|&c| [(c, 5), (c, fast)]) {
+        let mut z = Zombie::new(0.0, seed);
+        let mut body = Body::at(start);
+        z.hurt(1.0, false, false, player);
+        let mut closest = f64::INFINITY;
+        for _ in 0..90 {
+            run(&mut z, &mut body, &solids, Some(&nav), Some(player), &[], 0.5);
+            closest = closest.min((body.pos - player).length());
+            if closest < 1.8 {
+                break;
+            }
+        }
+        assert!(closest < 1.8, "walking at {:.1}, from {start:?} to {player:?}: got no closer than {closest:.1} m, left at {:?}", z.gait.walk, body.pos);
+    }
+}
+
+#[test]
+fn it_drops_off_a_roof_rather_than_walk_round_to_the_stairs() {
+    let solids = crate::testing::real_world();
+    let nav = NavGrid::build(&solids, capsule(false));
+    // On the building's roof at its west end; the player down on the pad
+    // beside its west wall, the stairs being round the far (east) side.
+    let player = Vec3::new(-5.5, 1.11, 46.0);
+    let mut z = Zombie::new(0.0, 5);
+    let mut body = Body::at(Vec3::new(-1.5, 4.16, 46.0));
+    z.hurt(1.0, false, false, player);
+    let mut t = 0.0;
+    while (body.pos - player).length() > 1.8 && t < 20.0 {
+        run(&mut z, &mut body, &solids, Some(&nav), Some(player), &[], 0.25);
+        t += 0.25;
+        assert!(body.pos.x < 3.0, "went round by the stairs: {:?}", body.pos);
+    }
+    assert!(t < 8.0, "took {t} s to get down to you");
+}
+
+#[test]
+fn it_does_not_drop_off_what_is_too_high() {
+    // A 5 m block with the player at its foot; one on top, no way down but
+    // a long ramp round the back.
+    let mut s = floor();
+    s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 5.0, 0.0)));
+    let nav = NavGrid::build(&s, capsule(false));
+    let (top, below) = (Vec3::new(0.0, 5.0, -1.0), Vec3::new(0.0, 0.0, 1.5));
+    assert!(nav.path(top, below).is_none(), "jumped 5 m");
+    // Nor climbs back up a drop it would take.
+    let mut s = floor();
+    s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 2.5, 0.0)));
+    let nav = NavGrid::build(&s, capsule(false));
+    let (top, below) = (Vec3::new(0.0, 2.5, -1.0), Vec3::new(0.0, 0.0, 1.5));
+    assert!(nav.path(top, below).is_some(), "wouldn't drop 2.5 m");
+    assert!(nav.path(below, top).is_none(), "climbed 2.5 m");
+}
+
+#[test]
 fn it_walks_round_a_wall_to_where_it_saw_you() {
     // A wall across the way, long enough that going round is the only way.
     let mut s = floor();
@@ -226,4 +349,5 @@ fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
         assert!(nav.path(at, feet).is_some(), "no way to the player from {at:?}");
     }
 }
+
 
