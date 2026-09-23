@@ -15,7 +15,7 @@ use crate::perf::Phase;
 use crate::render::{Draw, FigureDraw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
-use crate::weapon::{Clip, Weapon};
+use crate::weapon::Weapon;
 use crate::world::{Bounds, Look, Model, Placed};
 use crate::zombie::{self, figure::Figure};
 
@@ -73,13 +73,10 @@ impl AppHost for DeadSignal {
         if self.screen == Screen::Run
             && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
         {
-            if self.run.ending.is_none() {
-                let hands = &self.combat.hands;
-                let (clip, t) = hands.clip();
-                let (t, looping) = if clip.name() == Clip::Idle.name() { (time, true) } else { (t, false) };
-                if let Some(draw) = vm.draw(&view, hands.weapon, clip.name(), t, looping, self.run.lowered(), hands.stowed_amount()) {
-                    renderer.draw_viewmodel(draw);
-                }
+            if self.run.ending.is_none()
+                && let Some(draw) = vm.draw(&view, &self.combat.hands, time, self.run.lowered())
+            {
+                renderer.draw_viewmodel(draw);
             }
             self.combat.draw(renderer);
         }

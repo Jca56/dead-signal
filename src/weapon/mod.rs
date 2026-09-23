@@ -1,5 +1,6 @@
 //! The hands as a machine of states: ready, firing, reloading, striking,
-//! and bringing a weapon up or putting it away. What's in them is any
+//! and bringing a weapon up or putting it away; and a gun raised to the
+//! eye or not (only while ready or firing). What's in them is any
 //! weapon (`spec.rs`), bare fists among them. They're fed the frame's
 //! presses and say what happened (a shot, a click, the magazine out, the
 //! blow landing) at the moments the weapon's clips show them. They know
@@ -59,6 +60,8 @@ pub struct Trigger {
     pub fire: bool,
     pub reload: bool,
     pub melee: bool,
+    /// Held: the sights up.
+    pub aim: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -78,17 +81,24 @@ pub struct Hands {
     pub reload_speed: f64,
     /// What to take up once what's held is put away (none: bare fists).
     next: Option<Option<Slot>>,
+    /// How far the sights are raised to the eye, 0–1.
+    aim: f64,
 }
 
 impl Default for Hands {
     fn default() -> Self {
-        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None }
+        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0 }
     }
 }
 
 impl Hands {
     pub fn spec(&self) -> &'static Spec {
         self.weapon.spec()
+    }
+
+    /// How far the sights are up, 0–1, eased in and out.
+    pub fn aim(&self) -> f64 {
+        self.aim * self.aim * (3.0 - 2.0 * self.aim)
     }
 
     /// The clip showing and how far into it.
@@ -158,6 +168,7 @@ impl Hands {
         self.mag = mag.min(weapon.spec().mag);
         self.gap = 0.0;
         self.next = None;
+        self.aim = 0.0;
         self.start(Clip::Draw);
     }
 
@@ -195,6 +206,12 @@ impl Hands {
             Clip::Draw if self.t >= spec.draw => self.start(Clip::Idle),
             Clip::Holster if self.t >= spec.holster => self.start(Clip::Stowed),
             _ => {}
+        }
+        // The sights come up (a gun, ready or firing) and go down.
+        if let Some(shot) = spec.shot {
+            let up = input.aim && !self.busy();
+            let step = dt / shot.aim_time.max(1e-3);
+            self.aim = if up { (self.aim + step).min(1.0) } else { (self.aim - step).max(0.0) };
         }
         if self.busy() {
             return acts;

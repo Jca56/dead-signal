@@ -17,6 +17,8 @@ pub struct Hud<'a> {
     /// What's in hand, and its rounds (loaded, spare) if it's a gun.
     pub weapon: &'a str,
     pub rounds: Option<(u32, u32)>,
+    /// How far down the sights, 0–1 (the dot gives way to them).
+    pub aim: f64,
     pub marker: Option<Marker>,
     /// A blow's red at the edges, 0–1.
     pub hurt: f64,
@@ -53,10 +55,14 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
         vignette(ui, screen, red);
     }
 
-    // The dot, ringed dark so it shows against sky and ground alike.
+    // The dot, ringed dark so it shows against sky and ground alike; gone
+    // down the sights.
     let dot = 5.0 * s;
-    ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5 - Vec2::new(2.0 * s, 2.0 * s), Vec2::new(dot + 4.0 * s, dot + 4.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.55));
-    ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5, Vec2::new(dot, dot)), style::BONE);
+    let shown = 1.0 - h.aim.clamp(0.0, 1.0);
+    if shown > 0.0 {
+        ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5 - Vec2::new(2.0 * s, 2.0 * s), Vec2::new(dot + 4.0 * s, dot + 4.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.55 * shown));
+        ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5, Vec2::new(dot, dot)), Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, shown));
+    }
     if let Some(m) = h.marker {
         let (inner, outer, width, colour) = if m.beaten { (10.0 * s, 25.0 * s, 5.0 * s, style::SIGNAL) } else { (10.0 * s, 20.0 * s, 4.0 * s, style::BONE) };
         for (dx, dy) in [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {

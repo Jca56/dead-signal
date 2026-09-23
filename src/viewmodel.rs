@@ -15,7 +15,8 @@ use crate::render::SkinnedMeshId;
 use crate::head::{EYE_CROUCH, EYE_STAND, View};
 use crate::player::Body;
 use crate::render::SkinnedDraw;
-use crate::weapon::Weapon;
+use crate::weapon::{Clip, Hands, Weapon};
+use lntrn_model::Gltf;
 
 /// Seconds of turn the arms lag by, and the most they may lag, radians.
 const LAG: f64 = 0.018;
@@ -26,6 +27,8 @@ const STIFF: f64 = 150.0;
 const DAMP: f64 = 18.0;
 /// Where the arms turn about: low in the chest, just behind the eye.
 const PIVOT: Vec3 = Vec3::new(0.0, -0.25, 0.05);
+/// Down the sights, how much of the sway, bob and bounce is steadied.
+const AIM_STEADY: f64 = 0.8;
 /// Put away, how far the arms drop, metres, and tip forward, radians.
 const STOW_DROP: f64 = 0.32;
 const STOW_TIP: f64 = 0.7;
@@ -82,43 +85,67 @@ impl Viewmodel {
         self.lift += (lift - self.lift) * (1.0 - (-12.0 * dt).exp());
     }
 
-    /// The arms and `weapon` as they are drawn this frame, playing `clip`
-    /// at `t` seconds (a looping clip wraps round); none if that weapon's
-    /// viewmodel didn't load.
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw(&self, view: &View, weapon: Weapon, clip: &str, t: f64, looping: bool, lowered: f64, stowed: f64) -> Option<SkinnedDraw> {
-        let rig = self.rigs.get(&weapon)?;
+    /// The arms and what's in `hands` as they are drawn this frame (the
+    /// clip playing, blended toward the weapon's aimed one as far as the
+    /// sights are up; idles loop on the game's clock, `time`); none if that
+    /// weapon's viewmodel didn't load.
+    pub fn draw(&self, view: &View, hands: &Hands, time: f64, lowered: f64) -> Option<SkinnedDraw> {
+        let rig = self.rigs.get(&hands.weapon)?;
         let gltf = &rig.gltf;
-        let mut pose: Vec<Transform> = gltf.rest_pose();
-        if let Some(anim) = gltf.animations.iter().find(|a| a.name.as_deref() == Some(clip)) {
-            let length = anim.duration();
-            if length > 0.0 {
-                anim.sample(if looping { t.rem_euclid(length) } else { t.min(length) }, &mut pose);
+        let (clip, t) = hands.clip();
+        let idle = clip.name() == Clip::Idle.name();
+        let mut pose = sample(gltf, clip.name(), if idle { time } else { t }, idle);
+        let aim = hands.aim();
+        if aim > 0.0 {
+            let aimed = if clip == Clip::Fire { sample(gltf, "AimFire", t, false) } else { sample(gltf, "Aim", time, true) };
+            for (hip, up) in pose.iter_mut().zip(&aimed) {
+                *hip = Transform { translation: hip.translation.lerp(up.translation, aim), rotation: hip.rotation.slerp(up.rotation, aim), scale: hip.scale.lerp(up.scale, aim) };
             }
         }
         let joints = gltf.skins[rig.skin].joint_matrices(&gltf.world_matrices(&pose));
-        Some(SkinnedDraw { mesh: rig.mesh, model: self.placement(view, lowered, stowed), joints })
+        Some(SkinnedDraw { mesh: rig.mesh, model: self.placement(view, lowered, hands.stowed_amount(), aim), joints })
     }
 
     /// Where the whole rig sits in front of the eye.
     /// `lowered` (0–1) drops the gun out of the way (patching up);
-    /// `stowed` (0–1) takes it right down out of view, tipping forward.
-    fn placement(&self, view: &View, lowered: f64, stowed: f64) -> Mat4 {
-        let sway = self.sway.angle;
+    /// `stowed` (0–1) takes it right down out of view, tipping forward;
+    /// `aim` (0–1) steadies it, the sights held on the middle: all the
+    /// way up, nothing moves it (moved, the near sight would slide off the
+    /// far one), and what's left of the sway and bob turns it about the eye
+    /// (which keeps both sights on one line through it).
+    fn placement(&self, view: &View, lowered: f64, stowed: f64, aim: f64) -> Mat4 {
+        let steady = 1.0 - AIM_STEADY * aim;
+        let still = 1.0 - aim;
+        let sway = self.sway.angle * steady;
         let sprint = view.sprint_amount.max(lowered);
-        let amount = view.bob_amount * (1.0 + 0.6 * sprint);
+        let amount = view.bob_amount * (1.0 + 0.6 * sprint) * steady;
         let phase = view.bob_phase;
-        let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0);
+        let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0) * (1.0 - aim);
         let stow = stowed.clamp(0.0, 1.0);
         let stow = stow * stow * (3.0 - 2.0 * stow);
         let offset = Vec3::new(
-            phase.cos() * 0.012 * amount - sway.x * 0.1 + 0.04 * stow,
-            (phase * 2.0).sin() * 0.008 * amount + sway.y * 0.1 - 0.06 * sprint - 0.015 * crouch + self.lift + view.dip * 0.35 - STOW_DROP * stow,
+            (phase.cos() * 0.012 * amount - sway.x * 0.1) * still + 0.04 * stow,
+            ((phase * 2.0).sin() * 0.008 * amount + sway.y * 0.1 + self.lift + view.dip * 0.35) * still - 0.06 * sprint - 0.015 * crouch - STOW_DROP * stow,
             0.02 * sprint,
         );
         let turn = Quat::from_rotation_y(sway.x) * Quat::from_rotation_x(sway.y - 0.3 * sprint - STOW_TIP * stow) * Quat::from_rotation_z(phase.cos() * 0.015 * amount - sway.x * 0.3 + 0.1 * sprint);
-        Mat4::from_translation(offset + PIVOT) * Mat4::from_quat(turn) * Mat4::from_translation(-PIVOT)
+        // Turned about the chest from the hip, about the eye down the sights.
+        let pivot = PIVOT * still;
+        Mat4::from_translation(offset + pivot) * Mat4::from_quat(turn) * Mat4::from_translation(-pivot)
     }
+}
+
+/// `clip` of `gltf` at `t` seconds (a looping clip wraps round), over its
+/// rest pose (just the rest pose if there's no such clip).
+fn sample(gltf: &Gltf, clip: &str, t: f64, looping: bool) -> Vec<Transform> {
+    let mut pose = gltf.rest_pose();
+    if let Some(anim) = gltf.animations.iter().find(|a| a.name.as_deref() == Some(clip)) {
+        let length = anim.duration();
+        if length > 0.0 {
+            anim.sample(if looping { t.rem_euclid(length) } else { t.min(length) }, &mut pose);
+        }
+    }
+    pose
 }
 
 #[cfg(test)]
@@ -143,6 +170,26 @@ mod tests {
             sway.update(yaw, 0.0, DT);
         }
         assert!(sway.angle.x.abs() < 1e-3, "settled at {}", sway.angle.x);
+    }
+
+    #[test]
+    fn down_the_sights_the_sway_and_bob_never_part_the_sights() {
+        use crate::head::View;
+        let mut vm = Viewmodel::new(HashMap::new());
+        // Mid-turn, mid-stride, just landed, in the air.
+        vm.sway.angle = Vec2::new(0.05, -0.04);
+        vm.lift = 0.02;
+        let mut view = View::facing(0.0);
+        (view.bob_amount, view.bob_phase, view.dip) = (1.0, 0.9, -0.1);
+        let m = vm.placement(&view, 0.0, 0.0, 1.0);
+        // The sight line (the eye's own axis) stays a line through the eye.
+        let (rear, front) = (m.transform_point(Vec3::new(0.0, 0.0, -0.17)), m.transform_point(Vec3::new(0.0, 0.0, -0.34)));
+        let apart = rear.normalize().cross(front.normalize()).length();
+        assert!(apart < 1e-9, "the sights part by {apart}");
+        // From the hip the same motion does move the gun about.
+        let m = vm.placement(&view, 0.0, 0.0, 0.0);
+        let (rear, front) = (m.transform_point(Vec3::new(0.0, 0.0, -0.17)), m.transform_point(Vec3::new(0.0, 0.0, -0.34)));
+        assert!(rear.normalize().cross(front.normalize()).length() > 1e-3);
     }
 
     #[test]
@@ -256,7 +303,7 @@ mod model_tests {
         // The gun in the hand where poses.py put it: Blender (0.085, 0.30,
         // -0.165) is the game's (0.085, -0.165, -0.30).
         let at = bone_at(&g, "Idle", 0.0, "gun").translation();
-        assert!((at - Vec3::new(0.085, -0.165, -0.30)).length() < 0.01, "the gun is held at {at:?}");
+        assert!((at - Vec3::new(0.085, -0.165, -0.30)).length() < 0.001, "the gun is held at {at:?}");
         // The flash on the first frame of a shot only.
         let size = |anim: &str, t: f64| bone_at(&g, anim, t, "flash").col(0).length();
         assert!(size("Fire", 0.0) > 0.9 && size("Fire", 0.1) < 0.05 && size("Idle", 0.5) < 0.05);
@@ -268,6 +315,46 @@ mod model_tests {
         let mag = |t: f64| (bone_at(&g, "Reload", t, "mag").translation() - bone_at(&g, "Reload", t, "gun").translation()).length();
         assert!(mag(0.5) > mag(0.0) + 0.3, "mag out: {} vs {}", mag(0.5), mag(0.0));
         assert!((mag(1.4) - mag(0.0)).abs() < 0.005, "and back in");
+    }
+
+    #[test]
+    fn aimed_the_pistols_sights_are_on_the_middle_of_the_view() {
+        let g = viewmodel(Weapon::Pistol);
+        let skin = &g.skins[0];
+        let prim = &g.meshes[g.nodes.iter().find_map(|n| n.skin.and(n.mesh)).unwrap()].primitives[0];
+        let slide = skin.joints.iter().position(|&j| g.nodes[j].name.as_deref() == Some("slide")).unwrap() as u16;
+        for (anim, t) in [("Aim", 0.0), ("Aim", 1.5), ("AimFire", 0.2)] {
+            let mut pose = g.rest_pose();
+            g.animations.iter().find(|a| a.name.as_deref() == Some(anim)).unwrap().sample(t, &mut pose);
+            let joints = skin.joint_matrices(&g.world_matrices(&pose));
+            // The slide's corners as posed; the sights are its highest.
+            let posed: Vec<Vec3> = prim
+                .positions
+                .iter()
+                .zip(prim.joints.iter().zip(&prim.weights))
+                .filter(|(_, (j, w))| j[0] == slide && w[0] > 0.99)
+                .map(|(p, _)| joints[usize::from(slide)].transform_point(Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]))))
+                .collect();
+            let top = posed.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+            let sights: Vec<&Vec3> = posed.iter().filter(|p| p.y > top - 0.002).collect();
+            let (near, far) = (sights.iter().map(|p| -p.z).fold(f64::INFINITY, f64::min), sights.iter().map(|p| -p.z).fold(0.0, f64::max));
+            assert!(far - near > 0.12, "{anim}: rear and front sights both on top ({near:.3} to {far:.3} m ahead)");
+            // Each sight's middle (the rear's notch, the front's post) on
+            // the middle of the view.
+            let mid = (near + far) * 0.5;
+            for rear in [true, false] {
+                let those: Vec<&&Vec3> = sights.iter().filter(|p| (-p.z < mid) == rear).collect();
+                let centre = those.iter().fold(Vec3::ZERO, |a, p| a + ***p) * (1.0 / those.len() as f64);
+                let (x, y) = on_screen(centre).expect("in front");
+                assert!(x.abs() < 0.01 && y.abs() < 0.01, "{anim} at {t}: the {} sight at {x:.3}, {y:.3}", if rear { "rear" } else { "front" });
+            }
+            // And the post shows through the notch, light either side of it:
+            // on screen, the post's widest is inside the ears' nearest.
+            let across = |rear: bool| sights.iter().filter(|p| (-p.z < mid) == rear).map(|p| on_screen(**p).expect("in front").0).collect::<Vec<f64>>();
+            let notch = across(true).iter().map(|x| x.abs()).fold(f64::INFINITY, f64::min);
+            let post = across(false).iter().map(|x| x.abs()).fold(0.0, f64::max);
+            assert!(post < notch * 0.8, "{anim} at {t}: the post ({post:.4} wide each side) fills the notch ({notch:.4})");
+        }
     }
 
     #[test]

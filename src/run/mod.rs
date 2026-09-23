@@ -31,8 +31,10 @@ use crate::zombie::director::Director;
 const BLOW_DAMAGE: f64 = 20.0;
 /// Seconds between heartbeats when badly hurt.
 const HEARTBEAT: f64 = 1.1;
-/// How fast the player walks with the bag open, as a share.
+/// How fast the player walks with the bag open, and down the sights, as
+/// a share.
 const RUMMAGING_PACE: f64 = 0.5;
+const AIMING_PACE: f64 = 0.6;
 
 #[derive(Default)]
 pub struct Run {
@@ -154,7 +156,7 @@ impl Run {
         } else if open {
             (walk * RUMMAGING_PACE, false, false)
         } else {
-            (walk, sprint, jump)
+            (walk * (1.0 - (1.0 - AIMING_PACE) * combat.hands.aim()), sprint, jump)
         };
         let crouch = pressed(ui, &['c']);
         {
@@ -179,7 +181,10 @@ impl Run {
         }
         let busy = self.vitals.healing.is_some() || open;
         self.switch_hands(ui, combat, !busy);
-        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: pressed(ui, &['r']), melee: striking } };
+        // The sights up while the right button's held; a sprint takes them
+        // down.
+        let aim = locked && ui.state.right_down && !wants_sprint;
+        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: pressed(ui, &['r']), melee: striking, aim } };
         // Reloading draws on the rounds carried, of the kind the gun takes.
         let ammo = combat.hands.spec().ammo;
         combat.hands.spare = ammo.map_or(0, |kind| self.bag.count(kind));
@@ -280,6 +285,7 @@ impl Run {
             &Hud {
                 weapon: combat.hands.spec().name,
                 rounds: combat.hands.spec().ammo.map(|kind| (combat.hands.mag, self.bag.count(kind))),
+                aim: combat.hands.aim(),
                 marker: combat.fx.marker,
                 hurt: combat.hurt,
                 hp: v.hp,

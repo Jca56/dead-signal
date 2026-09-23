@@ -18,15 +18,36 @@ impl Weapon {
     pub const ALL: [Weapon; 2] = [Weapon::Fists, Weapon::Pistol];
 }
 
+/// How far off true a round may fly, degrees: standing still, moving,
+/// and in the air.
+#[derive(Clone, Copy, Debug)]
+pub struct Spread {
+    pub still: f64,
+    pub moving: f64,
+    pub air: f64,
+}
+
+impl Spread {
+    /// Between `self` (from the hip) and `aimed`, by how far it's aimed.
+    pub fn toward(self, aimed: Spread, aim: f64) -> Spread {
+        let mix = |a: f64, b: f64| a + (b - a) * aim;
+        Spread { still: mix(self.still, aimed.still), moving: mix(self.moving, aimed.moving), air: mix(self.air, aimed.air) }
+    }
+}
+
 /// How it shoots.
 #[derive(Clone, Copy, Debug)]
 pub struct Shot {
     pub damage: f64,
     /// How far a round flies, metres.
     pub range: f64,
-    /// Its spread, degrees: moving, and in the air (none standing still).
-    pub spread_moving: f64,
-    pub spread_air: f64,
+    /// Its spread from the hip, and down the sights.
+    pub hip: Spread,
+    pub aimed: Spread,
+    /// Seconds to raise the sights to the eye, and how far the view closes
+    /// in down them (its field of view, a share of the usual).
+    pub aim_time: f64,
+    pub zoom: f64,
     /// The quickest it fires again, seconds (none: as fast as the trigger
     /// is pulled), and how long the Fire clip runs.
     pub gap: f64,
@@ -94,7 +115,18 @@ const PISTOL: Spec = Spec {
     model: "pistol",
     mag: 12,
     ammo: Some(Kind::Rounds),
-    shot: Some(Shot { damage: 25.0, range: 300.0, spread_moving: 1.2, spread_air: 3.0, gap: 0.0, time: 0.2, kick: 1.5, kick_side: 0.8 }),
+    shot: Some(Shot {
+        damage: 25.0,
+        range: 300.0,
+        hip: Spread { still: 1.5, moving: 2.2, air: 4.0 },
+        aimed: Spread { still: 0.0, moving: 0.5, air: 3.0 },
+        aim_time: 0.18,
+        zoom: 0.8,
+        gap: 0.0,
+        time: 0.2,
+        kick: 1.5,
+        kick_side: 0.8,
+    }),
     reload: Some(Reload { time: 1.4, marks: &[(0.2, Act::MagOut), (0.95, Act::MagIn), (1.12, Act::SlideRack)] }),
     // The pistol-whip lands on frame 9 of 30 a second.
     bash: Bash { time: 0.5, swing_at: 0.05, strike_at: 8.0 / 30.0, damage: 50.0, reach: 1.8 },

@@ -1,6 +1,7 @@
 //! The view riding on the player's body, every frame: which way it looks,
 //! how high the eye is (standing or crouched), the head bob, the dip on
-//! landing, the glide up and down stairs, and the sprint's wider view.
+//! landing, the glide up and down stairs, the sprint's wider view, and the
+//! narrower one down a gun's sights (the mouse slowed to match).
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
@@ -43,11 +44,15 @@ pub struct View {
     /// A shake of the head (a blow landing), metres, and its clock.
     pub shake: f64,
     shake_t: f64,
+    /// How far down the sights, 0–1, and the share of the field of view
+    /// left at all the way.
+    pub ads: f64,
+    pub ads_zoom: f64,
 }
 
 impl View {
     pub fn facing(yaw: f64) -> Self {
-        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, stair: 0.0, sprint_amount: 0.0, kick: (0.0, 0.0), shake: 0.0, shake_t: 0.0 }
+        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, stair: 0.0, sprint_amount: 0.0, kick: (0.0, 0.0), shake: 0.0, shake_t: 0.0, ads: 0.0, ads_zoom: 1.0 }
     }
 
     /// Where the eye actually points: the held aim plus the recoil.
@@ -66,14 +71,22 @@ impl View {
         self.shake = self.shake.max(metres);
     }
 
-    /// Turn by raw mouse counts.
+    /// Turn by raw mouse counts: slower down the sights, as much as the
+    /// view closes in (the world passes under them as fast as ever).
     pub fn look(&mut self, counts: Vec2) {
-        self.yaw -= counts.x * SENSITIVITY;
-        self.pitch = (self.pitch - counts.y * SENSITIVITY).clamp(-PITCH_LIMIT, PITCH_LIMIT);
+        let half = |fov: f64| (fov.to_radians() * 0.5).tan();
+        let sensitivity = SENSITIVITY * half(FOV * self.zoom()) / half(FOV);
+        self.yaw -= counts.x * sensitivity;
+        self.pitch = (self.pitch - counts.y * sensitivity).clamp(-PITCH_LIMIT, PITCH_LIMIT);
+    }
+
+    /// The share of the field of view left down the sights.
+    fn zoom(&self) -> f64 {
+        1.0 + (self.ads_zoom - 1.0) * self.ads
     }
 
     pub fn fov_y(&self) -> f64 {
-        (FOV + SPRINT_FOV * self.sprint_amount).to_radians()
+        ((FOV + SPRINT_FOV * self.sprint_amount) * self.zoom()).to_radians()
     }
 }
 

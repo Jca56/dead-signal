@@ -7,6 +7,9 @@ flash, each part on a bone of its own under the hand; and its clips.
     Reload  1.4 s tilt, mag out, left hand away and back with a new one,
                   seated, slide racked
     Bash    0.5 s a pistol-whip: wind up, strike (frame 9), recover
+    Aim     3 s   raised to the eye, the sights on the middle of the view,
+                  held dead still
+    AimFire 0.2 s the kick and the flash from there
 
 The parts' bones:
 
@@ -32,11 +35,19 @@ import poses
 SLIDE = (0.17, 0.17, 0.18)
 FRAME = (0.10, 0.10, 0.10)
 GRIP = (0.13, 0.12, 0.11)
-SIGHT = (0.75, 0.73, 0.66)
+# The sights, easy to see: white dots either side of the rear notch, a
+# bright front post.
+DOT = (0.92, 0.91, 0.87)
+POST = (0.95, 0.45, 0.08)
 FLASH = (1.0, 0.78, 0.35)
 
-# Where things are, in the gun's frame, metres.
+# Where things are, in the gun's frame, metres: the muzzle, and how high
+# the tops of the sights stand over the origin (the line they make runs
+# along the barrel).
 MUZZLE = Vector((0.0, 0.14, 0.07))
+SIGHT_LINE = 0.094
+# How far ahead of the eye the gun is held up to it (its origin).
+AIM_DISTANCE = 0.22
 GRIP_TILT = math.radians(-15)  # the grip's top leans forward
 
 
@@ -107,8 +118,14 @@ def build(b, wrist, fwd, back, across, hand):
     box(b, to_rig, Vector((0.0, 0.133, 0.066)), (0.012, 0.008, 0.012), FRAME, "gun")
     # The slide and its sights.
     box(b, to_rig, Vector((0.0, 0.035, 0.07)), (0.030, 0.19, 0.032), SLIDE, "slide")
-    box(b, to_rig, Vector((0.0, -0.052, 0.09)), (0.022, 0.008, 0.008), SLIDE, "slide")
-    box(b, to_rig, Vector((0.0, 0.12, 0.09)), (0.006, 0.006, 0.009), SIGHT, "slide")
+    # The rear sight: two ears and the notch between, a dot on each ear's
+    # back; the front post, seen through the notch. Their tops make the
+    # sight line.
+    top, height = SIGHT_LINE, 0.010
+    for side in (-1.0, 1.0):
+        box(b, to_rig, Vector((side * 0.0075, -0.052, top - height / 2)), (0.007, 0.008, height), SLIDE, "slide")
+        box(b, to_rig, Vector((side * 0.0075, -0.0566, top - 0.0045)), (0.0035, 0.0012, 0.0035), DOT, "slide")
+    box(b, to_rig, Vector((0.0, 0.12, top - height / 2)), (0.006, 0.006, height), POST, "slide")
     # The magazine: a body inside the grip and the base plate under it.
     box(b, to_rig, Vector((0.0, -0.013, -0.02)), (0.022, 0.034, 0.1), FRAME, "mag", GRIP_TILT)
     box(b, to_rig, Vector((0.0, -0.03, -0.074)), (0.031, 0.05, 0.01), GRIP, "mag", GRIP_TILT)
@@ -197,6 +214,26 @@ def animate(rig, gun_rest, left_rest):
         r.key(start + f, g, left)
         steady(start + f)
     spans["Bash"] = (start, start + 15)
+
+    # Aim: frames 401..491, dead still (the game sways it about the eye).
+    start = 401
+    aimed = poses.aim_pose(SIGHT_LINE, AIM_DISTANCE)
+    for f in (start, start + 90):
+        r.key(f, aimed, poses.support(aimed))
+        steady(f)
+    spans["Aim"] = (start, start + 90)
+
+    # AimFire: frames 501..507, a sharper kick back into the eye.
+    start = 501
+    for f, g, slide, fl in (
+        (0, aimed, 0.0, 1.0),
+        (1, poses.aim_pose(SIGHT_LINE, AIM_DISTANCE, Vector((0.0, -0.03, 0.008)), pitch=6.0), -0.038, 0.0),
+        (3, poses.aim_pose(SIGHT_LINE, AIM_DISTANCE, Vector((0.0, -0.01, 0.002)), pitch=1.5), 0.0, 0.0),
+        (6, aimed, 0.0, 0.0),
+    ):
+        r.key(start + f, g, poses.support(g))
+        steady(start + f, flash=fl, slide=slide)
+    spans["AimFire"] = (start, start + 6)
 
     # The flash pops for one frame: no easing into or out of it.
     for fc in work.fcurves if hasattr(work, "fcurves") else []:

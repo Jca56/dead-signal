@@ -47,6 +47,18 @@ def gun_pose(offset=Vector(), pitch=0.0, roll=0.0, yaw=0.0):
     return frame_to(origin, right, barrel, up)
 
 
+def aim_pose(sight, distance, offset=Vector(), pitch=0.0):
+    """The gun's frame raised to the eye: dead level and square, its
+    sight line (`sight` above its origin, in its own frame) on the line of
+    sight `distance` ahead, then moved by `offset` and tipped up by
+    `pitch` degrees about its sights."""
+    right = Vector((1, 0, 0))
+    turn = Matrix.Rotation(math.radians(pitch), 3, right)
+    barrel, up = turn @ Vector((0, 1, 0)), turn @ Vector((0, 0, 1))
+    origin = Vector((0, distance, 0)) - up * sight + offset
+    return frame_to(origin, right, barrel, up)
+
+
 class Rig:
     """What the poses are built from: the rig, its rest frames and targets."""
 
@@ -61,8 +73,11 @@ class Rig:
         w, f, k = left_rest
         self.left_rest = frame_to(w, f.cross(k).normalized(), f, k)
         self.hand_l = rest(rig, "hand.L")
+        # The gun bone's rest matrix: the gun itself is put exactly where
+        # it's posed (IK brings the hand only close).
+        self.gun_bone = rest(rig, "gun")
         self.targets = {}
-        for side in ("R", "L"):
+        for side in ("R", "L", "gun"):
             e = bpy.data.objects.new(f"target.{side}", None)
             bpy.context.scene.collection.objects.link(e)
             e.rotation_mode = "QUATERNION"
@@ -83,7 +98,7 @@ class Rig:
     def key(self, frame, gun, left):
         """Both hands for one frame: the right carrying the gun at `gun`,
         the left at (wrist, fwd, back)."""
-        for side, m in (("R", self.right_for(gun)), ("L", self.left_for(*left))):
+        for side, m in (("R", self.right_for(gun)), ("L", self.left_for(*left)), ("gun", gun @ self.gun_rest.inverted() @ self.gun_bone)):
             e = self.targets[side]
             e.matrix_world = m
             e.keyframe_insert("location", frame=frame)
@@ -96,13 +111,16 @@ class Rig:
             c.use_tail = False
             c.use_rotation = True
             c.chain_count = 3
+        c = self.rig.pose.bones["gun"].constraints.new("COPY_TRANSFORMS")
+        c.target = self.targets["gun"]
 
     def clear(self):
-        for side in ("R", "L"):
-            pb = self.rig.pose.bones[f"hand.{side}"]
+        for bone in ("hand.R", "hand.L", "gun"):
+            pb = self.rig.pose.bones[bone]
             for c in list(pb.constraints):
                 pb.constraints.remove(c)
-            bpy.data.objects.remove(self.targets[side])
+        for e in self.targets.values():
+            bpy.data.objects.remove(e)
 
 
 def support(gun, dx=0.0, dy=0.0, dz=0.0):

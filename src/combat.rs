@@ -141,6 +141,12 @@ impl Combat {
         self.hurt = (self.hurt - dt * 1.6).max(0.0);
         let spec = self.hands.spec();
         let acts = self.hands.update(trigger, dt);
+        // Down the sights, the view closes in.
+        let sights = self.hands.aim();
+        if let Some(mut v) = game.player_view_mut() {
+            v.ads = sights;
+            v.ads_zoom = spec.shot.map_or(1.0, |s| s.zoom);
+        }
         if acts.is_empty() {
             return;
         }
@@ -158,7 +164,8 @@ impl Combat {
                     if let Some(mut v) = game.player_view_mut() {
                         v.recoil(shot.kick, side);
                     }
-                    let spread = if !body.grounded { shot.spread_air } else if body.speed_flat() > 0.5 { shot.spread_moving } else { 0.0 };
+                    let spread = shot.hip.toward(shot.aimed, self.hands.aim());
+                    let spread = if !body.grounded { spread.air } else if body.speed_flat() > 0.5 { spread.moving } else { spread.still };
                     let dir = self.scatter(&aim, spread);
                     self.strike(game, &aim, dir, shot.range, shot.damage, false, stats);
                 }

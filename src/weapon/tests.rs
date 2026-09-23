@@ -31,9 +31,10 @@ fn run(h: &mut Hands, input: Trigger, frames: usize) -> Vec<Act> {
     all
 }
 
-const FIRE: Trigger = Trigger { fire: true, reload: false, melee: false };
-const RELOAD: Trigger = Trigger { fire: false, reload: true, melee: false };
-const MELEE: Trigger = Trigger { fire: false, reload: false, melee: true };
+const FIRE: Trigger = Trigger { fire: true, reload: false, melee: false, aim: false };
+const RELOAD: Trigger = Trigger { fire: false, reload: true, melee: false, aim: false };
+const MELEE: Trigger = Trigger { fire: false, reload: false, melee: true, aim: false };
+const AIM: Trigger = Trigger { fire: false, reload: false, melee: false, aim: true };
 const RELOAD_TIME: f64 = 1.4;
 
 #[test]
@@ -171,4 +172,46 @@ fn no_switching_mid_blow_but_a_reload_is_given_up() {
         p.update(Trigger::default(), DT);
     }
     assert_eq!((p.mag, p.spare), (2, 24), "nothing loaded");
+}
+
+#[test]
+fn the_sights_come_up_while_held_and_drop_for_a_reload() {
+    let mut p = pistol(24);
+    let aim_time = Weapon::Pistol.spec().shot.unwrap().aim_time;
+    let frames = (aim_time * 60.0).ceil() as usize;
+    for _ in 0..frames / 2 {
+        p.update(AIM, DT);
+    }
+    assert!(p.aim() > 0.2 && p.aim() < 0.8, "halfway: {}", p.aim());
+    for _ in 0..frames {
+        p.update(AIM, DT);
+    }
+    assert_eq!(p.aim(), 1.0, "up");
+    // Firing down the sights keeps them up.
+    assert_eq!(p.update(Trigger { fire: true, ..AIM }, DT), vec![Act::Shoot]);
+    assert_eq!(p.aim(), 1.0);
+    // A reload takes them down, held or not.
+    p.mag = 3;
+    for _ in 0..frames + 2 {
+        p.update(Trigger { reload: true, ..AIM }, DT);
+    }
+    assert_eq!((p.clip().0, p.aim()), (Clip::Reload, 0.0));
+    // Let go of: down.
+    idle(&mut p);
+    for _ in 0..frames + 2 {
+        p.update(AIM, DT);
+    }
+    for _ in 0..frames + 2 {
+        p.update(Trigger::default(), DT);
+    }
+    assert_eq!(p.aim(), 0.0);
+}
+
+#[test]
+fn bare_fists_have_no_sights() {
+    let mut h = Hands::default();
+    for _ in 0..60 {
+        h.update(AIM, DT);
+    }
+    assert_eq!(h.aim(), 0.0);
 }
