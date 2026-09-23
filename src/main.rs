@@ -17,6 +17,7 @@ mod icons;
 mod items;
 mod levelbar;
 mod loot;
+mod map;
 mod menu;
 mod perf;
 mod player;

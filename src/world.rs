@@ -22,18 +22,36 @@ pub struct Placed(pub Mat4);
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Model(pub MeshId);
 
-/// How it shows: its own light, and how much fog swallows it.
+/// How it shows: its own light, how much fog swallows it, and a shade
+/// its colours are multiplied by (white leaves them).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Look {
     pub emissive: f32,
     pub fog: f32,
+    pub tint: [f32; 3],
 }
 
 impl Default for Look {
     fn default() -> Self {
-        Self { emissive: 1.0, fog: 1.0 }
+        Self { emissive: 1.0, fog: 1.0, tint: [1.0; 3] }
     }
 }
+
+/// The ball a thing lies within, for leaving it undrawn when it's out of
+/// view or lost in the fog.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Bounds {
+    pub centre: Vec3,
+    pub radius: f64,
+}
+
+/// Part of the map a run is played on: gone with it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct OnMap;
+
+/// Part of the title's scene: put away while a run is on.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct OnTitle;
 
 /// A light that stutters on and off: lit for each `(start, end)` span of
 /// seconds within every `period`.
@@ -57,9 +75,19 @@ pub struct Clock {
 #[derive(Resource, Clone, Copy, Debug, Default)]
 pub struct Blend(pub f64);
 
-/// What can be stood on, in world space.
-#[derive(Resource, Clone, Debug, Default)]
-pub struct Ground(pub Vec<[Vec3; 3]>);
+/// The lie of the land: the title scene's ground as triangles, or a
+/// map's as its grid of heights.
+#[derive(Resource, Clone, Debug)]
+pub enum Ground {
+    Tris(Vec<[Vec3; 3]>),
+    Field(std::sync::Arc<crate::map::terrain::Field>),
+}
+
+impl Default for Ground {
+    fn default() -> Self {
+        Ground::Tris(Vec::new())
+    }
+}
 
 /// Everything solid: what bodies stand on and bump into.
 #[derive(Resource, Clone, Debug, Default)]
@@ -67,7 +95,10 @@ pub struct Solid(pub Solids);
 
 impl Ground {
     pub fn height_at(&self, x: f64, z: f64) -> Option<f64> {
-        crate::assets::height_at(&self.0, x, z)
+        match self {
+            Ground::Tris(tris) => crate::assets::height_at(tris, x, z),
+            Ground::Field(field) => field.height_at(x, z),
+        }
     }
 }
 
@@ -179,27 +210,56 @@ impl Game {
         (self.owed / player::STEP).clamp(0.0, 1.0)
     }
 
-    /// Put a model file's objects in the world. By name: `Ground` is the
-    /// terrain (drawn and solid), `SOLID_*` are drawn and solid, `COL_*` are
-    /// only solid, and `Beacon` blinks.
-    pub fn spawn_props(&mut self, props: Vec<Prop>) {
+    /// Put the title scene's objects in the world (in place of any map):
+    /// its ground is the ground, and its beacon blinks. By name: `Ground`
+    /// is the terrain (drawn and solid), `SOLID_*` are drawn and solid,
+    /// `COL_*` are only solid.
+    pub fn spawn_title(&mut self, props: &[Prop]) {
+        self.clear_map();
+        self.hide_title();
+        let mut solids = crate::collide::Solids::default();
+        let mut ground = Vec::new();
         for p in props {
             let name = p.name.as_str();
             if name == "Ground" || name.starts_with("SOLID_") || name.starts_with("COL_") {
-                self.world.resource_mut::<Solid>().0.add_as(&p.triangles, surface_of(name));
+                solids.add_as(&p.triangles, surface_of(name));
             }
             if name == "Ground" {
-                self.world.resource_mut::<Ground>().0.extend(p.triangles.iter().copied());
+                ground.extend(p.triangles.iter().copied());
             }
             let Some(mesh) = p.mesh else { continue };
-            let mut e = self.world.spawn((Placed(p.model), Model(mesh), Look::default()));
+            let mut e = self.world.spawn((Placed(p.model), Model(mesh), Look::default(), OnTitle));
             if let Some(kind) = target_kind(name) {
                 e.insert(Target::new(kind, p.model));
             }
             if name == "Beacon" {
                 // A failing light: two quick flashes, then a long dark.
-                e.insert((Blink { period: 3.2, lit: vec![(0.0, 0.18), (0.42, 0.55)] }, Look { emissive: 1.0, fog: 0.35 }));
+                e.insert((Blink { period: 3.2, lit: vec![(0.0, 0.18), (0.42, 0.55)] }, Look { emissive: 1.0, fog: 0.35, ..Look::default() }));
             }
+        }
+        self.world.insert_resource(Solid(solids));
+        self.world.insert_resource(Ground::Tris(ground));
+        self.world.resource_mut::<zombie::Nav>().0 = None;
+    }
+
+    /// Put the title scene away (a map is going in).
+    pub fn hide_title(&mut self) {
+        let shown: Vec<Entity> = self.world.query_filtered::<Entity, With<OnTitle>>().iter(&self.world).collect();
+        for e in shown {
+            self.world.despawn(e);
+        }
+    }
+
+    /// Everything of the last map gone: its ground, scenery, containers,
+    /// the dead, what's lying about, the ways out.
+    pub fn clear_map(&mut self) {
+        zombie::clear(&mut self.world);
+        crate::items::clear(&mut self.world);
+        crate::exits::hide(&mut self.world);
+        self.world.remove_resource::<crate::exits::Exits>();
+        let all: Vec<Entity> = self.world.query_filtered::<Entity, With<OnMap>>().iter(&self.world).collect();
+        for e in all {
+            self.world.despawn(e);
         }
     }
 
@@ -226,12 +286,6 @@ impl Game {
         let blend = self.alpha();
         self.world.resource_mut::<Blend>().0 = blend;
         self.frame.run(&mut self.world);
-    }
-
-    /// Probe the loaded world for where the dead can walk.
-    pub fn build_nav(&mut self) {
-        let grid = zombie::nav::NavGrid::build(&self.world.resource::<Solid>().0, player::capsule(false));
-        self.world.resource_mut::<zombie::Nav>().0 = Some(grid);
     }
 
     pub fn clock(&self) -> Clock {

@@ -124,7 +124,7 @@ fn it_lines_up_with_stairs_it_comes_at_from_the_side() {
     let top = 10.0 * rise;
     let edge = -2.0 - 10.0 * run_;
     s.add(&box_tris(Vec3::new(-5.0, 0.0, edge - 6.0), Vec3::new(1.2, top, edge)));
-    let nav = NavGrid::build(&s, capsule(false));
+    let nav = NavGrid::build(&s, capsule(false), crate::testing::COURSE_HALF);
     let player = Vec3::new(-2.0, top, edge - 3.0);
     for (start, seed) in [Vec3::new(6.0, 0.0, -6.0), Vec3::new(5.0, 0.0, -3.5), Vec3::new(-3.0, 0.0, 2.0)].into_iter().flat_map(|s| (1..=12u32).map(move |k| (s, k * 7919))) {
         let mut z = Zombie::new(0.0, seed);
@@ -142,7 +142,7 @@ fn it_lines_up_with_stairs_it_comes_at_from_the_side() {
 #[test]
 fn on_the_real_map_it_climbs_to_you_from_any_side() {
     let solids = crate::testing::real_world();
-    let nav = NavGrid::build(&solids, capsule(false));
+    let nav = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     let ground = |x: f64, z: f64| Vec3::new(x, nav.height_at(Vec3::new(x, 50.0, z)).unwrap(), z);
     // Up on the building's roof, and on the landings atop the 30° and 45°
     // ramps; each come at from around about.
@@ -180,7 +180,7 @@ fn on_the_real_map_it_climbs_to_you_from_any_side() {
 #[test]
 fn it_drops_off_a_roof_rather_than_walk_round_to_the_stairs() {
     let solids = crate::testing::real_world();
-    let nav = NavGrid::build(&solids, capsule(false));
+    let nav = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     // On the building's roof at its west end; the player down on the pad
     // beside its west wall, the stairs being round the far (east) side.
     let player = Vec3::new(-5.5, 1.11, 46.0);
@@ -202,7 +202,7 @@ fn it_does_not_drop_off_what_is_too_high() {
     // a long ramp round the back.
     let mut s = floor();
     s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 5.0, 0.0)));
-    let nav = NavGrid::build(&s, capsule(false));
+    let nav = NavGrid::build(&s, capsule(false), crate::testing::COURSE_HALF);
     let (top, below) = (Vec3::new(0.0, 5.0, -1.0), Vec3::new(0.0, 0.0, 1.5));
     // (The way found goes as near as it can: the edge, up top.)
     let stays = |route: Option<Vec<Vec3>>, y: f64| route.is_some_and(|r| r.iter().all(|p| (p.y - y).abs() < 0.5));
@@ -210,7 +210,7 @@ fn it_does_not_drop_off_what_is_too_high() {
     // Nor climbs back up a drop it would take.
     let mut s = floor();
     s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 2.5, 0.0)));
-    let nav = NavGrid::build(&s, capsule(false));
+    let nav = NavGrid::build(&s, capsule(false), crate::testing::COURSE_HALF);
     let (top, below) = (Vec3::new(0.0, 2.5, -1.0), Vec3::new(0.0, 0.0, 1.5));
     assert!(nav.path(top, below).is_some_and(|r| r.last().unwrap().y < 0.5), "wouldn't drop 2.5 m");
     assert!(stays(nav.path(below, top), 0.0), "climbed 2.5 m");
@@ -221,7 +221,7 @@ fn it_walks_round_a_wall_to_where_it_saw_you() {
     // A wall across the way, long enough that going round is the only way.
     let mut s = floor();
     s.add(&box_tris(Vec3::new(-6.0, 0.0, -5.5), Vec3::new(6.0, 3.0, -5.0)));
-    let nav = NavGrid::build(&s, capsule(false));
+    let nav = NavGrid::build(&s, capsule(false), crate::testing::COURSE_HALF);
     let mut z = Zombie::new(0.0, 5);
     let mut body = Body::at(Vec3::ZERO);
     let player = Vec3::new(0.0, 0.0, -12.0);
@@ -342,7 +342,7 @@ fn a_crowd_spreads_round_you_instead_of_stacking() {
 fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
     use bevy_ecs::prelude::*;
     let solids = crate::testing::real_world();
-    let grid = NavGrid::build(&solids, capsule(false));
+    let grid = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     let mut world = World::new();
     world.insert_resource(crate::world::Solid(solids.clone()));
     world.insert_resource(super::Nav(Some(grid)));

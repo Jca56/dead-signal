@@ -64,6 +64,13 @@ impl MeshId {
     }
 }
 
+/// Where the meshes stood at some point: see [`Renderer::mark`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Mark {
+    vertices: usize,
+    meshes: usize,
+}
+
 #[derive(Clone, Copy)]
 struct MeshRange {
     first: u32,
@@ -223,6 +230,19 @@ impl Renderer {
         self.staged.extend_from_slice(vertices);
         self.meshes.push(MeshRange { first, count: vertices.len() as u32 });
         MeshId(self.meshes.len() - 1)
+    }
+
+    /// How many meshes there are so far: what [`Renderer::rewind`] goes back
+    /// to.
+    pub fn mark(&self) -> Mark {
+        Mark { vertices: self.staged.len(), meshes: self.meshes.len() }
+    }
+
+    /// Forget every mesh added since `mark` (the last map's), to add the
+    /// next's in their place. Their ids mean nothing any more.
+    pub fn rewind(&mut self, mark: Mark) {
+        self.staged.truncate(mark.vertices);
+        self.meshes.truncate(mark.meshes);
     }
 
     /// Keep a skinned mesh (the arms) for the viewmodel pass.

@@ -14,7 +14,7 @@ use crate::world::{Blend, Solid};
 
 fn crowd(n: usize, player: Option<Vec3>) -> World {
     let solids = crate::testing::real_world();
-    let nav = NavGrid::build(&solids, capsule(false));
+    let nav = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     let mut world = World::new();
     let player = player.unwrap_or(Vec3::new(0.0, nav.height_at(Vec3::new(0.0, 50.0, 6.0)).unwrap(), 6.0));
     // Round the player, 6–40 m off, every one hunting them.

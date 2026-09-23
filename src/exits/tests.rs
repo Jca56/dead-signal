@@ -1,4 +1,4 @@
-//! The ways out on the real map.
+//! The ways out on the old course.
 
 use super::*;
 use crate::player::capsule;
@@ -32,9 +32,9 @@ pub fn shapes() -> Shapes {
 fn each_way_out_stands_clear_and_can_be_walked_to() {
     let before = crate::testing::real_world();
     let mut solids = before.clone();
-    let exits = set_down(&mut solids, &shapes());
+    let exits = set_down(&mut solids, &shapes(), &crate::testing::COURSE_EXITS);
     assert_eq!(exits.list.len(), 3);
-    let nav = NavGrid::build(&solids, capsule(false));
+    let nav = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     let spawn = Vec3::new(0.0, nav.height_at(Vec3::new(0.0, 50.0, 6.0)).unwrap(), 6.0);
     for e in &exits.list {
         // Nothing already there pokes into it (clear of its floor: the
@@ -64,7 +64,7 @@ fn each_way_out_stands_clear_and_can_be_walked_to() {
 #[test]
 fn the_barricade_shuts_the_road_only_when_it_is_up() {
     let mut solids = crate::testing::real_world();
-    let exits = set_down(&mut solids, &shapes());
+    let exits = set_down(&mut solids, &shapes(), &crate::testing::COURSE_EXITS);
     let road = exits.list.iter().find(|e| e.way == Way::Road).unwrap();
     // Walking through the gap towards the zone, waist high over the road.
     let floor = |p: Vec3| solids.raycast(p + Vec3::new(0.0, 5.0, 0.0), Vec3::new(0.0, -1.0, 0.0), 10.0).unwrap().point;
@@ -84,7 +84,7 @@ fn the_barricade_shuts_the_road_only_when_it_is_up() {
 fn each_zones_ring_lies_on_the_ground_round_it() {
     let solids = crate::testing::real_world();
     let mut working = solids.clone();
-    let exits = set_down(&mut working, &shapes());
+    let exits = set_down(&mut working, &shapes(), &crate::testing::COURSE_EXITS);
     // The terrain alone, as the game keeps it.
     let path = format!("{}/assets/models/title_scene.glb", env!("CARGO_MANIFEST_DIR"));
     let g = lntrn_model::Gltf::load(&path).expect("title_scene");
@@ -98,7 +98,7 @@ fn each_zones_ring_lies_on_the_ground_round_it() {
         };
         tris.extend(p.indices.chunks_exact(3).map(|t| [at(t[0]), at(t[1]), at(t[2])]));
     }
-    let ground = Ground(tris);
+    let ground = Ground::Tris(tris);
     for zone in exits.list.iter().filter(|e| e.radius > 0.0) {
     let ring = ring(&ground, zone.zone, zone.radius);
     assert_eq!(ring.len(), RING_PIECES * 6);

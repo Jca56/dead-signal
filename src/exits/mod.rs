@@ -46,15 +46,11 @@ impl Way {
     }
 }
 
-/// Where each stands (game x and z, which way its front faces, a height
-/// above its floor meant), where its zone is from there (in its own frame:
-/// -Z is in front of it, +Z behind), and how wide the zone is.
-type Spot = (Way, (f64, f64, f64, f64), Vec3, f64);
-const SPOTS: [Spot; 3] = [
-    (Way::Radio, (7.6, -44.2, std::f64::consts::FRAC_PI_2, 3.0), Vec3::new(1.0, 0.0, -4.0), 11.0),
-    (Way::Road, (-6.0, 61.0, -0.2, 6.0), Vec3::new(0.0, 0.0, 7.0), 3.5),
-    (Way::Truck, (48.0, 35.0, 0.1, 3.0), Vec3::new(0.0, 0.0, 0.0), 0.0),
-];
+/// Where a way out stands (game x and z, which way its front faces, a
+/// height to look down for its floor from), where its zone is from there
+/// (in its own frame: -Z is in front of it, +Z behind), and how wide the
+/// zone is.
+pub type Spot = (Way, crate::map::Spot, Vec3, f64);
 
 /// How long each takes: the radio's wait for the chopper, the walk out
 /// past the checkpoint, the engine's cranking; and how long the hands
@@ -172,6 +168,7 @@ pub fn ring(ground: &Ground, centre: Vec3, radius: f64) -> Vec<Vertex> {
 
 /// Each way out's shapes, from `exits.glb`: what it's drawn as (normal and
 /// alt) and what's solid (its hull, and the road's barricade).
+#[derive(Clone, Default)]
 pub struct Shapes {
     pub meshes: HashMap<Way, (MeshId, MeshId)>,
     pub hulls: HashMap<Way, Vec<[Vec3; 3]>>,
@@ -180,9 +177,9 @@ pub struct Shapes {
 
 /// The ways out, set down and made solid (the road's barricade too,
 /// switched off till a run shuts the road).
-pub fn set_down(solids: &mut Solids, shapes: &Shapes) -> Exits {
+pub fn set_down(solids: &mut Solids, shapes: &Shapes, spots: &[Spot]) -> Exits {
     let mut exits = Exits::default();
-    for (way, at, zone, radius) in SPOTS {
+    for &(way, at, zone, radius) in spots {
         let Some(hull) = shapes.hulls.get(&way) else { continue };
         let Some(s) = seat(solids, hull, at, way == Way::Road) else { continue };
         solids.add_as(&s.tris, if way == Way::Road { Surface::Stone } else { Surface::Metal });
@@ -219,7 +216,7 @@ pub fn begin(world: &mut World, seed: u32) {
         for e in &mut exits.list {
             e.shown = e.looks.map(|(normal, alt)| world.spawn((Placed(e.model), Model(if e.alt() { alt } else { normal }), Look::default())).id());
             // (A shut road has no zone to show.)
-            e.ring_shown = e.ring.filter(|_| e.open).map(|mesh| world.spawn((Placed(Mat4::IDENTITY), Model(mesh), Look { emissive: GLOW_WAITING, fog: 0.6 })).id());
+            e.ring_shown = e.ring.filter(|_| e.open).map(|mesh| world.spawn((Placed(Mat4::IDENTITY), Model(mesh), Look { emissive: GLOW_WAITING, fog: 0.6, ..Look::default() })).id());
         }
     });
 }
@@ -278,4 +275,4 @@ pub fn in_view(world: &World, eye: Vec3, dir: Vec3) -> Option<usize> {
 }
 
 #[cfg(test)]
-mod tests;
+pub mod tests;

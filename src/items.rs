@@ -17,28 +17,12 @@ use crate::world::{Look, Model, Placed, Solid};
 pub const REACH: f64 = 2.6;
 const AIM: f64 = 0.965;
 
-/// Where things lie: what, how many (fewest to most), where (game x and
-/// z), a height above the floor meant (so the one inside the building
-/// lands on its floor, not its roof), and which way it's turned.
-type Spot = (Kind, (u32, u32), f64, f64, f64, f64);
-const SPOTS: [Spot; 14] = [
-    (Kind::Bandage, (1, 1), 4.0, 3.0, 3.0, 0.4),
-    (Kind::Bandage, (1, 1), 1.0, 2.2, 37.0, 1.1),
-    (Kind::Bandage, (1, 1), -1.5, 5.2, 46.0, 2.3),
-    (Kind::Bandage, (1, 1), 12.0, 3.0, -46.0, 0.2),
-    (Kind::Medkit, (1, 1), 0.0, 2.2, 45.5, 0.6),
-    (Kind::Medkit, (1, 1), 2.5, 5.0, -36.5, 2.0),
-    (Kind::Rounds, ROUNDS, -5.0, 3.0, 12.0, 0.3),
-    (Kind::Rounds, ROUNDS, 18.0, 3.0, 2.0, 1.9),
-    (Kind::Rounds, ROUNDS, -20.0, 3.0, -8.0, 0.8),
-    (Kind::Rounds, ROUNDS, 8.0, 3.0, -28.0, 2.6),
-    (Kind::Rounds, ROUNDS, -16.0, 3.0, -44.0, 1.2),
-    (Kind::Rounds, ROUNDS, 28.0, 3.0, -24.0, 0.1),
-    (Kind::Rounds, ROUNDS, -1.9, 2.2, 47.0, 1.6),
-    (Kind::Rounds, ROUNDS, 38.0, 3.0, 36.0, 2.2),
-];
+/// Where a thing lies: what, how many (fewest to most), where (game x
+/// and z), a height to look down from for its floor (so one inside a
+/// building lands on its floor, not its roof), and which way it's turned.
+pub type Spot = (Kind, (u32, u32), f64, f64, f64, f64);
 /// How many rounds a box can hold, fewest to most.
-const ROUNDS: (u32, u32) = (8, 16);
+pub const ROUNDS: (u32, u32) = (8, 16);
 
 /// Every kind of thing's mesh.
 #[derive(Resource, Clone, Default)]
@@ -53,10 +37,10 @@ pub struct Pickup {
 
 /// Set everything down in its spot (any left from before go first), the
 /// boxes filled by `seed`'s luck.
-pub fn scatter(world: &mut World, seed: u32) {
+pub fn scatter(world: &mut World, seed: u32, spots: &[Spot]) {
     clear(world);
     let mut dice = Dice(seed | 1);
-    for (kind, (lo, hi), x, hint, z, yaw) in SPOTS {
+    for &(kind, (lo, hi), x, hint, z, yaw) in spots {
         let stack = Stack::new(kind, dice.range(lo, hi));
         set_down(world, stack, Vec3::new(x, hint, z), yaw);
     }
@@ -108,12 +92,12 @@ mod tests {
     fn everything_lands_where_it_can_be_walked_to_and_seen_up_close() {
         let mut world = World::new();
         let solids = crate::testing::real_world();
-        let nav = crate::zombie::nav::NavGrid::build(&solids, crate::player::capsule(false));
+        let nav = crate::zombie::nav::NavGrid::build(&solids, crate::player::capsule(false), crate::testing::COURSE_HALF);
         world.insert_resource(Solid(solids));
         world.insert_resource(Meshes(crate::loot::ALL.iter().map(|&k| (k, MeshId::placeholder())).collect()));
-        scatter(&mut world, 1234);
+        scatter(&mut world, 1234, &crate::testing::COURSE_PICKUPS);
         let all: Vec<Pickup> = world.query::<&Pickup>().iter(&world).copied().collect();
-        assert_eq!(all.len(), SPOTS.len(), "every spot had a floor under it");
+        assert_eq!(all.len(), crate::testing::COURSE_PICKUPS.len(), "every spot had a floor under it");
         let solids = &world.resource::<Solid>().0;
         for p in &all {
             // Outdoors, on the ground something could stand on: not a
@@ -138,7 +122,7 @@ mod tests {
         let dir = (p.at - eye).normalize();
         assert!(in_view(&mut world, eye, dir).is_some_and(|(_, stack)| stack == p.stack));
         assert!(in_view(&mut world, eye, Vec3::new(0.0, 0.0, -1.0)).is_none());
-        scatter(&mut world, 99);
-        assert_eq!(world.query::<&Pickup>().iter(&world).count(), SPOTS.len(), "a fresh set, not a second one");
+        scatter(&mut world, 99, &crate::testing::COURSE_PICKUPS);
+        assert_eq!(world.query::<&Pickup>().iter(&world).count(), crate::testing::COURSE_PICKUPS.len(), "a fresh set, not a second one");
     }
 }

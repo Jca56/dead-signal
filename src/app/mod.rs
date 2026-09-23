@@ -2,38 +2,42 @@
 //! every frame. Screens (the title, the hideout, a run) take turns in it,
 //! with a fade through black between them. In a run the pointer is locked
 //! for mouse look; Esc (or leaving the window) pauses and lets it go.
-//! What's loaded at the start beyond the scenes is in `load.rs`. The
-//! player's profile is saved as a run starts (as if lost), and again as it
-//! ends.
+//! What's loaded at the start is in `load.rs`, the GPU's side in
+//! `gpu.rs`, and every run's map (built behind the loading screen, then
+//! put in) in `level.rs`. The player's profile is saved as a run starts
+//! (as if lost), and again as it ends.
 
-use lntrn_app::lntrn_render::{Gpu, Images};
-use lntrn_app::{AppHost, RenderCx, wgpu};
-use lntrn_core::{log_error, log_info};
+use std::collections::HashMap;
+use std::time::Instant;
+
+use lntrn_app::lntrn_render::ImageHandle;
 use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
+mod gpu;
+mod level;
 mod load;
 
-use std::time::Instant;
-
-use crate::assets;
-use crate::perf::{Perf, Phase};
-use crate::hideout::{Hideout, Leave};
-use crate::profile::{Profile, save};
+use crate::assets::Prop;
 use crate::bag_ui::Icons;
 use crate::camera::Camera;
-use crate::ending::After;
-use crate::run::Run;
 use crate::combat::Combat;
-use crate::menu::SideMenu;
+use crate::ending::After;
 use crate::head;
+use crate::hideout::{Hideout, Leave};
+use crate::loot::tables::Source;
+use crate::map::Map;
+use crate::map::build::{Building, Built, Kit};
+use crate::map::scatter::Scenery;
+use crate::menu::SideMenu;
+use crate::perf::{Perf, Phase};
 use crate::player::Controls;
-use crate::render::{Draw, FigureDraw, Renderer};
-use crate::style;
+use crate::profile::{Profile, save};
+use crate::render::{Mark, MeshId, Renderer};
+use crate::run::Run;
 use crate::viewmodel::Viewmodel;
-use crate::weapon::Clip;
-use crate::world::{Game, Look, Model, Placed};
-use crate::zombie::{self, figure::Figure};
+use crate::world::Game;
+use crate::zombie;
 
 /// Seconds a fade to or from black takes.
 const FADE: f64 = 0.6;
@@ -46,14 +50,15 @@ const PAUSE_DIM: f64 = 0.35;
 const TITLE_EYE: Vec3 = Vec3::new(-4.0, 3.5, 22.0);
 const TITLE_LOOK: Vec3 = Vec3::new(8.0, 17.0, -46.0);
 const TITLE_FOV: f64 = 70.0;
-/// Where a run starts (for now: the clearing, facing the tower).
-const START: (f64, f64) = (0.0, 6.0);
-const START_LOOK: Vec3 = Vec3::new(12.0, 0.0, -46.0);
+/// Past this far, the fog has swallowed everything: not drawn.
+const FAR: f64 = 240.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Screen {
     Title,
     Hideout,
+    /// A map being built for the next run.
+    Loading,
     Run,
 }
 
@@ -92,6 +97,26 @@ pub struct DeadSignal {
     in_run: bool,
     hideout: Hideout,
     perf: Perf,
+    /// The title's scene, kept to put back after a run.
+    title: Vec<Prop>,
+    /// What every map is built from, and how its things are drawn: each
+    /// piece of scenery's mesh and the ball it lies in; each container's,
+    /// shut and opened.
+    kit: Kit,
+    scenery: HashMap<Scenery, (MeshId, Vec3, f64)>,
+    container_meshes: HashMap<Source, (MeshId, MeshId)>,
+    /// Where the meshes that stay end and a map's begin.
+    mark: Mark,
+    /// The next map, being built; built, waiting to go in; in, and whether
+    /// it went in this frame (the run begins).
+    building: Option<Building>,
+    loading_since: Instant,
+    ready: Option<Built>,
+    installed: bool,
+    map: Option<Map>,
+    /// The map screen's picture of it, and whether it's up.
+    picture: Option<ImageHandle>,
+    map_open: bool,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
@@ -120,6 +145,18 @@ impl DeadSignal {
             in_run: false,
             hideout: Hideout::default(),
             perf: Perf::default(),
+            title: Vec::new(),
+            kit: Kit::default(),
+            scenery: HashMap::new(),
+            container_meshes: HashMap::new(),
+            mark: Mark::default(),
+            building: None,
+            loading_since: Instant::now(),
+            ready: None,
+            installed: false,
+            map: None,
+            picture: None,
+            map_open: false,
             screen: Screen::Title,
             title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("HIDEOUT", TitleItem::Hideout), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
@@ -163,9 +200,11 @@ impl DeadSignal {
         self.paused = false;
         self.was_locked = false;
         match screen {
+            Screen::Loading => self.start_loading(),
             Screen::Run => {
-                let yaw = (-(START_LOOK.x - START.0)).atan2(-(START_LOOK.z - START.1));
-                self.game.spawn_player(START.0, START.1, yaw);
+                let (at, yaw) = self.spawn_point();
+                self.game.spawn_player(at.x, at.z, yaw);
+                self.map_open = false;
                 if let Some(vm) = &mut self.viewmodel {
                     vm.reset();
                 }
@@ -179,18 +218,20 @@ impl DeadSignal {
                 let mut committed = self.profile.clone();
                 committed.loadout.pockets = loadout.pockets.clone();
                 save::store(&committed);
-                self.run.start(&mut self.game, &mut self.combat, loadout, self.profile.xp, self.profile.perks);
+                if let Some(map) = &self.map {
+                    self.run.start(&mut self.game, &mut self.combat, loadout, self.profile.xp, self.profile.perks, map);
+                }
                 self.in_run = true;
+                // In from black, off the loading screen.
+                self.black = 1.0;
                 cx.request(ShellRequest::LockPointer(true));
             }
             Screen::Hideout => {}
             Screen::Title => {
                 self.settle_run();
                 self.game.despawn_player();
-                zombie::clear(&mut self.game.world);
-                crate::items::clear(&mut self.game.world);
                 self.run.ending = None;
-                crate::exits::hide(&mut self.game.world);
+                self.show_title_scene();
                 self.title_menu.reset();
             }
         }
@@ -229,7 +270,7 @@ impl DeadSignal {
     fn run_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, active: bool) {
         if self.run.ending.is_some() {
             match self.run.ending(ui, cx, &mut self.game, &mut self.combat, active, &self.icons) {
-                Some(After::Again) => self.fade_to(Then::Show(Screen::Run)),
+                Some(After::Again) => self.fade_to(Then::Show(Screen::Loading)),
                 Some(After::Title) => self.fade_to(Then::Show(Screen::Title)),
                 None => {}
             }
@@ -262,6 +303,7 @@ impl DeadSignal {
             return;
         }
         self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons);
+        self.map_screen(ui, active);
         // The run just ended: it's settled (and saved) at once.
         if self.run.ending.is_some() {
             self.settle_run();
@@ -271,7 +313,7 @@ impl DeadSignal {
     /// Where the camera is this frame.
     fn place_camera(&mut self, time: f64) {
         match self.screen {
-            Screen::Title | Screen::Hideout => {
+            Screen::Title | Screen::Hideout | Screen::Loading => {
                 // A slow drift, never quite still.
                 let drift = Vec3::new((time * 0.05).sin() * 4.0, (time * 0.07).sin() * 0.5, (time * 0.04).cos() * 2.5);
                 let mut eye = TITLE_EYE + drift;
@@ -340,7 +382,7 @@ impl Host for DeadSignal {
         let active = self.fading_to.is_none();
         match self.screen {
             Screen::Title => match self.title_menu.draw(ui, active) {
-                Some(TitleItem::Play) => self.fade_to(Then::Show(Screen::Run)),
+                Some(TitleItem::Play) => self.fade_to(Then::Show(Screen::Loading)),
                 Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
                 None => {}
@@ -352,10 +394,15 @@ impl Host for DeadSignal {
                 }
                 Some(Leave::Play) => {
                     save::store(&self.profile);
-                    self.fade_to(Then::Show(Screen::Run));
+                    self.fade_to(Then::Show(Screen::Loading));
                 }
                 None => {}
             },
+            Screen::Loading => {
+                if self.loading_frame(ui) {
+                    self.show(Screen::Run, cx);
+                }
+            }
             Screen::Run => {
                 let started = Instant::now();
                 self.run_frame(ui, cx, active);
@@ -384,61 +431,4 @@ impl Host for DeadSignal {
     }
 
     fn run(&mut self, _: &Action, _: &mut HostCx) {}
-}
-
-impl AppHost for DeadSignal {
-    fn init_gpu(&mut self, gpu: &Gpu, format: wgpu::TextureFormat, images: &mut Images) {
-        let mut renderer = Renderer::new(gpu, format);
-        for scene in ["title_scene", "proving_ground"] {
-            match assets::load(&mut renderer, scene) {
-                Ok(props) => self.game.spawn_props(props),
-                Err(e) => log_error!("{scene}: {e}"),
-            }
-        }
-        log_info!("world: {} solid triangles", self.game.solid_count());
-        self.combat.init(&mut renderer);
-        self.load_things(&mut renderer, gpu, images);
-        match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
-            Ok(model) => self.game.world.insert_resource(model),
-            Err(e) => log_error!("shambler: {e}"),
-        }
-        let started = std::time::Instant::now();
-        self.game.build_nav();
-        log_info!("nav: built in {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
-        match assets::load_viewmodel(&mut renderer, "arms") {
-            Ok(rig) => self.viewmodel = Some(Viewmodel::new(rig)),
-            Err(e) => log_error!("arms: {e}"),
-        }
-        renderer.upload(gpu);
-        self.renderer = Some(renderer);
-    }
-
-    fn render<'f>(&'f mut self, cx: &mut RenderCx<'f, '_>) {
-        let started = Instant::now();
-        let Some(renderer) = self.renderer.as_mut() else { return };
-        let mut things = self.game.world.query::<(&Model, &Placed, &Look)>();
-        for (model, placed, look) in things.iter(&self.game.world) {
-            renderer.draw(Draw { mesh: model.0, model: placed.0, emissive: look.emissive, fog: look.fog, tint: [1.0; 3] });
-        }
-        let time = self.game.clock().time;
-        if self.screen == Screen::Run
-            && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
-        {
-            if self.run.ending.is_none() {
-                let (clip, t) = self.combat.pistol.clip();
-                let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
-                renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping, self.run.lowered()));
-            }
-            self.combat.draw(renderer);
-        }
-        if let Some(mesh) = self.game.world.get_resource::<zombie::figure::Model>().map(|m| m.mesh) {
-            for f in self.game.world.query::<&Figure>().iter(&self.game.world) {
-                if !f.joints.is_empty() {
-                    renderer.draw_figure(FigureDraw { mesh, model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3] });
-                }
-            }
-        }
-        renderer.render(cx, &self.camera, &style::AIR, time);
-        self.perf.done(Phase::Render, started);
-    }
 }

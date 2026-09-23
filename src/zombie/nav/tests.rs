@@ -7,7 +7,7 @@ use crate::player::capsule;
 fn the_real_map_has_ground_and_routes_round_the_shack() {
     let solids = crate::testing::real_world();
     let started = std::time::Instant::now();
-    let nav = NavGrid::build(&solids, capsule(false));
+    let nav = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     eprintln!("nav: {} open cells in {:.0} ms", nav.open_cells(), started.elapsed().as_secs_f64() * 1000.0);
     assert!(nav.open_cells() > 30_000, "{} open cells", nav.open_cells());
     // The spawn is ground. The shack (game x 4, z -40) stands on its
@@ -67,7 +67,7 @@ fn the_real_map_has_ground_and_routes_round_the_shack() {
 #[test]
 fn what_cannot_be_reached_is_known_and_the_way_ends_as_near_as_it_gets() {
     let solids = crate::testing::real_world();
-    let nav = NavGrid::build(&solids, capsule(false));
+    let nav = NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
     // The open ground is one region; crate tops and car roofs are islands
     // of their own; not every cell its own.
     let n = nav.regions.count();

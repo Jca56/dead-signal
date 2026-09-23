@@ -50,6 +50,35 @@ impl Camera {
     pub fn projection(&self, aspect: f64) -> Mat4 {
         Mat4::perspective_infinite_reverse_z(self.fov_y, aspect, self.near)
     }
+
+    /// What it sees, `aspect` wide, out to `far`: for asking of many
+    /// things whether each is in view.
+    pub fn frustum(&self, aspect: f64, far: f64) -> Frustum {
+        let (r, u, f) = self.basis();
+        let half_y = self.fov_y * 0.5;
+        let half_x = (half_y.tan() * aspect).atan();
+        let (sx, cx) = half_x.sin_cos();
+        let (sy, cy) = half_y.sin_cos();
+        Frustum { eye: self.position, far, sides: [f * sx - r * cx, f * sx + r * cx, f * sy - u * cy, f * sy + u * cy] }
+    }
+}
+
+/// What a camera sees: its eye, how far, and each side of its view (the
+/// normal, pointing in).
+#[derive(Clone, Copy, Debug)]
+pub struct Frustum {
+    eye: Vec3,
+    far: f64,
+    sides: [Vec3; 4],
+}
+
+impl Frustum {
+    /// Whether any of a ball (`centre`, `radius`) is in view and nearer
+    /// than the far end.
+    pub fn sees(&self, centre: Vec3, radius: f64) -> bool {
+        let d = centre - self.eye;
+        d.length() - radius <= self.far && self.sides.iter().all(|n| d.dot(*n) >= -radius)
+    }
 }
 
 #[cfg(test)]
@@ -68,5 +97,18 @@ mod tests {
         // The view puts the target straight ahead, down -Z.
         let seen = c.view().transform_point(target);
         assert!(seen.x.abs() < 1e-9 && seen.y.abs() < 1e-9 && seen.z < 0.0);
+    }
+
+    #[test]
+    fn sees_what_is_in_front_and_near_only() {
+        // It looks down -Z, 70° high; 16:9.
+        let c = Camera::new(Vec3::ZERO).frustum(16.0 / 9.0, 100.0);
+        assert!(c.sees(Vec3::new(0.0, 0.0, -20.0), 1.0));
+        assert!(!c.sees(Vec3::new(0.0, 0.0, 20.0), 1.0), "behind");
+        assert!(c.sees(Vec3::new(0.0, 0.0, 0.5), 1.0), "around the eye");
+        assert!(!c.sees(Vec3::new(0.0, 0.0, -150.0), 1.0), "lost in the fog");
+        assert!(!c.sees(Vec3::new(60.0, 0.0, -20.0), 1.0), "off to the right");
+        assert!(c.sees(Vec3::new(20.0, 0.0, -20.0), 1.0), "at the right, still in");
+        assert!(!c.sees(Vec3::new(0.0, 30.0, -20.0), 1.0), "overhead");
     }
 }

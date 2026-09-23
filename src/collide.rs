@@ -30,7 +30,7 @@ const SKIN: f64 = 0.001;
 const TOUCH: f64 = 0.01;
 
 /// What a solid is made of: what a bullet kicks up, what it sounds like.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Surface {
     #[default]
     Dirt,

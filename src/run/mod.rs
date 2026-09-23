@@ -16,6 +16,7 @@ use crate::exits::{self, Way};
 use crate::hud::{self, Hud};
 use crate::loot::{Dice, Kind};
 use crate::loot::bag::Bag;
+use crate::map::Map;
 use crate::profile::perks::Perks;
 use crate::sound::Sfx;
 use crate::stats::Stats;
@@ -69,7 +70,7 @@ struct Open {
 impl Run {
     /// A fresh run: whole, nothing counted, things lying in their spots and
     /// in their containers, the first of the dead already out there.
-    pub fn start(&mut self, game: &mut Game, combat: &mut Combat, loadout: Bag, xp_before: u32, perks: Perks) {
+    pub fn start(&mut self, game: &mut Game, combat: &mut Combat, loadout: Bag, xp_before: u32, perks: Perks, map: &Map) {
         *self = Self::default();
         self.bag = loadout;
         self.xp_before = xp_before;
@@ -80,10 +81,10 @@ impl Run {
         combat.melee = perks.melee();
         game.world.insert_resource(crate::zombie::Stealth(perks.seen_from()));
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
-        crate::items::scatter(&mut game.world, seed);
+        crate::items::scatter(&mut game.world, seed, &map.pickups);
         crate::containers::fill(&mut game.world, seed.rotate_left(13));
         self.dice = Dice(seed.rotate_left(7) | 1);
-        self.begin_out(game, seed.rotate_left(21));
+        self.begin_out(game, seed.rotate_left(21), map.truck_near());
         if let Some((eye, forward)) = Self::watching(game) {
             self.director.begin(&mut game.world, eye, forward);
         }
@@ -290,7 +291,7 @@ impl Run {
         let o = self.out_hud(game);
         exits::hud::draw(
             ui,
-            &exits::hud::Compass { heading: o.heading, marks: &o.marks, clock: self.stats.seconds, surging: self.out.surging, under: o.under, chatter: o.chatter, shout: self.out.shout.map(|(w, t)| (w, t.min(1.0))) },
+            &exits::hud::Compass { heading: o.heading, marks: &o.marks, clock: self.stats.seconds, surging: self.out.surging, under: o.under, chatter: o.chatter.as_ref().map(|(w, a)| (w.as_str(), *a)), shout: self.out.shout.map(|(w, t)| (w, t.min(1.0))) },
         );
     }
 

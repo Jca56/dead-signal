@@ -1,39 +1,64 @@
-//! What's loaded as the game starts, beyond the scenes themselves: the
-//! containers and the ways out (set down and made solid), and every kind
+//! What's loaded as the game starts, beyond the title's scene: what every
+//! map is built from (scenery, containers, the ways out), and every kind
 //! of thing (its mesh, and its picture for the inventory).
-
-use std::collections::HashMap;
 
 use lntrn_app::lntrn_render::{Gpu, Images};
 use lntrn_core::{log_error, log_info};
+use lntrn_math::Vec3;
 
 use super::DeadSignal;
 use crate::assets;
 use crate::exits::{self, Way};
 use crate::loot::tables::Source;
+use crate::map::scatter::Scenery;
 use crate::render::Renderer;
-use crate::world::Solid;
 use crate::{containers, icons, loot};
 
 impl DeadSignal {
+    /// Everything a map is made of, loaded once: what the scenery,
+    /// containers and ways out look like and what's solid of them (the
+    /// kit every map is built from); and every kind of thing (its mesh, and
+    /// its picture for the inventory).
     pub(super) fn load_things(&mut self, renderer: &mut Renderer, gpu: &Gpu, images: &mut Images) {
+        match assets::load(renderer, "scenery") {
+            Ok(props) => {
+                for what in Scenery::ALL {
+                    let name = what.name();
+                    let find = |n: &str| props.iter().find(|p| p.name == n);
+                    if let Some(hull) = find(&format!("{name}_Hull")) {
+                        self.kit.scenery.insert(what, hull.triangles.clone());
+                    }
+                    let Some(p) = find(&name) else {
+                        log_error!("scenery: no {name}");
+                        continue;
+                    };
+                    if let Some(mesh) = p.mesh {
+                        // The ball it lies in, about its origin (scaled up
+                        // with it).
+                        let (mut lo, mut hi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
+                        for q in p.triangles.iter().flatten() {
+                            lo = lo.min(*q);
+                            hi = hi.max(*q);
+                        }
+                        self.scenery.insert(what, (mesh, (lo + hi) * 0.5, (hi - lo).length() * 0.5));
+                    }
+                }
+            }
+            Err(e) => log_error!("scenery: {e}"),
+        }
         match assets::load(renderer, "containers") {
             Ok(props) => {
-                let mut shapes = HashMap::new();
-                let mut meshes = HashMap::new();
                 for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
                     let name = containers::model_name(source);
                     let open = format!("{name}_Open");
                     let find = |n: &str| props.iter().find(|p| p.name == n);
                     if let Some(hull) = find(&format!("{name}_Hull")) {
-                        shapes.insert(source, hull.triangles.clone());
+                        self.kit.containers.insert(source, hull.triangles.clone());
                     }
                     if let (Some(shut), Some(open)) = (find(name).and_then(|p| p.mesh), find(&open).and_then(|o| o.mesh)) {
-                        meshes.insert(source, (shut, open));
+                        self.container_meshes.insert(source, (shut, open));
                     }
                 }
-                let placed = containers::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
-                containers::spawn(&mut self.game.world, placed, &meshes);
             }
             Err(e) => log_error!("containers: {e}"),
         }
@@ -50,10 +75,7 @@ impl DeadSignal {
                         shapes.meshes.insert(way, (a, b));
                     }
                 }
-                let mut placed = exits::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
-                let ground = self.game.ground();
-                placed.ring_zones(|centre, radius| renderer.add_mesh(&exits::ring(ground, centre, radius)));
-                self.game.world.insert_resource(placed);
+                self.kit.exits = shapes;
             }
             Err(e) => log_error!("exits: {e}"),
         }

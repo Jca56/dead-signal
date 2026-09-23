@@ -13,25 +13,11 @@ use crate::loot::grid::Grid;
 use crate::loot::tables::{self, Source};
 use crate::loot::{Dice, Kind, Stack};
 use crate::render::MeshId;
-use crate::world::{Look, Model, Placed, Solid};
+use crate::world::{Bounds, Look, Model, OnMap, Placed, Solid};
 
 /// How far off a container can be searched, from the eye to where it's
 /// looked at.
 pub const REACH: f64 = 2.4;
-
-/// Where each stands: what, where (game x and z), which way its front
-/// faces (a yaw: 0 faces -Z), and a height above its floor meant (the
-/// locker inside the building, under its roof).
-const SPOTS: [(Source, f64, f64, f64, f64); 8] = [
-    (Source::Crate, -7.0, 31.5, 0.3, 3.0),
-    (Source::Crate, -1.0, 38.0, -0.4, 3.0),
-    (Source::Crate, 50.0, 31.0, 1.2, 3.0),
-    (Source::Locker, 2.45, 46.5, std::f64::consts::FRAC_PI_2, 2.2),
-    (Source::Locker, 8.6, 41.0, std::f64::consts::FRAC_PI_2, 3.0),
-    (Source::Car, 33.0, 26.5, -0.3, 3.0),
-    (Source::Car, 60.0, 27.5, 0.3, 3.0),
-    (Source::Cage, -7.6, 45.5, -std::f64::consts::FRAC_PI_2, 3.0),
-];
 
 /// A kind of container's object name in `containers.glb`, shut; opened,
 /// the same with `_Open` after it; its collision shape, with `_Hull`.
@@ -77,13 +63,15 @@ pub struct Placing {
     pub hi: Vec3,
 }
 
-/// Set each container down on whatever is under its spot and make it
-/// solid. `shapes` holds each kind's collision hull, about its own origin.
-pub fn set_down(solids: &mut Solids, shapes: &HashMap<Source, Vec<[Vec3; 3]>>) -> Vec<Placing> {
+/// Set each container down on whatever is under its spot (what, where in
+/// game x and z, which way its front faces as a yaw (0 faces -Z), and a
+/// height to look down for its floor from) and make it solid. `shapes`
+/// holds each kind's collision hull, about its own origin.
+pub fn set_down(solids: &mut Solids, shapes: &HashMap<Source, Vec<[Vec3; 3]>>, spots: &[(Source, crate::map::Spot)]) -> Vec<Placing> {
     let mut out = Vec::new();
-    for (source, x, z, yaw, hint) in SPOTS {
+    for &(source, spot) in spots {
         let Some(tris) = shapes.get(&source) else { continue };
-        let Some(seat) = seat(solids, tris, (x, z, yaw, hint), false) else { continue };
+        let Some(seat) = seat(solids, tris, spot, false) else { continue };
         solids.add_as(&seat.tris, surface(source));
         out.push(Placing { source, model: seat.model, lo: seat.lo, hi: seat.hi });
     }
@@ -134,16 +122,16 @@ pub fn in_box(p: Vec3, lo: Vec3, hi: Vec3, near: f64) -> bool {
     p.x >= lo.x - near && p.x <= hi.x + near && p.y >= lo.y - near && p.y <= hi.y + near && p.z >= lo.z - near && p.z <= hi.z + near
 }
 
-/// The containers, placed, into the world: drawn with `meshes` (shut and
-/// opened), empty until a run fills them.
+/// The containers, placed, into the world (part of its map): drawn with
+/// `meshes` (shut and opened), empty until a run fills them.
 pub fn spawn(world: &mut World, placings: Vec<Placing>, meshes: &HashMap<Source, (MeshId, MeshId)>) {
     for p in placings {
         let (w, h) = p.source.grid();
         let looks = meshes.get(&p.source).copied();
         let container = Container { source: p.source, grid: Grid::new(w, h), searched: false, locked: false, looks, lo: p.lo, hi: p.hi };
-        let mut e = world.spawn(container);
+        let mut e = world.spawn((container, OnMap));
         if let Some((shut, _)) = looks {
-            e.insert((Placed(p.model), Model(shut), Look::default()));
+            e.insert((Placed(p.model), Model(shut), Look::default(), Bounds { centre: (p.lo + p.hi) * 0.5, radius: (p.hi - p.lo).length() * 0.5 }));
         }
     }
 }
@@ -229,9 +217,9 @@ mod tests {
     fn each_stands_clear_on_its_floor_and_can_be_reached() {
         let before = crate::testing::bare_world();
         let mut solids = before.clone();
-        let placed = set_down(&mut solids, &shapes());
-        assert_eq!(placed.len(), SPOTS.len());
-        let nav = crate::zombie::nav::NavGrid::build(&solids, capsule(false));
+        let placed = set_down(&mut solids, &shapes(), &crate::testing::COURSE_CONTAINERS);
+        assert_eq!(placed.len(), crate::testing::COURSE_CONTAINERS.len());
+        let nav = crate::zombie::nav::NavGrid::build(&solids, capsule(false), crate::testing::COURSE_HALF);
         for p in &placed {
             // Nothing already there pokes into it: a thin body stood
             // anywhere inside its box, clear of the floor (a car's body
@@ -293,7 +281,7 @@ mod tests {
     fn each_run_fills_them_afresh_locks_the_cage_and_hides_its_key() {
         let mut world = World::new();
         let mut solids = crate::testing::bare_world();
-        let placed = set_down(&mut solids, &shapes());
+        let placed = set_down(&mut solids, &shapes(), &crate::testing::COURSE_CONTAINERS);
         spawn(&mut world, placed, &HashMap::new());
         for seed in [1, 2, 3, 4, 5] {
             fill(&mut world, seed);

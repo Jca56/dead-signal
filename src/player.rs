@@ -42,7 +42,7 @@ const STAIR: f64 = 0.15;
 /// How far at a time a body is lowered looking for the floor.
 const SNAP_STEP: f64 = 0.025;
 /// The world ends this far from its middle, either way.
-pub const BOUNDS: f64 = 115.0;
+pub const BOUNDS: f64 = crate::map::HALF;
 
 /// How fast a kind of body goes, m/s.
 #[derive(Clone, Copy, Debug)]

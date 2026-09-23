@@ -16,7 +16,7 @@ mod regions;
 
 use crate::collide::{Capsule, Solids, WALKABLE};
 use regions::Regions;
-use crate::player::{BOUNDS, STEP_UP};
+use crate::player::STEP_UP;
 
 /// Cell size, metres.
 const CELL: f64 = 1.0;
@@ -47,6 +47,8 @@ const CLOSEST: i64 = 6;
 const AROUND: [(i64, i64); 8] = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)];
 
 pub struct NavGrid {
+    /// How far the grid reaches from the middle of the map, each way.
+    half: f64,
     /// Cells a side.
     side: usize,
     /// The ground's height in each cell, or NaN where there is none a body
@@ -67,6 +69,50 @@ pub struct NavGrid {
     spots: Vec<(i8, i8)>,
 }
 
+/// A search's working: each cell's cost so far and where it was come to
+/// from, kept between searches (a map's worth is megabytes, too much to
+/// clear every time) and told apart by which search wrote them.
+#[derive(Default)]
+struct Scratch {
+    search: u32,
+    stamp: Vec<u32>,
+    costs: Vec<f64>,
+    from: Vec<usize>,
+}
+
+impl Scratch {
+    /// A new search over `cells` cells: whatever was written before is
+    /// forgotten.
+    fn begin(&mut self, cells: usize) {
+        if self.stamp.len() != cells {
+            *self = Self { search: 0, stamp: vec![0; cells], costs: vec![f64::INFINITY; cells], from: vec![usize::MAX; cells] };
+        }
+        self.search = self.search.wrapping_add(1);
+        if self.search == 0 {
+            self.stamp.fill(0);
+            self.search = 1;
+        }
+    }
+
+    fn cost(&self, i: usize) -> f64 {
+        if self.stamp[i] == self.search { self.costs[i] } else { f64::INFINITY }
+    }
+
+    fn came(&self, i: usize) -> usize {
+        self.from[i]
+    }
+
+    fn set(&mut self, i: usize, cost: f64, from: usize) {
+        self.stamp[i] = self.search;
+        self.costs[i] = cost;
+        self.from[i] = from;
+    }
+}
+
+thread_local! {
+    static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::new(Scratch::default());
+}
+
 #[derive(Clone, Copy, PartialEq)]
 struct Open {
     cost: f64,
@@ -85,53 +131,52 @@ impl PartialOrd for Open {
 }
 
 impl NavGrid {
-    /// Probe `solids` for every cell a body of `body` could stand in.
-    pub fn build(solids: &Solids, body: Capsule) -> Self {
-        let side = (2.0 * BOUNDS / CELL) as usize + 1;
-        let mut height = vec![f32::NAN; side * side];
-        for z in 0..side {
-            for x in 0..side {
-                let (wx, wz) = (Self::coord(x), Self::coord(z));
-                let from = Vec3::new(wx, SKY, wz);
-                if let Some(hit) = solids.raycast(from, Vec3::new(0.0, -1.0, 0.0), SKY * 2.0)
-                    && hit.normal.y >= WALKABLE
-                    && solids.fits(body, hit.point + Vec3::new(0.0, FIT_LIFT, 0.0))
-                {
-                    height[z * side + x] = hit.point.y as f32;
-                }
-            }
-        }
-        let mut grid = Self { side, height, links: vec![0; side * side], drops: vec![0; side * side], edges: vec![false; side * side], regions: Regions::default(), spots: vec![(0, 0); side * side] };
-        for z in 0..side {
-            for x in 0..side {
-                let Some(ha) = grid.ground(x, z) else { continue };
-                let (mut walks, mut drops) = (0u8, 0u8);
-                for (k, (dx, dz)) in AROUND.iter().enumerate() {
-                    let Some((nx, nz)) = grid.offset((x, z), *dx, *dz) else { continue };
-                    let Some(hb) = grid.ground(nx, nz) else { continue };
-                    let dh = (ha - hb).abs();
-                    let a = Vec3::new(Self::coord(x), ha, Self::coord(z));
-                    let b = Vec3::new(Self::coord(nx), hb, Self::coord(nz));
-                    if dh <= STEP_UP || (dh <= CLIMB && steps_between(solids, a, b, STEP_UP)) {
-                        walks |= 1 << k;
-                    } else if ha - hb <= DROP && steps_between(solids, a, b, DROP) {
-                        drops |= 1 << k;
+    /// Probe `solids` for every cell a body of `body` could stand in, over
+    /// the square `half` metres each way from the middle. The rows are
+    /// shared out over every core.
+    pub fn build(solids: &Solids, body: Capsule, half: f64) -> Self {
+        let side = (2.0 * half / CELL) as usize + 1;
+        let mut grid = Self { half, side, height: vec![f32::NAN; side * side], links: vec![0; side * side], drops: vec![0; side * side], edges: vec![false; side * side], regions: Regions::default(), spots: vec![(0, 0); side * side] };
+        let heights = crate::map::rows(side, |z| {
+            (0..side)
+                .map(|x| {
+                    let from = Vec3::new(grid.coord(x), SKY, grid.coord(z));
+                    match solids.raycast(from, Vec3::new(0.0, -1.0, 0.0), SKY * 2.0) {
+                        Some(hit) if hit.normal.y >= WALKABLE && solids.fits(body, hit.point + Vec3::new(0.0, FIT_LIFT, 0.0)) => hit.point.y as f32,
+                        _ => f32::NAN,
                     }
-                }
-                let i = z * side + x;
-                grid.links[i] = walks | drops;
-                grid.drops[i] = drops;
-                grid.edges[i] = walks != 0xFF;
-            }
+                })
+                .collect()
+        });
+        grid.height = heights;
+        let ways = crate::map::rows(side, |z| {
+            (0..side)
+                .map(|x| {
+                    let Some(ha) = grid.ground(x, z) else { return (0u8, 0u8) };
+                    let (mut walks, mut drops) = (0u8, 0u8);
+                    for (k, (dx, dz)) in AROUND.iter().enumerate() {
+                        let Some((nx, nz)) = grid.offset((x, z), *dx, *dz) else { continue };
+                        let Some(hb) = grid.ground(nx, nz) else { continue };
+                        let dh = (ha - hb).abs();
+                        let a = Vec3::new(grid.coord(x), ha, grid.coord(z));
+                        let b = Vec3::new(grid.coord(nx), hb, grid.coord(nz));
+                        if dh <= STEP_UP || (dh <= CLIMB && steps_between(solids, a, b, STEP_UP)) {
+                            walks |= 1 << k;
+                        } else if ha - hb <= DROP && steps_between(solids, a, b, DROP) {
+                            drops |= 1 << k;
+                        }
+                    }
+                    (walks, drops)
+                })
+                .collect()
+        });
+        for (i, (walks, drops)) in ways.into_iter().enumerate() {
+            grid.links[i] = walks | drops;
+            grid.drops[i] = drops;
+            grid.edges[i] = !grid.height[i].is_nan() && walks != 0xFF;
         }
         grid.regions = Regions::build(&grid);
-        for z in 0..side {
-            for x in 0..side {
-                if grid.edges[z * side + x] {
-                    grid.spots[z * side + x] = grid.best_spot(solids, (x, z), body.radius);
-                }
-            }
-        }
+        grid.spots = crate::map::rows(side, |z| (0..side).map(|x| if grid.edges[z * side + x] { grid.best_spot(solids, (x, z), body.radius) } else { (0, 0) }).collect());
         grid
     }
 
@@ -142,7 +187,7 @@ impl NavGrid {
         let Some(h) = self.ground(x, z) else { return (0, 0) };
         let floor = |px: f64, pz: f64| solids.raycast(Vec3::new(px, h + 1.0, pz), Vec3::new(0.0, -1.0, 0.0), 2.0).map(|hit| hit.point.y);
         let even = |ox: i8, oz: i8| {
-            let (px, pz) = (Self::coord(x) + f64::from(ox) * 0.25, Self::coord(z) + f64::from(oz) * 0.25);
+            let (px, pz) = (self.coord(x) + f64::from(ox) * 0.25, self.coord(z) + f64::from(oz) * 0.25);
             let at = floor(px, pz).filter(|y| (y - h).abs() < 0.3);
             at.is_some_and(|y| [(radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius)].iter().all(|(dx, dz)| floor(px + dx, pz + dz).is_some_and(|f| (f - y).abs() < STEP_UP * 0.5)))
         };
@@ -172,7 +217,7 @@ impl NavGrid {
                 if self.ground(c.0, c.1).is_none() || !self.reaches(from, c) {
                     continue;
                 }
-                let d = (Self::coord(c.0) - to.x).powi(2) + (Self::coord(c.1) - to.z).powi(2);
+                let d = (self.coord(c.0) - to.x).powi(2) + (self.coord(c.1) - to.z).powi(2);
                 if best.is_none_or(|(_, b)| d < b) {
                     best = Some((c, d));
                 }
@@ -187,13 +232,13 @@ impl NavGrid {
         (x >= 0 && z >= 0 && (x as usize) < self.side && (z as usize) < self.side).then_some((x as usize, z as usize))
     }
 
-    fn coord(i: usize) -> f64 {
-        -BOUNDS + i as f64 * CELL
+    fn coord(&self, i: usize) -> f64 {
+        -self.half + i as f64 * CELL
     }
 
     fn cell_at(&self, p: Vec3) -> Option<(usize, usize)> {
-        let x = ((p.x + BOUNDS) / CELL).round();
-        let z = ((p.z + BOUNDS) / CELL).round();
+        let x = ((p.x + self.half) / CELL).round();
+        let z = ((p.z + self.half) / CELL).round();
         (x >= 0.0 && z >= 0.0 && (x as usize) < self.side && (z as usize) < self.side).then_some((x as usize, z as usize))
     }
 
@@ -218,7 +263,7 @@ impl NavGrid {
     /// `spots`).
     fn centre(&self, x: usize, z: usize) -> Vec3 {
         let (ox, oz) = self.spots[z * self.side + x];
-        Vec3::new(Self::coord(x) + f64::from(ox) * 0.25, self.ground(x, z).unwrap_or(0.0), Self::coord(z) + f64::from(oz) * 0.25)
+        Vec3::new(self.coord(x) + f64::from(ox) * 0.25, self.ground(x, z).unwrap_or(0.0), self.coord(z) + f64::from(oz) * 0.25)
     }
 
     /// The ground a body stands on in the cell holding `p`, if any.
@@ -238,6 +283,16 @@ impl NavGrid {
     /// Whether a body can stand in the cell holding `p`.
     pub fn walkable(&self, p: Vec3) -> bool {
         self.cell_at(p).is_some_and(|(x, z)| self.ground(x, z).is_some())
+    }
+
+    /// Whether a body with its feet at `a` can get to `b` at all (by any
+    /// way, however far).
+    #[cfg(test)]
+    pub fn connects(&self, a: Vec3, b: Vec3) -> bool {
+        match (self.nearest_open(a), self.nearest_open(b)) {
+            (Some(ca), Some(cb)) => self.reaches(ca, cb),
+            _ => false,
+        }
     }
 
     /// How many cells a body can stand in.
@@ -272,7 +327,7 @@ impl NavGrid {
             for dx in -3..=3i64 {
                 let Some((x, z)) = self.offset((cx, cz), dx, dz) else { continue };
                 let Some(h) = self.ground(x, z) else { continue };
-                let flat = ((Self::coord(x) - p.x).powi(2) + (Self::coord(z) - p.z).powi(2)).sqrt();
+                let flat = ((self.coord(x) - p.x).powi(2) + (self.coord(z) - p.z).powi(2)).sqrt();
                 let score = flat + 4.0 * ((h - p.y).abs() - 0.5).max(0.0);
                 if best.is_none_or(|(_, b)| score < b) {
                     best = Some(((x, z), score));
@@ -298,46 +353,46 @@ impl NavGrid {
             let (dx, dz) = ((x as f64 - goal.0 as f64).abs(), (z as f64 - goal.1 as f64).abs());
             dx.max(dz) + (std::f64::consts::SQRT_2 - 1.0) * dx.min(dz)
         };
-        let mut cost = vec![f64::INFINITY; self.side * self.side];
-        let mut came = vec![usize::MAX; self.side * self.side];
-        let mut open = BinaryHeap::new();
-        cost[idx(start)] = 0.0;
-        open.push(Open { cost: h(start), cell: idx(start) });
-        let mut seen = 0;
-        while let Some(Open { cell, .. }) = open.pop() {
-            if cell == idx(goal) {
-                break;
+        SCRATCH.with_borrow_mut(|scratch| {
+            scratch.begin(self.side * self.side);
+            let mut open = BinaryHeap::new();
+            scratch.set(idx(start), 0.0, usize::MAX);
+            open.push(Open { cost: h(start), cell: idx(start) });
+            let mut seen = 0;
+            while let Some(Open { cell, .. }) = open.pop() {
+                if cell == idx(goal) {
+                    break;
+                }
+                seen += 1;
+                if seen > SEARCH_LIMIT {
+                    return None;
+                }
+                let here = (cell % self.side, cell / self.side);
+                for (dx, dz) in AROUND {
+                    let Some(next) = self.offset(here, dx, dz) else { continue };
+                    if !self.linked(here, next) {
+                        continue;
+                    }
+                    let step = if dx != 0 && dz != 0 { std::f64::consts::SQRT_2 } else { 1.0 };
+                    let c = scratch.cost(cell) + step + if self.edge(next) { EDGE_COST } else { 0.0 } + if self.drop_to(here, next) { DROP_COST } else { 0.0 };
+                    if c < scratch.cost(idx(next)) {
+                        scratch.set(idx(next), c, cell);
+                        open.push(Open { cost: c + h(next), cell: idx(next) });
+                    }
+                }
             }
-            seen += 1;
-            if seen > SEARCH_LIMIT {
+            if !scratch.cost(idx(goal)).is_finite() {
                 return None;
             }
-            let here = (cell % self.side, cell / self.side);
-            for (dx, dz) in AROUND {
-                let Some(next) = self.offset(here, dx, dz) else { continue };
-                if !self.linked(here, next) {
-                    continue;
-                }
-                let step = if dx != 0 && dz != 0 { std::f64::consts::SQRT_2 } else { 1.0 };
-                let c = cost[cell] + step + if self.edge(next) { EDGE_COST } else { 0.0 } + if self.drop_to(here, next) { DROP_COST } else { 0.0 };
-                if c < cost[idx(next)] {
-                    cost[idx(next)] = c;
-                    came[idx(next)] = cell;
-                    open.push(Open { cost: c + h(next), cell: idx(next) });
-                }
+            let mut cells = vec![goal];
+            let mut at = idx(goal);
+            while at != idx(start) {
+                at = scratch.came(at);
+                cells.push((at % self.side, at / self.side));
             }
-        }
-        if !cost[idx(goal)].is_finite() {
-            return None;
-        }
-        let mut cells = vec![goal];
-        let mut at = idx(goal);
-        while at != idx(start) {
-            at = came[at];
-            cells.push((at % self.side, at / self.side));
-        }
-        cells.reverse();
-        Some(self.pull(&cells))
+            cells.reverse();
+            Some(self.pull(&cells))
+        })
     }
 
     /// Whether a straight walk from cell `a` to cell `b` stays on linked

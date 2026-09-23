@@ -46,7 +46,7 @@ pub(super) struct OutHud {
     pub heading: f64,
     pub marks: Vec<Mark>,
     pub under: Option<Under>,
-    pub chatter: Option<(&'static str, f64)>,
+    pub chatter: Option<(String, f64)>,
 }
 
 #[derive(Default)]
@@ -58,23 +58,42 @@ pub(super) struct Out {
     rotor_in: f64,
     crank_in: f64,
     /// The radio's words as the run begins, and how long they've been up.
-    chatter: Vec<&'static str>,
+    chatter: Vec<String>,
     chatter_t: f64,
     /// A shout under the compass, and how long it has left.
     pub shout: Option<(&'static str, f64)>,
     pub surging: bool,
 }
 
-/// What the radio says as a run begins: of two of the ways out, in some
-/// order, the road's word true to whether it's open.
-fn chatter(road_open: bool, dice: &mut Dice) -> Vec<&'static str> {
-    let radio = "…anyone copy… the old radio tower still has power… call and we'll send a bird…";
-    let road = if road_open { "…the south road past the range is clear… repeat, south road clear…" } else { "…they've barricaded the south road… don't go south…" };
-    let truck = "…there's a pickup out by the range… needs fuel and a battery…";
-    let mut lines = vec![radio, road, truck];
-    let drop = dice.next() as usize % 3;
-    lines.remove(drop);
-    if dice.unit() < 0.5 {
+/// Which side of the map a point is on, in words.
+fn side(p: Vec3) -> &'static str {
+    if p.x.abs() > p.z.abs() {
+        if p.x > 0.0 { "east" } else { "west" }
+    } else if p.z > 0.0 {
+        "south"
+    } else {
+        "north"
+    }
+}
+
+/// What the radio says as a run begins: of two of the ways out (each
+/// `(way, open, where)`), in some order, where they are, the road's word
+/// true to whether it's open; the truck is out by `truck_near`.
+fn chatter(ways: &[(Way, bool, Vec3)], truck_near: &str, dice: &mut Dice) -> Vec<String> {
+    let mut lines: Vec<String> = ways
+        .iter()
+        .map(|&(way, open, at)| match way {
+            Way::Radio => format!("…anyone copy… the old radio tower on the {} hill still has power… call and we'll send a bird…", side(at)),
+            Way::Road if open => format!("…the {0} highway is clear past the checkpoint… repeat, {0} road clear…", side(at)),
+            Way::Road => format!("…they've barricaded the {0} highway… don't go {0}…", side(at)),
+            Way::Truck => format!("…there's a pickup out by the {truck_near}… needs fuel and a battery…"),
+        })
+        .collect();
+    if lines.len() > 2 {
+        let drop = dice.next() as usize % lines.len();
+        lines.remove(drop);
+    }
+    if lines.len() == 2 && dice.unit() < 0.5 {
         lines.swap(0, 1);
     }
     lines
@@ -86,10 +105,10 @@ fn e_down(ui: &Ui) -> bool {
 
 impl Run {
     /// A fresh run's ways out and what the radio says of them.
-    pub(super) fn begin_out(&mut self, game: &mut Game, seed: u32) {
+    pub(super) fn begin_out(&mut self, game: &mut Game, seed: u32, truck_near: &str) {
         exits::begin(&mut game.world, seed);
-        let road_open = game.world.get_resource::<Exits>().is_some_and(|x| x.list.iter().any(|e| e.way == Way::Road && e.open));
-        self.out = Out { chatter: chatter(road_open, &mut self.dice), ..Out::default() };
+        let ways: Vec<(Way, bool, Vec3)> = game.world.get_resource::<Exits>().map(|x| x.list.iter().map(|e| (e.way, e.open, e.zone)).collect()).unwrap_or_default();
+        self.out = Out { chatter: chatter(&ways, truck_near, &mut self.dice), ..Out::default() };
     }
 
     /// The prompt for the way out `i`, aimed at.
@@ -311,7 +330,7 @@ impl Run {
         let line = (self.out.chatter_t / CHATTER_FOR) as usize;
         let chatter = self.out.chatter.get(line).map(|l| {
             let into = self.out.chatter_t - line as f64 * CHATTER_FOR;
-            (*l, (into / 0.4).min(1.0).min((CHATTER_FOR - into) / 0.6))
+            (l.clone(), (into / 0.4).min(1.0).min((CHATTER_FOR - into) / 0.6))
         });
         OutHud { heading: view.yaw, marks, under, chatter }
     }
@@ -322,14 +341,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_radio_speaks_of_two_ways_out_and_true_of_the_road() {
+    fn the_radio_speaks_of_two_ways_out_where_they_are_and_true_of_the_road() {
         for seed in 1..40u32 {
             let mut dice = Dice(seed * 7919);
             let open = seed % 2 == 0;
-            let lines = chatter(open, &mut dice);
+            let ways = [(Way::Radio, true, Vec3::new(-200.0, 0.0, 30.0)), (Way::Road, open, Vec3::new(10.0, 0.0, 270.0)), (Way::Truck, true, Vec3::new(0.0, 0.0, -100.0))];
+            let lines = chatter(&ways, "farm", &mut dice);
             assert_eq!(lines.len(), 2);
-            if let Some(road) = lines.iter().find(|l| l.contains("south road")) {
+            if let Some(road) = lines.iter().find(|l| l.contains("highway")) {
+                assert!(road.contains("south"), "{road}");
                 assert_eq!(road.contains("clear"), open, "{road}");
+            }
+            if let Some(radio) = lines.iter().find(|l| l.contains("tower")) {
+                assert!(radio.contains("west hill"), "{radio}");
+            }
+            if let Some(truck) = lines.iter().find(|l| l.contains("pickup")) {
+                assert!(truck.contains("by the farm"), "{truck}");
             }
         }
     }
