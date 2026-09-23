@@ -4,7 +4,8 @@
 //! windows; a foundation and a step up to each door; each room's floor;
 //! the floors between storeys with the stairwell left open and railed; the
 //! stairs; a roof. Empty windows get a barrier only bodies meet; boarded
-//! ones get planks.
+//! ones get planks. A barn is boarded up and down in red, a cabin laid in
+//! logs (bare wood inside too) with a porch at its front.
 
 use lntrn_math::Vec3;
 
@@ -21,9 +22,14 @@ const SKIN: f64 = 0.1;
 /// goes into it.
 pub const RAISED: f64 = 0.25;
 const FOUNDATION: f64 = 0.8;
-/// Roofs: how far they overhang, how high a gable's ridge stands.
+/// Roofs: how far they overhang.
 const OVERHANG: f64 = 0.4;
-const RIDGE: f64 = 2.2;
+/// A barn's boards, how wide; a cabin's logs, how high; a cabin's porch,
+/// how deep and how high its roof.
+const BOARD: f64 = 0.5;
+const LOG: f64 = 0.28;
+const PORCH: f64 = 1.8;
+const PORCH_ROOF: f64 = 2.5;
 /// The rail round the stairwell upstairs.
 const RAIL: f64 = 1.0;
 /// How far one block runs into the next where they meet: no two faces
@@ -63,6 +69,9 @@ const PLANKS: Rgb = [0.42, 0.33, 0.22];
 const PLANKS_DARK: Rgb = [0.32, 0.25, 0.17];
 const STAIRS: Rgb = [0.40, 0.30, 0.20];
 const CEILING_WHITE: Rgb = [0.78, 0.77, 0.73];
+const BARN_RED: [Rgb; 2] = [[0.50, 0.18, 0.14], [0.42, 0.15, 0.12]];
+const LOGS: [Rgb; 2] = [[0.42, 0.29, 0.18], [0.33, 0.22, 0.13]];
+const LOG_INSIDE: Rgb = [0.55, 0.41, 0.27];
 
 /// What a room's floor is.
 fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
@@ -71,7 +80,8 @@ fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
         Use::Bed => [[0.46, 0.38, 0.34], [0.36, 0.40, 0.46], [0.44, 0.44, 0.36]][dice.next() as usize % 3],
         Use::Shop => [0.56, 0.54, 0.48],
         Use::Back => [0.44, 0.43, 0.40],
-        Use::Living | Use::Hall => [0.47, 0.35, 0.23],
+        Use::Living | Use::Hall | Use::Den => [0.47, 0.35, 0.23],
+        Use::Barn => [0.46, 0.40, 0.26],
     }
 }
 
@@ -82,9 +92,29 @@ fn pick<const N: usize>(dice: &mut Dice, from: [Rgb; N]) -> Rgb {
 /// Build the blocks of `plan`.
 pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
     let store = plan.kind == Kind::Store;
-    let siding = if store { pick(dice, STORE_WALLS) } else { pick(dice, SIDINGS) };
+    let siding = match plan.kind {
+        Kind::Store => pick(dice, STORE_WALLS),
+        Kind::Barn => BARN_RED[0],
+        Kind::Cabin => LOGS[0],
+        _ => pick(dice, SIDINGS),
+    };
+    // Outside, a barn's boards run up and down, a cabin's logs along: each
+    // stretch of skin cut into strips of two shades.
+    let banding: Option<(bool, f64, [Rgb; 2])> = match plan.kind {
+        Kind::Barn => Some((false, BOARD, BARN_RED)),
+        Kind::Cabin => Some((true, LOG, LOGS)),
+        _ => None,
+    };
     let roof_colour = pick(dice, ROOFS);
-    let paints: Vec<Rgb> = plan.rooms.iter().map(|r| if r.use_ == Use::Bath { [0.70, 0.74, 0.74] } else { pick(dice, PAINTS) }).collect();
+    let paints: Vec<Rgb> = plan
+        .rooms
+        .iter()
+        .map(|r| match (plan.kind, r.use_) {
+            (Kind::Cabin | Kind::Barn, _) => LOG_INSIDE,
+            (_, Use::Bath) => [0.70, 0.74, 0.74],
+            _ => pick(dice, PAINTS),
+        })
+        .collect();
     let floors: Vec<Rgb> = plan.rooms.iter().map(|r| floor_of(r.use_, dice)).collect();
     let wall_stuff = Stuff::Solid(if store { Surface::Stone } else { Surface::Wood });
     let mut blocks = Vec::new();
@@ -105,10 +135,11 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         let at = f64::from(wall.at);
         let out = if wall.sides[0].is_none() { -1.0 } else { 1.0 };
         let (a, b) = (at + out * SKIN, at + out * (SKIN + 0.7));
+        let half = o.width * 0.5 + 0.2;
         let (lo, hi) = if wall.along_x {
-            (Vec3::new(o.centre - 0.8, -RAISED - 0.3, a), Vec3::new(o.centre + 0.8, -0.13, b))
+            (Vec3::new(o.centre - half, -RAISED - 0.3, a), Vec3::new(o.centre + half, -0.13, b))
         } else {
-            (Vec3::new(a, -RAISED - 0.3, o.centre - 0.8), Vec3::new(b, -0.13, o.centre + 0.8))
+            (Vec3::new(a, -RAISED - 0.3, o.centre - half), Vec3::new(b, -0.13, o.centre + half))
         };
         add(lo, hi, CONCRETE, Stuff::Solid(Surface::Stone));
     }
@@ -134,8 +165,33 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
                 // Tucked into the floor under it and the ceiling over it.
                 let y0 = if y0 <= 0.0 { -TUCK } else { y0 };
                 let y1 = if y1 >= CEILING { CEILING + TUCK } else { y1 };
-                let (lo, hi) = if wall.along_x { (Vec3::new(a, base + y0, t0), Vec3::new(b, base + y1, t1)) } else { (Vec3::new(t0, base + y0, a), Vec3::new(t1, base + y1, b)) };
-                add(lo, hi, colour, wall_stuff);
+                let mut strip = |a: f64, b: f64, y0: f64, y1: f64, colour: Rgb| {
+                    let (lo, hi) = if wall.along_x { (Vec3::new(a, base + y0, t0), Vec3::new(b, base + y1, t1)) } else { (Vec3::new(t0, base + y0, a), Vec3::new(t1, base + y1, b)) };
+                    add(lo, hi, colour, wall_stuff);
+                };
+                match banding.filter(|_| room.is_none()) {
+                    // Logs: along the wall, one over another.
+                    Some((true, pitch, shades)) => {
+                        let mut y = y0;
+                        while y < y1 - 1e-6 {
+                            let k = ((y + TUCK) / pitch).floor();
+                            let top = ((k + 1.0) * pitch).min(y1);
+                            strip(a, b, y, top, shades[k.rem_euclid(2.0) as usize]);
+                            y = top;
+                        }
+                    }
+                    // Boards: up and down, side by side.
+                    Some((false, pitch, shades)) => {
+                        let mut u = a;
+                        while u < b - 1e-6 {
+                            let k = ((u + 1e-6) / pitch).floor();
+                            let end = ((k + 1.0) * pitch).min(b);
+                            strip(u, end, y0, y1, shades[k.rem_euclid(2.0) as usize]);
+                            u = end;
+                        }
+                    }
+                    None => strip(a, b, y0, y1, colour),
+                }
             };
             let mut along = from;
             for g in &gaps {
@@ -219,6 +275,17 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
     } else {
         roof = gable(plan, top, roof_colour, siding);
     }
+    // A cabin's porch: a deck along its front, two posts, a roof over.
+    if plan.kind == Kind::Cabin {
+        let deck = Vec3::new(-SKIN, -RAISED - 0.3, -SKIN - PORCH);
+        add(deck, Vec3::new(w + SKIN, -0.02, -SKIN), PLANKS, Stuff::Solid(Surface::Wood));
+        // A step up to it, all along its front.
+        add(Vec3::new(-SKIN, -RAISED - 0.3, -SKIN - PORCH - 0.45), Vec3::new(w + SKIN, -0.16, -SKIN - PORCH + TUCK), PLANKS_DARK, Stuff::Solid(Surface::Wood));
+        for x in [0.0, w - 0.2] {
+            add(Vec3::new(x, -0.02, -SKIN - PORCH), Vec3::new(x + 0.2, PORCH_ROOF, -SKIN - PORCH + 0.2), LOGS[1], Stuff::Solid(Surface::Wood));
+        }
+        add(Vec3::new(-SKIN - 0.2, PORCH_ROOF, -SKIN - PORCH - 0.3), Vec3::new(w + SKIN + 0.2, PORCH_ROOF + 0.12, -SKIN), roof_colour, Stuff::Solid(Surface::Wood));
+    }
     Shape { blocks, roof }
 }
 
@@ -232,7 +299,7 @@ fn gable(plan: &Plan, top: f64, colour: Rgb, ends: Rgb) -> Vec<([Vec3; 3], Rgb)>
     let (u0, u1) = (-OVERHANG, len + OVERHANG);
     let (v0, v1) = (-OVERHANG, span + OVERHANG);
     let eave = top - 0.25;
-    let peak = top + RIDGE;
+    let peak = top + plan.ridge;
     let vm = span * 0.5;
     let (a0, b0, r0) = (at(u0, v0, eave), at(u0, v1, eave), at(u0, vm, peak));
     let (a1, b1, r1) = (at(u1, v0, eave), at(u1, v1, eave), at(u1, vm, peak));

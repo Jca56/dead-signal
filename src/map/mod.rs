@@ -6,6 +6,7 @@
 
 pub mod build;
 pub mod building;
+pub mod homestead;
 pub mod noise;
 pub mod roads;
 pub mod scatter;
@@ -101,6 +102,10 @@ pub fn generate(seed: u32) -> Map {
     // station is on the highway).
     let mut laid = vec![Road { kind: roads::Kind::Highway, points: roads::profile(roads::Kind::Highway, &highway, |x, z| shaped.height(x, z), in_plot, None) }];
     let town = town::lay_out(&mut dice, &plan.sites[0]);
+    let mut buildings = town.buildings;
+    for site in &plan.sites {
+        buildings.extend(homestead::lay_out(&mut dice, site));
+    }
     for line in &town.streets {
         let points = roads::profile(roads::Kind::Paved, line, |x, z| shaped.height(x, z), in_plot, Some(&Network::new(laid.clone())));
         laid.push(Road { kind: roads::Kind::Paved, points });
@@ -115,7 +120,14 @@ pub fn generate(seed: u32) -> Map {
         let Some(from) = nearest_on(&laid, door) else { continue };
         let blocked = |p: Vec2| plots.iter().any(|pl| pl.outside(p) < 3.0) || plan.fields.iter().any(|f| f.outside(p) < 2.0);
         let line = roads::route(&|x, z| shaped.height(x, z), &blocked, from, door);
-        let points = roads::profile(kind, &line, |x, z| shaped.height(x, z), in_plot, Some(&Network::new(laid.clone())));
+        // As far as its shoulder reaches into a plot, the road comes up (or
+        // down) to the plot's level first: the land it claims round its end
+        // is then the plot's own, and stays flat for what's built on it.
+        // (Drawn to it, never pinned: a short road may have to climb
+        // gently where it can't do both.)
+        let reach = kind.half_width() + roads::FLAT + roads::SHOULDER;
+        let at_level = |p: Vec2| plots.iter().map(|pl| ((1.0 - terrain::smooth((pl.outside(p) - reach) / pl.shoulder.max(1e-6))).min(0.98), pl.height)).filter(|(w, _)| *w > 0.0).max_by(|a, b| a.0.total_cmp(&b.0));
+        let points = roads::profile(kind, &line, |x, z| shaped.height(x, z), at_level, Some(&Network::new(laid.clone())));
         laid.push(Road { kind, points });
     }
     let network = Network::new(laid);
@@ -154,7 +166,9 @@ pub fn generate(seed: u32) -> Map {
     }
     let truck_site = [sites::Kind::Farm, sites::Kind::Gas, sites::Kind::Military].iter().find_map(|k| plan.sites.iter().find(|s| s.kind == *k));
     if let Some(site) = truck_site {
-        let at = site.plot.world(Vec2::new(site.plot.half.x * 0.35, site.plot.half.y * 0.3));
+        // In a farm's yard, clear of its house and barn.
+        let spot = if site.kind == sites::Kind::Farm { homestead::FARM_YARD } else { Vec2::new(0.35, 0.3) };
+        let at = site.plot.world(Vec2::new(site.plot.half.x * spot.x, site.plot.half.y * spot.y));
         let y = field.height_at(at.x, at.y).unwrap_or(site.plot.height);
         exits.push((Way::Truck, (at.x, at.y, site.plot.yaw, y + 3.0), Vec3::ZERO, 0.0));
     }
@@ -162,9 +176,9 @@ pub fn generate(seed: u32) -> Map {
 
     // What's lying about (and what's in the buildings), and the forest
     // round it all.
-    let mut things = scatter::things(&mut dice, &field, &network, &plan.sites, &exits, out_end);
+    let mut things = scatter::things(&mut dice, &field, &network, &plan.sites, &exits, &buildings, out_end);
     things.containers.extend(town.cars);
-    for b in &town.buildings {
+    for b in &buildings {
         let inside = building::furnish::furnish(b, &mut Dice(b.seed.rotate_left(9) | 1));
         scenery.extend(inside.pieces);
         things.containers.extend(inside.containers);
@@ -175,7 +189,7 @@ pub fn generate(seed: u32) -> Map {
     keep_out.extend(things.containers.iter().map(|(_, (x, z, _, _))| (Vec2::new(*x, *z), 4.0)));
     scenery.extend(scatter::forest(seed, &forest, &field, &network, &plots, &plan.fields, &keep_out));
     scenery.extend(scatter::poles(&field, &network, &plots));
-    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings: town.buildings, forest }
+    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings, forest }
 }
 
 /// The nearest point to `p` on any of `roads` (flat).

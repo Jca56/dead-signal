@@ -100,6 +100,40 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 (crack * 0.9 + thump * 1.0 + rumble * 2.5).tanh()
             })
         }
+        Sfx::Blast => {
+            // The pistol's shot, bigger: a harder crack, a deeper thump
+            // and a long low roll after it.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(1.1, 1.0, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 2600.0, 0.7).2 * env(t, 0.0005, 0.01);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 120.0, 32.0, 0.05)).sin() * env(t, 0.001, 0.12);
+                let rumble = tail.run(x, 380.0, 1.1).0 * env(t, 0.006, 0.34);
+                (crack * 1.1 + thump * 1.4 + rumble * 3.2).tanh()
+            })
+        }
+        Sfx::Pump => {
+            // Back: a scrape and a clack; home: a harder clack.
+            let (mut scrape, mut clack) = (Svf::default(), Svf::default());
+            render(0.34, 0.7, |t, n| {
+                let x = n.next();
+                let pull = scrape.run(x, 900.0 + 2500.0 * t, 0.8).1 * env(t, 0.01, 0.04) * f32::from(t < 0.1);
+                let knock = |at: f32, f: &mut Svf, x: f32, low: f32| {
+                    let s = t - at;
+                    if s > 0.0 { f.run(x, 1900.0, 0.3).1 * env(s, 0.0003, 0.014) + sine(s, low) * env(s, 0.001, 0.04) * 0.7 } else { 0.0 }
+                };
+                pull * 0.5 + knock(0.08, &mut clack, x, 170.0) * 0.8 + knock(0.2, &mut clack, x, 140.0)
+            })
+        }
+        Sfx::ShellIn => {
+            let mut f = Svf::default();
+            render(0.12, 0.5, |t, n| {
+                let x = n.next();
+                let slide = f.run(x, 1600.0 + 4000.0 * t, 0.6).1 * env(t, 0.005, 0.03) * 0.5;
+                let click = f.run(x, 3200.0, 0.3).1 * env((t - 0.05).max(0.0), 0.0003, 0.006) * f32::from(t > 0.05);
+                slide + click + sine(t, 260.0) * env(t, 0.002, 0.03) * 0.4
+            })
+        }
         Sfx::DryFire => {
             let mut f = Svf::default();
             render(0.06, 0.45, |t, n| f.run(n.next(), 4000.0, 0.3).1 * env(t, 0.0003, 0.004) + sine(t, 2300.0) * env(t, 0.0005, 0.008) * 0.4)

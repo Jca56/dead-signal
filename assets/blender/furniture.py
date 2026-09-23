@@ -13,6 +13,9 @@ its back against a wall at -Y and its front (what faces the room) at +Y:
     FURN_Basin      a washbasin on a pedestal, a mirror over it
     FURN_Bookcase   a tall bookcase
     FURN_Tv         a television on a low stand
+    FURN_HayBale    a bale of straw, lying long
+    FURN_HayStack   bales stacked three high against a wall
+    FURN_WoodStove  a squat cast-iron stove, its pipe up to the ceiling
 
 and what the game bumps into for each (FURN_*_Hull): plain boxes.
 
@@ -254,6 +257,56 @@ def tv():
     p.finish()
 
 
+STRAW = (0.66, 0.56, 0.30)
+STRAW_DARK = (0.52, 0.43, 0.22)
+TWINE = (0.36, 0.30, 0.18)
+IRON = (0.14, 0.14, 0.14)
+EMBER = (0.55, 0.20, 0.06)
+
+
+def bale(p, x, y, z, turned=False):
+    """A bale of straw, 1.1 × 0.5 × 0.45, its middle at (x, y) on `z`
+    (turned: long along y), two bands of twine round it."""
+    (hw, hd) = (0.25, 0.55) if turned else (0.55, 0.25)
+    p.box((x - hw, y - hd, z), (x + hw, y + hd, z + 0.45), STRAW if rng.random() < 0.6 else STRAW_DARK)
+    for k in (-0.25, 0.25):
+        if turned:
+            p.box((x - hw - 0.01, y + k - 0.02, z - 0.005), (x + hw + 0.01, y + k + 0.02, z + 0.455), TWINE)
+        else:
+            p.box((x + k - 0.02, y - hd - 0.01, z - 0.005), (x + k + 0.02, y + hd + 0.01, z + 0.455), TWINE)
+
+
+def hay_bale():
+    p = piece("FURN_HayBale", [((-0.55, -0.25, 0.0), (0.55, 0.25, 0.45))])
+    bale(p, 0.0, 0.0, 0.0)
+    p.finish()
+
+
+def hay_stack():
+    """Two bales side by side, two across them, one on top: against the
+    wall at the back."""
+    w, d = 1.1, 1.0
+    p = piece("FURN_HayStack", [((-w / 2, -d / 2, 0.0), (w / 2, d / 2, 1.35))])
+    for y in (-0.25, 0.25):
+        bale(p, 0.0, y, 0.0)
+    for x in (-0.28, 0.28):
+        bale(p, x, 0.0, 0.45, turned=True)
+    bale(p, 0.0, -0.22, 0.9)
+    p.finish()
+
+
+def wood_stove():
+    w, d, h = 0.6, 0.55, 0.75
+    p = piece("FURN_WoodStove", [((-w / 2, -d / 2, 0.0), (w / 2, d / 2, h))])
+    legs(p, -w / 2 + 0.02, w / 2 - 0.02, -d / 2 + 0.02, d / 2 - 0.02, 0.15, t=0.06, colour=IRON)
+    p.box((-w / 2, -d / 2, 0.15), (w / 2, d / 2, h), IRON)
+    p.box((-0.16, d / 2, 0.28), (0.16, d / 2 + 0.02, 0.55), EMBER)
+    p.box((-0.2, d / 2 + 0.02, 0.26), (0.2, d / 2 + 0.03, 0.29), STEEL)
+    # The pipe, up from its back to the ceiling.
+    p.box((-0.07, -d / 2 + 0.05, h), (0.07, -d / 2 + 0.19, 2.8), IRON)
+    p.finish()
+
+
 def main():
     bed()
     sofa()
@@ -266,6 +319,9 @@ def main():
     basin()
     bookcase()
     tv()
+    hay_bale()
+    hay_stack()
+    wood_stove()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     tris = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
     print(f"furniture: {len(bpy.data.objects)} objects, {tris} faces -> {os.path.abspath(OUT)}")

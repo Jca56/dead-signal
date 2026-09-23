@@ -27,10 +27,13 @@ pub enum Furn {
     Basin,
     Bookcase,
     Tv,
+    HayBale,
+    HayStack,
+    WoodStove,
 }
 
 impl Furn {
-    pub const ALL: [Furn; 11] = [Furn::Bed, Furn::Sofa, Furn::Armchair, Furn::Table, Furn::Counter, Furn::Stove, Furn::Bathtub, Furn::Toilet, Furn::Basin, Furn::Bookcase, Furn::Tv];
+    pub const ALL: [Furn; 14] = [Furn::Bed, Furn::Sofa, Furn::Armchair, Furn::Table, Furn::Counter, Furn::Stove, Furn::Bathtub, Furn::Toilet, Furn::Basin, Furn::Bookcase, Furn::Tv, Furn::HayBale, Furn::HayStack, Furn::WoodStove];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -45,6 +48,9 @@ impl Furn {
             Furn::Basin => "FURN_Basin",
             Furn::Bookcase => "FURN_Bookcase",
             Furn::Tv => "FURN_Tv",
+            Furn::HayBale => "FURN_HayBale",
+            Furn::HayStack => "FURN_HayStack",
+            Furn::WoodStove => "FURN_WoodStove",
         }
     }
 }
@@ -73,6 +79,9 @@ impl Thing {
                 Furn::Basin => (0.6, 0.5, false),
                 Furn::Bookcase => (1.0, 0.35, true),
                 Furn::Tv => (1.2, 0.45, false),
+                Furn::HayBale => (1.1, 0.5, false),
+                Furn::HayStack => (1.1, 1.0, true),
+                Furn::WoodStove => (0.6, 0.55, true),
             },
             Thing::Box(s) => match s {
                 Source::Fridge => (0.75, 0.7, true),
@@ -82,6 +91,7 @@ impl Thing {
                 Source::Shelf => (1.8, 0.6, true),
                 Source::Register => (2.06, 0.86, false),
                 Source::Locker => (0.6, 0.55, true),
+                Source::GunCabinet => (0.84, 0.5, true),
                 _ => (1.0, 0.7, false),
             },
         }
@@ -125,6 +135,9 @@ fn program(use_: Use, room: &Room) -> Vec<(Thing, f64)> {
         Use::Back => vec![b(Source::Crate, 1.0), b(Source::Crate, 0.6), b(Source::Locker, 0.35), b(Source::Shelf, 0.5)],
         Use::Shop => vec![b(Source::Register, 1.0)],
         Use::Hall => Vec::new(),
+        // The gun cabinet first: it has the pick of the walls.
+        Use::Den => vec![b(Source::GunCabinet, 1.0), f(WoodStove, 0.9), f(Armchair, 0.8), f(Table, 0.6), f(Bookcase, 0.5), b(Source::Cabinet, 0.5), f(Sofa, 0.35)],
+        Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::Locker, 0.6), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
     }
 }
 
@@ -196,8 +209,12 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
                 continue;
             }
             let (w, d, tall) = thing.size();
-            // Against a wall, facing into the room: a few tries.
-            for _ in 0..24 {
+            // Against a wall, facing into the room: a few tries. The gun
+            // cabinet (a den's reason to be looked in) gets more, and at the
+            // last may stand across a window.
+            let tries = if thing == Thing::Box(Source::GunCabinet) { 64 } else { 24 };
+            for k in 0..tries {
+                let tall = tall && k < 40;
                 let side = dice.next() % 4;
                 let (len_lo, len_hi) = if side < 2 { (inner.lo.x, inner.hi.x) } else { (inner.lo.y, inner.hi.y) };
                 if len_hi - len_lo < w + 0.05 {

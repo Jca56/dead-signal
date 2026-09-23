@@ -33,13 +33,14 @@ pub fn model_name(source: Source) -> &'static str {
         Source::Wardrobe => "CONTAINER_Wardrobe",
         Source::Shelf => "CONTAINER_Shelf",
         Source::Register => "CONTAINER_Register",
+        Source::GunCabinet => "CONTAINER_GunCabinet",
         Source::Corpse => "",
     }
 }
 
 fn surface(source: Source) -> Surface {
     match source {
-        Source::Crate | Source::Cabinet | Source::Desk | Source::Wardrobe | Source::Register => Surface::Wood,
+        Source::Crate | Source::Cabinet | Source::Desk | Source::Wardrobe | Source::Register | Source::GunCabinet => Surface::Wood,
         _ => Surface::Metal,
     }
 }

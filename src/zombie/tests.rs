@@ -320,7 +320,7 @@ fn a_crowd_spreads_round_you_instead_of_stacking() {
     for i in 0..10 {
         let mut z = Zombie::new(0.0, 100 + i);
         z.hurt(1.0, false, false, Vec3::ZERO);
-        world.spawn((z, Body::at(Vec3::new(0.0, 0.0, -8.0))));
+        world.spawn((z, Body::at(Vec3::new(0.0, 0.0, -8.0)), super::Beat::new(i)));
     }
     let mut schedule = Schedule::default();
     schedule.add_systems(super::think);

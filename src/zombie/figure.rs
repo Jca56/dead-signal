@@ -102,6 +102,12 @@ impl Figure {
         self.solid = solid;
     }
 
+    /// Not drawn, nor to be hit (lost in the fog).
+    pub fn hide(&mut self) {
+        self.joints.clear();
+        self.solid = false;
+    }
+
     /// How far along a ray (unit `dir`) it is hit, and whether in the head.
     pub fn ray(&self, from: Vec3, dir: Vec3, max: f64) -> Option<(f64, bool)> {
         if !self.solid {

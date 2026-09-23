@@ -18,7 +18,7 @@ use crate::render::Renderer;
 use crate::sound::{Sfx, Sound};
 use crate::stats::Stats;
 use crate::targets::{self, Kind, Target};
-use crate::weapon::{Act, Hands, Trigger, Weapon};
+use crate::weapon::{Act, Clip, Falloff, Hands, Trigger, Weapon};
 use crate::loot::bag::Slot;
 use crate::world::{Game, Solid};
 use crate::zombie::{self, Horde};
@@ -44,6 +44,49 @@ pub struct Combat {
 /// How hard a blow shoves the player, m/s, and shakes the view, metres.
 const BLOW_SHOVE: f64 = 4.5;
 const BLOW_SHAKE: f64 = 0.035;
+
+/// A pellet or a blow: how far it reaches and how hard it hits, whether
+/// it's a blow, how its punch fades, how hard it shoves the dead and
+/// whether it can send one stumbling.
+struct Hit {
+    reach: f64,
+    damage: f64,
+    blow: bool,
+    falloff: Option<Falloff>,
+    shove: f64,
+    stumble: bool,
+}
+
+/// What a pellet or a blow met: anything at all, one of the dead or a
+/// target, and its head.
+#[derive(Clone, Copy, Debug, Default)]
+struct Met {
+    something: bool,
+    target: bool,
+    head: bool,
+}
+
+/// What's been heard of a shot's pellets landing so far: one tick for
+/// hitting something (any kill ticks again), one thud, however many land.
+#[derive(Default)]
+struct Heard {
+    confirmed: bool,
+    thudded: bool,
+}
+
+impl Heard {
+    fn confirm(&mut self, sound: &Sound, killed: bool) {
+        if killed || !self.confirmed {
+            sound.play(Sfx::Confirm, if killed { 0.7 } else { 0.45 });
+        }
+        self.confirmed = true;
+    }
+
+    /// Whether this landing is the one heard.
+    fn thud(&mut self) -> bool {
+        !std::mem::replace(&mut self.thudded, true)
+    }
+}
 
 /// Where the eye is and which way it looks.
 struct Aim {
@@ -157,8 +200,8 @@ impl Combat {
                 Act::Shoot => {
                     let Some(shot) = spec.shot else { continue };
                     stats.shots += 1;
-                    self.sound.play(Sfx::Shot, 0.9);
-                    zombie::noise(&mut game.world, aim.eye, zombie::brain::HEARING);
+                    self.sound.play(shot.sound, 0.9);
+                    zombie::noise(&mut game.world, aim.eye, shot.heard);
                     self.sprint_block = SPRINT_BLOCK;
                     let side = (self.rand() - 0.5) * shot.kick_side;
                     if let Some(mut v) = game.player_view_mut() {
@@ -166,8 +209,18 @@ impl Combat {
                     }
                     let spread = shot.hip.toward(shot.aimed, self.hands.aim());
                     let spread = if !body.grounded { spread.air } else if body.speed_flat() > 0.5 { spread.moving } else { spread.still };
-                    let dir = self.scatter(&aim, spread);
-                    self.strike(game, &aim, dir, shot.range, shot.damage, false, stats);
+                    // Every pellet its own way; a hit counted once a shot.
+                    let hit = Hit { reach: shot.range, damage: shot.damage, blow: false, falloff: shot.falloff, shove: shot.shove, stumble: shot.stumble };
+                    let mut heard = Heard::default();
+                    let mut met = Met::default();
+                    for _ in 0..shot.pellets {
+                        let dir = self.scatter(&aim, spread);
+                        let m = self.strike(game, &aim, dir, &hit, &mut heard, stats);
+                        met.target |= m.target;
+                        met.head |= m.head;
+                    }
+                    stats.hits += u32::from(met.target);
+                    stats.headshots += u32::from(met.head);
                 }
                 Act::DryFire => self.sound.play(Sfx::DryFire, 0.8),
                 Act::MagOut => self.sound.play(Sfx::MagOut, 0.7),
@@ -176,13 +229,20 @@ impl Combat {
                     self.sound.play(Sfx::MagIn, 0.8);
                 }
                 Act::SlideRack => self.sound.play(Sfx::SlideRack, 0.8),
+                Act::Pump => {
+                    // The pump that finishes a reload counts it.
+                    stats.reloads += u32::from(self.hands.clip().0 == Clip::ReloadEnd);
+                    self.sound.play(Sfx::Pump, 0.85);
+                }
+                Act::ShellIn => self.sound.play(Sfx::ShellIn, 0.75),
                 Act::Swing => self.sound.play(Sfx::Whoosh, 0.7),
                 Act::Strike => {
                     // A fan of three: straight on, and a little either side.
+                    let hit = Hit { reach: spec.bash.reach, damage: spec.bash.damage * self.melee, blow: true, falloff: None, shove: zombie::blow_shove(self.melee), stumble: true };
                     for turn in [0.0f64, -8.0, 8.0] {
                         let t = turn.to_radians();
                         let dir = (aim.dir * t.cos() + aim.right * t.sin()).normalize();
-                        if self.strike(game, &aim, dir, spec.bash.reach, spec.bash.damage * self.melee, true, stats) {
+                        if self.strike(game, &aim, dir, &hit, &mut Heard::default(), stats).something {
                             break;
                         }
                     }
@@ -201,47 +261,46 @@ impl Combat {
         (aim.dir + aim.right * (r * a.cos()) + aim.up * (r * a.sin())).normalize()
     }
 
-    /// A shot or a blow along `dir`: whatever it meets first. Whether it
-    /// met anything.
-    #[allow(clippy::too_many_arguments)]
-    fn strike(&mut self, game: &mut Game, aim: &Aim, dir: Vec3, range: f64, damage: f64, blow: bool, stats: &mut Stats) -> bool {
-        let wall = game.world.resource::<Solid>().0.raycast(aim.eye, dir, range);
-        let reach = wall.map_or(range, |h| h.t);
+    /// A pellet (or round) or a blow along `dir`: whatever it meets first
+    /// takes `hit` (a pellet's punch fading with how far it flew). What it
+    /// met.
+    fn strike(&mut self, game: &mut Game, aim: &Aim, dir: Vec3, hit: &Hit, heard: &mut Heard, stats: &mut Stats) -> Met {
+        let wall = game.world.resource::<Solid>().0.raycast(aim.eye, dir, hit.reach);
+        let reach = wall.map_or(hit.reach, |h| h.t);
         let dead = zombie::raycast(&mut game.world, aim.eye, dir, reach);
         let reach = dead.map_or(reach, |(_, t, _)| t);
         let target = targets::raycast(&mut game.world, aim.eye, dir, reach);
+        let punch = |t: f64| hit.damage * hit.falloff.map_or(1.0, |f| f.at(t));
         if target.is_none()
             && let Some((e, t, head)) = dead
         {
             let point = aim.eye + dir * t;
-            let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, damage, head, blow, self.melee);
-            stats.damage_dealt += zombie::brain::dealt(damage, head, blow);
-            if !blow {
-                stats.hits += 1;
-                stats.headshots += u32::from(head);
-            }
+            // Close enough to hurt in full, a blast staggers.
+            let close = hit.falloff.is_none_or(|f| t <= f.near);
+            let impact = zombie::Impact { damage: punch(t), head, blow: hit.blow, shove: hit.shove, stumble: hit.stumble && close };
+            let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, impact);
+            stats.damage_dealt += zombie::brain::dealt(impact.damage, head, hit.blow);
             if killed {
-                if blow { stats.melee_kills += 1 } else { stats.gun_kills += 1 }
-                stats.headshot_kills += u32::from(head && !blow);
+                if hit.blow { stats.melee_kills += 1 } else { stats.gun_kills += 1 }
+                stats.headshot_kills += u32::from(head && !hit.blow);
                 stats.longest_kill = stats.longest_kill.max(t);
                 self.drop_something(game, e);
             }
-            self.fx.burst(point, -dir, Surface::Flesh, if blow { 12 } else { 9 });
+            self.fx.burst(point, -dir, Surface::Flesh, if hit.blow { 12 } else { 9 });
             self.fx.mark(killed);
-            self.sound.play(Sfx::Confirm, if killed { 0.7 } else { 0.45 });
-            self.sound.play_at(Sfx::Flesh, 1.0, point, aim.eye, aim.right, false);
-            if blow && let Some(mut v) = game.player_view_mut() {
+            heard.confirm(&self.sound, killed);
+            if heard.thud() {
+                self.sound.play_at(Sfx::Flesh, 1.0, point, aim.eye, aim.right, false);
+            }
+            if hit.blow && let Some(mut v) = game.player_view_mut() {
                 v.jolt(0.02);
             }
-            return true;
+            return Met { something: true, target: true, head };
         }
         if let Some((e, t, head)) = target {
             let point = aim.eye + dir * t;
-            let Some((beaten, kind)) = game.world.get_mut::<Target>(e).map(|mut target| (target.hit(dir, point, damage, head), target.kind)) else { return false };
-            if !blow {
-                stats.hits += 1;
-                stats.headshots += u32::from(head);
-            }
+            let damage = punch(t);
+            let Some((beaten, kind)) = game.world.get_mut::<Target>(e).map(|mut target| (target.hit(dir, point, damage, head), target.kind)) else { return Met::default() };
             match kind {
                 Kind::Dummy => stats.dummies_downed += u32::from(beaten),
                 Kind::Plate => stats.plates_rung += 1,
@@ -250,29 +309,33 @@ impl Combat {
                 Kind::Dummy => (Surface::Wood, Sfx::HitWood, 0.9),
                 Kind::Plate => (Surface::Metal, Sfx::Ding, 1.0),
             };
-            self.fx.burst(point, -dir, surface, if blow { 10 } else { 7 });
+            self.fx.burst(point, -dir, surface, if hit.blow { 10 } else { 7 });
             self.fx.mark(beaten);
-            self.sound.play(Sfx::Confirm, if beaten { 0.7 } else { 0.45 });
-            self.sound.play_at(sfx, gain, point, aim.eye, aim.right, false);
-            if blow && let Some(mut v) = game.player_view_mut() {
+            heard.confirm(&self.sound, beaten);
+            if heard.thud() {
+                self.sound.play_at(sfx, gain, point, aim.eye, aim.right, false);
+            }
+            if hit.blow && let Some(mut v) = game.player_view_mut() {
                 v.jolt(0.02);
             }
-            return true;
+            return Met { something: true, target: true, head };
         }
-        let Some(hit) = wall else { return false };
-        self.fx.burst(hit.point, hit.normal, hit.surface, if blow { 8 } else { 6 });
-        let (sfx, gain) = match hit.surface {
+        let Some(wall) = wall else { return Met::default() };
+        self.fx.burst(wall.point, wall.normal, wall.surface, if hit.blow { 8 } else { 6 });
+        let (sfx, gain) = match wall.surface {
             Surface::Dirt => (Sfx::HitDirt, 0.8),
             Surface::Wood => (Sfx::HitWood, 0.8),
             Surface::Stone => (Sfx::HitStone, 0.8),
             Surface::Metal => (Sfx::Ding, 0.35),
             Surface::Flesh => (Sfx::Flesh, 0.8),
         };
-        self.sound.play_at(sfx, gain, hit.point, aim.eye, aim.right, false);
-        if blow && let Some(mut v) = game.player_view_mut() {
+        if heard.thud() {
+            self.sound.play_at(sfx, gain, wall.point, aim.eye, aim.right, false);
+        }
+        if hit.blow && let Some(mut v) = game.player_view_mut() {
             v.jolt(0.012);
         }
-        true
+        Met { something: true, target: false, head: false }
     }
 
     /// Now and then one of the dead had something on it: left where it

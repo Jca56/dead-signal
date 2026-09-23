@@ -34,10 +34,10 @@ def frame_to(origin, x, y, z):
     return m
 
 
-def gun_pose(offset=Vector(), pitch=0.0, roll=0.0, yaw=0.0):
-    """The gun's frame held at GRIP_AT (+ `offset`), aimed at AIM, then
+def gun_pose(offset=Vector(), pitch=0.0, roll=0.0, yaw=0.0, grip=GRIP_AT):
+    """The gun's frame held at `grip` (+ `offset`), aimed at AIM, then
     turned by `pitch` (up), `roll` (clockwise) and `yaw` (left), degrees."""
-    origin = GRIP_AT + offset
+    origin = grip + offset
     barrel = (AIM - (origin + Vector((0, 0, 0.07)))).normalized()
     up = Vector((0, 0, 1))
     up = (up - barrel * up.dot(barrel)).normalized()
@@ -133,6 +133,25 @@ def support(gun, dx=0.0, dy=0.0, dz=0.0):
     fwd = right * 0.75 + barrel * 0.5 + up * 0.35
     back = -right * 0.4 - up * 0.9
     return wrist, fwd, back
+
+
+def forend(gun, along, dx=0.0, dy=0.0, dz=0.0):
+    """The left hand under a long gun's forend, `along` its barrel from
+    its origin, fingers wrapped up round its far side."""
+    o = gun.translation
+    barrel = gun.col[1].xyz
+    up = gun.col[2].xyz
+    right = gun.col[0].xyz
+    wrist = o + barrel * (along - 0.05) - right * 0.03 - up * 0.05 + Vector((dx, dy, dz))
+    fwd = right * 0.85 + barrel * 0.35 + up * 0.25
+    back = -right * 0.3 - up * 0.95
+    return wrist, fwd, back
+
+
+def shoulder(rig, bone, frame, move):
+    """Key `bone` (an upper arm) moved by `move`, camera space: a pose
+    bone's location is in its own rest frame."""
+    key_bone(rig, bone, frame, loc=rest(rig, bone).to_3x3().inverted() @ move)
 
 
 def away(wrist):

@@ -1,6 +1,7 @@
-"""Things to search: a wooden crate, a metal locker, a wrecked car and a
-locked supply cage, each its own object (CONTAINER_Crate, CONTAINER_Locker,
-CONTAINER_Car, CONTAINER_Cage); and in houses and stores a fridge, a chest
+"""Things to search: a wooden crate, a metal locker, a wrecked car, a
+locked supply cage and a gun cabinet, each its own object (CONTAINER_Crate,
+CONTAINER_Locker, CONTAINER_Car, CONTAINER_Cage, CONTAINER_GunCabinet);
+and in houses and stores (`indoor_containers.py`) a fridge, a chest
 of drawers (CONTAINER_Cabinet), a desk, a wardrobe, a store's shelving
 and its till counter (CONTAINER_Register): each standing on its origin with its front (the
 side it's searched from) facing +Y, for the game to set down where it likes;
@@ -20,109 +21,19 @@ Writes assets/models/containers.glb.
 
 import math
 import os
-import random
+import sys
 
-import bmesh
 import bpy
-from mathutils import Matrix, Vector
+from mathutils import Matrix
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from container_kit import BRASS, CHROME, GLASS, HOLLOW, HUB, KIT_RED, LAMP, LOCKER, LOCKER_DARK, PAINT, PLANK, PLANK_DARK, ROPE, RUST, SLOT, STEEL, STEEL_DARK, STRAW, TAIL, TYRE, hull, named, swing  # noqa: E402
+from indoor_containers import cabinet, desk, fridge, register, shelf, wardrobe  # noqa: E402
+
 OUT = os.path.join(HERE, "..", "models", "containers.glb")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-rng = random.Random(7)
-
-PLANK = (0.50, 0.38, 0.24)
-PLANK_DARK = (0.34, 0.25, 0.16)
-ROPE = (0.60, 0.52, 0.36)
-LOCKER = (0.33, 0.38, 0.34)
-LOCKER_DARK = (0.20, 0.23, 0.21)
-SLOT = (0.08, 0.08, 0.08)
-PAINT = (0.30, 0.37, 0.41)
-RUST = (0.42, 0.24, 0.14)
-GLASS = (0.10, 0.12, 0.13)
-TYRE = (0.09, 0.09, 0.09)
-HUB = (0.40, 0.40, 0.38)
-CHROME = (0.55, 0.55, 0.52)
-LAMP = (0.80, 0.78, 0.66)
-TAIL = (0.55, 0.08, 0.06)
-STEEL = (0.42, 0.43, 0.42)
-STEEL_DARK = (0.24, 0.25, 0.25)
-BRASS = (0.74, 0.58, 0.24)
-KIT_RED = (0.66, 0.10, 0.08)
-STRAW = (0.62, 0.53, 0.30)
-HOLLOW = (0.06, 0.06, 0.06)
-
-
-def swing(verts, hinge, axis, degrees):
-    """Turn `verts` about the line through `hinge` along `axis`."""
-    m = Matrix.Translation(hinge) @ Matrix.Rotation(math.radians(degrees), 4, axis) @ Matrix.Translation(-Vector(hinge))
-    for v in verts:
-        v.co = m @ v.co
-
-
-def jitter(c, amount=0.06):
-    k = 1.0 + rng.uniform(-amount, amount)
-    return tuple(min(1.0, max(0.0, v * k)) for v in c)
-
-
-class Part:
-    def __init__(self, name):
-        self.name = name
-        self.bm = bmesh.new()
-        self.col = self.bm.loops.layers.color.new("Col")
-
-    def paint(self, faces, colour, shade=True):
-        for f in faces:
-            c = jitter(colour) if shade else colour
-            for loop in f.loops:
-                loop[self.col] = (*c, 1.0)
-
-    def faces_of(self, verts):
-        return sorted({f for v in verts for f in v.link_faces}, key=lambda f: f.index)
-
-    def box(self, lo, hi, colour, turn=None):
-        """An axis-lined box between two corners (turned about its middle
-        by a matrix if given)."""
-        c = Vector(((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2))
-        s = ((hi[0] - lo[0]) / 2, (hi[1] - lo[1]) / 2, (hi[2] - lo[2]) / 2)
-        m = Matrix.Translation(c) @ (turn or Matrix.Identity(4)) @ Matrix.Diagonal((*s, 1.0))
-        made = bmesh.ops.create_cube(self.bm, size=2.0, matrix=m)["verts"]
-        self.paint(self.faces_of(made), colour)
-        return made
-
-    def wheel(self, centre, radius, width, colour, hub):
-        m = Matrix.Translation(centre) @ Matrix.Rotation(math.pi / 2, 4, "X")
-        made = bmesh.ops.create_cone(self.bm, cap_ends=True, segments=10, radius1=radius, radius2=radius, depth=width, matrix=m)["verts"]
-        self.paint(self.faces_of(made), colour)
-        face = centre[1] + (width / 2 if centre[1] > 0 else -width / 2)
-        self.box((centre[0] - radius * 0.45, face - 0.012, centre[2] - radius * 0.45), (centre[0] + radius * 0.45, face + 0.012, centre[2] + radius * 0.45), hub)
-
-    def finish(self):
-        mesh = bpy.data.meshes.new(self.name)
-        bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
-        self.bm.to_mesh(mesh)
-        self.bm.free()
-        attrs = mesh.color_attributes
-        attrs.active_color = attrs["Col"]
-        attrs.render_color_index = attrs.find("Col")
-        mat = bpy.data.materials.get("Flat") or bpy.data.materials.new("Flat")
-        mat.use_nodes = True
-        nodes = mat.node_tree.nodes
-        if "Col" not in [n.name for n in nodes]:
-            vc = nodes.new("ShaderNodeVertexColor")
-            vc.name = "Col"
-            vc.layer_name = "Col"
-            mat.node_tree.links.new(vc.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
-        mesh.materials.append(mat)
-        bpy.context.scene.collection.objects.link(bpy.data.objects.new(self.name, mesh))
-
-
-def named(base, opened):
-    """A part for `base`, shut or opened. Same seed, same colours: the two
-    look alike but for what moved."""
-    rng.seed(base)
-    return Part(base + ("_Open" if opened else ""))
 
 
 def crate(opened):
@@ -283,162 +194,51 @@ def cage(opened):
     p.finish()
 
 
-# ---- indoors ----------------------------------------------------------------
-
-WHITE_GOODS = (0.80, 0.80, 0.76)
-FRIDGE_DARK = (0.30, 0.31, 0.31)
-WOOD = (0.45, 0.32, 0.21)
-WOOD_DARK = (0.30, 0.21, 0.14)
-WOOD_PALE = (0.58, 0.46, 0.32)
-KNOB = (0.66, 0.60, 0.40)
-SHELF_METAL = (0.55, 0.56, 0.56)
-GOODS = [(0.70, 0.20, 0.16), (0.85, 0.72, 0.30), (0.24, 0.45, 0.62), (0.30, 0.56, 0.30), (0.82, 0.80, 0.74), (0.62, 0.36, 0.18)]
-COUNTER = (0.52, 0.47, 0.40)
-COUNTER_TOP = (0.30, 0.30, 0.30)
-TILL = (0.20, 0.21, 0.22)
+CABINET_WOOD = (0.36, 0.22, 0.13)
+CABINET_DARK = (0.22, 0.13, 0.08)
+BAIZE = (0.20, 0.28, 0.17)
+GUN_WOOD = (0.44, 0.27, 0.14)
+GUN_METAL = (0.15, 0.15, 0.16)
+GLINT = (0.62, 0.68, 0.70)
 
 
-def fridge(opened):
-    """A fridge, 0.75 × 0.7 × 1.8, its door hinged at its left; opened,
-    swung wide on a lit-less inside and bare shelves."""
-    p = named("CONTAINER_Fridge", opened)
-    w, d, h = 0.75, 0.7, 1.8
-    p.box((-w / 2, -d / 2, 0.0), (w / 2, d / 2 - 0.04, h), WHITE_GOODS)
-    door = p.box((-w / 2, d / 2 - 0.04, 0.02), (w / 2, d / 2, h - 0.02), WHITE_GOODS)
-    door += p.box((w / 2 - 0.1, d / 2, 0.9), (w / 2 - 0.07, d / 2 + 0.04, 1.35), CHROME)
-    door += p.box((-w / 2, d / 2 - 0.041, 1.2), (w / 2, d / 2 + 0.001, 1.22), FRIDGE_DARK)
+def gun_cabinet(opened):
+    """A gun cabinet, 0.8 × 0.45 × 1.9, dark wood, a glass door at its
+    front, long guns racked in it on green baize and a drawer under them;
+    opened, the door swung wide and the rack bare."""
+    p = named("CONTAINER_GunCabinet", opened)
+    w, d, h = 0.8, 0.45, 1.9
+    # The carcass: back, sides, top, base, and the drawer under the rack.
+    p.box((-w / 2, -d / 2, 0.0), (w / 2, -d / 2 + 0.03, h), CABINET_DARK)
+    for x in (-w / 2, w / 2 - 0.03):
+        p.box((x, -d / 2, 0.0), (x + 0.03, d / 2 - 0.02, h), CABINET_WOOD)
+    p.box((-w / 2 - 0.02, -d / 2, h), (w / 2 + 0.02, d / 2 + 0.01, h + 0.05), CABINET_DARK)
+    p.box((-w / 2, -d / 2, 0.0), (w / 2, d / 2 - 0.02, 0.08), CABINET_DARK)
+    p.box((-w / 2 + 0.03, -d / 2 + 0.03, 0.08), (w / 2 - 0.03, d / 2 - 0.02, 0.4), CABINET_WOOD)
+    p.box((-0.08, d / 2 - 0.02, 0.22), (0.08, d / 2 + 0.01, 0.25), BRASS)
+    p.box((-w / 2 + 0.03, -d / 2 + 0.03, 0.4), (w / 2 - 0.03, -d / 2 + 0.035, h), BAIZE)
+    p.box((-w / 2 + 0.03, -d / 2 + 0.03, 0.4), (w / 2 - 0.03, d / 2 - 0.05, 0.43), CABINET_DARK)
+    # The rack: a notched bar high up, and the guns stood in it.
+    p.box((-w / 2 + 0.03, -d / 2 + 0.03, 1.45), (w / 2 - 0.03, -d / 2 + 0.12, 1.5), CABINET_DARK)
+    if not opened:
+        for x in (-0.24, 0.0, 0.24):
+            p.box((x - 0.035, -d / 2 + 0.06, 0.43), (x + 0.035, -d / 2 + 0.14, 0.95), GUN_WOOD)
+            p.box((x - 0.018, -d / 2 + 0.07, 0.95), (x + 0.018, -d / 2 + 0.12, 1.72), GUN_METAL)
+    # The door: a frame round a pane of glass, hinged at the left.
+    y0, y1 = d / 2 - 0.02, d / 2 + 0.01
+    door = []
+    door += p.box((-w / 2, y0, 0.42), (-w / 2 + 0.06, y1, h), CABINET_WOOD)
+    door += p.box((w / 2 - 0.06, y0, 0.42), (w / 2, y1, h), CABINET_WOOD)
+    door += p.box((-w / 2, y0, 0.42), (w / 2, y1, 0.5), CABINET_WOOD)
+    door += p.box((-w / 2, y0, h - 0.08), (w / 2, y1, h), CABINET_WOOD)
+    # The glass isn't drawn (nothing in the world is see-through), only a
+    # glint or two on it, so what's racked behind shows.
+    glint = Matrix.Rotation(math.radians(35), 4, "Y")
+    for x, z, length in ((-0.18, 1.35, 0.35), (-0.08, 1.2, 0.2)):
+        door += p.box((x - 0.006, y0 + 0.012, z - length / 2), (x + 0.006, y0 + 0.016, z + length / 2), GLINT, glint)
+    door += p.box((w / 2 - 0.1, y1, 1.05), (w / 2 - 0.08, y1 + 0.03, 1.2), BRASS)
     if opened:
-        p.box((-w / 2 + 0.04, d / 2 - 0.045, 0.06), (w / 2 - 0.04, d / 2 - 0.041, h - 0.06), HOLLOW)
-        for z in (0.5, 0.95, 1.4):
-            p.box((-w / 2 + 0.04, -d / 2 + 0.05, z), (w / 2 - 0.04, d / 2 - 0.045, z + 0.02), FRIDGE_DARK)
-        swing(door, (-w / 2, d / 2, 0.0), "Z", 105.0)
-    p.finish()
-
-
-def cabinet(opened):
-    """A chest of three drawers, 1.0 × 0.5 × 0.9; opened, its top drawer
-    pulled out."""
-    p = named("CONTAINER_Cabinet", opened)
-    w, d, h = 1.0, 0.5, 0.9
-    p.box((-w / 2, -d / 2, 0.05), (w / 2, d / 2 - 0.02, h), WOOD)
-    p.box((-w / 2 - 0.02, -d / 2, h), (w / 2 + 0.02, d / 2 + 0.02, h + 0.03), WOOD_DARK)
-    for k in range(3):
-        z0 = 0.1 + k * 0.27
-        drawer = p.box((-w / 2 + 0.04, d / 2 - 0.02, z0), (w / 2 - 0.04, d / 2, z0 + 0.24), WOOD_PALE)
-        drawer += p.box((-0.08, d / 2, z0 + 0.1), (0.08, d / 2 + 0.03, z0 + 0.14), KNOB)
-        if opened and k == 2:
-            drawer += p.box((-w / 2 + 0.06, -d / 2 + 0.05, z0), (w / 2 - 0.06, d / 2 - 0.02, z0 + 0.02), WOOD_PALE)
-            p.box((-w / 2 + 0.06, d / 2 - 0.03, z0 + 0.02), (w / 2 - 0.06, d / 2 - 0.021, z0 + 0.22), HOLLOW)
-            for v in drawer:
-                v.co.y += 0.32
-    p.finish()
-
-
-def desk(opened):
-    """A desk, 1.3 × 0.65 × 0.76: a top on a panel at its left and a
-    pedestal of drawers at its right, a chair tucked in; opened, a drawer
-    out."""
-    p = named("CONTAINER_Desk", opened)
-    w, d, h = 1.3, 0.65, 0.76
-    p.box((-w / 2, -d / 2, h - 0.04), (w / 2, d / 2, h), WOOD)
-    p.box((-w / 2, -d / 2, 0.0), (-w / 2 + 0.04, d / 2, h - 0.04), WOOD_DARK)
-    p.box((w / 2 - 0.42, -d / 2, 0.0), (w / 2, d / 2 - 0.02, h - 0.04), WOOD_DARK)
-    p.box((-w / 2 + 0.04, -d / 2, 0.3), (w / 2 - 0.42, -d / 2 + 0.03, h - 0.04), WOOD_DARK)
-    for k in range(3):
-        z0 = 0.06 + k * 0.22
-        drawer = p.box((w / 2 - 0.4, d / 2 - 0.02, z0), (w / 2 - 0.02, d / 2, z0 + 0.19), WOOD_PALE)
-        drawer += p.box((w / 2 - 0.25, d / 2, z0 + 0.08), (w / 2 - 0.17, d / 2 + 0.03, z0 + 0.11), KNOB)
-        if opened and k == 2:
-            p.box((w / 2 - 0.39, d / 2 - 0.03, z0 + 0.02), (w / 2 - 0.03, d / 2 - 0.021, z0 + 0.17), HOLLOW)
-            for v in drawer:
-                v.co.y += 0.28
-    # Papers, and a lamp.
-    p.box((-0.4, -0.1, h), (-0.1, 0.12, h + 0.01), (0.85, 0.83, 0.76))
-    p.box((0.2, -0.25, h), (0.3, -0.15, h + 0.35), FRIDGE_DARK)
-    # The chair, pushed in.
-    p.box((-0.45, d / 2 - 0.1, 0.44), (0.0, d / 2 + 0.3, 0.48), WOOD_DARK)
-    p.box((-0.45, d / 2 + 0.26, 0.48), (0.0, d / 2 + 0.3, 0.9), WOOD_DARK)
-    for x in (-0.43, -0.04):
-        for y in (d / 2 - 0.08, d / 2 + 0.26):
-            p.box((x, y, 0.0), (x + 0.03, y + 0.03, 0.44), WOOD_DARK)
-    p.finish()
-
-
-def wardrobe(opened):
-    """A wardrobe, 1.2 × 0.6 × 2.0, two doors; opened, both swung out on a
-    rail of dark clothes."""
-    p = named("CONTAINER_Wardrobe", opened)
-    w, d, h = 1.2, 0.6, 2.0
-    p.box((-w / 2, -d / 2, 0.05), (w / 2, d / 2 - 0.03, h), WOOD_DARK)
-    p.box((-w / 2 - 0.02, -d / 2, h), (w / 2 + 0.02, d / 2 + 0.02, h + 0.05), WOOD_DARK)
-    left = p.box((-w / 2 + 0.02, d / 2 - 0.03, 0.08), (-0.005, d / 2, h - 0.03), WOOD)
-    left += p.box((-0.07, d / 2, 0.95), (-0.04, d / 2 + 0.03, 1.15), KNOB)
-    right = p.box((0.005, d / 2 - 0.03, 0.08), (w / 2 - 0.02, d / 2, h - 0.03), WOOD)
-    right += p.box((0.04, d / 2, 0.95), (0.07, d / 2 + 0.03, 1.15), KNOB)
-    if opened:
-        p.box((-w / 2 + 0.03, d / 2 - 0.035, 0.08), (w / 2 - 0.03, d / 2 - 0.031, h - 0.03), HOLLOW)
-        p.box((-w / 2 + 0.05, 0.0, 1.75), (w / 2 - 0.05, 0.02, 1.77), CHROME)
-        for k in range(4):
-            x = -0.45 + k * 0.28
-            p.box((x, -0.18, 0.9), (x + 0.2, 0.2, 1.72), [(0.25, 0.27, 0.35), (0.40, 0.22, 0.20), (0.30, 0.30, 0.28)][k % 3])
-        swing(left, (-w / 2 + 0.02, d / 2, 0.0), "Z", -100.0)
-        swing(right, (w / 2 - 0.02, d / 2, 0.0), "Z", 100.0)
-    p.finish()
-
-
-def shelf(opened):
-    """A store's shelving, 1.8 × 0.6 × 1.6, three shelves of goods, both
-    faces; opened (searched), most of it gone."""
-    p = named("CONTAINER_Shelf", opened)
-    w, d, h = 1.8, 0.6, 1.6
-    p.box((-w / 2, -0.03, 0.0), (w / 2, 0.03, h), SHELF_METAL)
-    for x in (-w / 2, w / 2 - 0.04):
-        p.box((x, -d / 2, 0.0), (x + 0.04, d / 2, h), SHELF_METAL)
-    left = 0
-    for z in (0.08, 0.6, 1.1):
-        p.box((-w / 2, -d / 2, z), (w / 2, d / 2, z + 0.03), SHELF_METAL)
-        for side in (-1, 1):
-            x = -w / 2 + 0.08
-            while x < w / 2 - 0.2:
-                bw = rng.uniform(0.12, 0.24)
-                bh = rng.uniform(0.15, 0.36)
-                keep = not opened or rng.random() < 0.15
-                if keep:
-                    y0, y1 = (0.05, d / 2 - 0.03) if side > 0 else (-d / 2 + 0.03, -0.05)
-                    p.box((x, y0, z + 0.03), (x + bw, y1, z + 0.03 + bh), GOODS[left % len(GOODS)])
-                left += 1
-                x += bw + 0.03
-    p.finish()
-
-
-def register(opened):
-    """A shop counter, 2.0 × 0.8 × 1.0, a till on it; opened, its drawer
-    out and empty."""
-    p = named("CONTAINER_Register", opened)
-    w, d, h = 2.0, 0.8, 1.0
-    p.box((-w / 2, -d / 2, 0.0), (w / 2, d / 2, h - 0.04), COUNTER)
-    p.box((-w / 2 - 0.03, -d / 2 - 0.03, h - 0.04), (w / 2 + 0.03, d / 2 + 0.03, h), COUNTER_TOP)
-    p.box((-w / 2 + 0.05, d / 2, 0.05), (w / 2 - 0.05, d / 2 + 0.01, 0.12), WOOD_DARK)
-    # The till, facing the customer's side (+Y).
-    p.box((0.3, -0.2, h), (0.75, 0.2, h + 0.12), TILL)
-    p.box((0.35, -0.15, h + 0.12), (0.7, 0.0, h + 0.32), TILL)
-    p.box((0.37, -0.012, h + 0.15), (0.68, 0.0, h + 0.3), (0.25, 0.42, 0.30))
-    drawer = p.box((0.32, 0.12, h + 0.01), (0.73, 0.2, h + 0.1), TILL)
-    if opened:
-        for v in drawer:
-            v.co.y += 0.25
-        p.box((0.34, 0.2, h + 0.02), (0.71, 0.45, h + 0.03), HOLLOW)
-    p.finish()
-
-
-def hull(name, boxes, turn=None):
-    """`boxes` (corner pairs) as one object, turned by `turn` if given."""
-    p = Part(name + "_Hull")
-    for lo, hi in boxes:
-        p.box(lo, hi, STEEL_DARK)
-    if turn is not None:
-        for v in p.bm.verts:
-            v.co = turn @ v.co
+        swing(door, (-w / 2, y1, 0.0), "Z", 105.0)
     p.finish()
 
 
@@ -451,6 +251,7 @@ def hulls():
     hull("CONTAINER_Wardrobe", [((-0.62, -0.3, 0.0), (0.62, 0.3, 2.05))])
     hull("CONTAINER_Shelf", [((-0.9, -0.3, 0.0), (0.9, 0.3, 1.6))])
     hull("CONTAINER_Register", [((-1.03, -0.43, 0.0), (1.03, 0.43, 1.0))])
+    hull("CONTAINER_GunCabinet", [((-0.42, -0.24, 0.0), (0.42, 0.25, 1.95))])
     lean = Matrix.Rotation(math.radians(-2.5), 4, "X") @ Matrix.Rotation(math.radians(-1.5), 4, "Y")
     hull("CONTAINER_Car", [((-2.2, -0.875, 0.05), (2.2, 0.875, 0.82)), ((-1.0, -0.78, 0.82), (0.75, 0.78, 1.32))], lean)
     w, d, h, t = 1.6, 1.0, 2.0, 0.05
@@ -476,6 +277,7 @@ def main():
         wardrobe(opened)
         shelf(opened)
         register(opened)
+        gun_cabinet(opened)
     hulls()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"containers: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")

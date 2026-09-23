@@ -215,3 +215,77 @@ fn bare_fists_have_no_sights() {
     }
     assert_eq!(h.aim(), 0.0);
 }
+
+/// A shotgun in hand, up and ready, `mag` shells in it and `spare` carried.
+fn shotgun(mag: u32, spare: u32) -> Hands {
+    let mut h = Hands { spare, ..Hands::default() };
+    h.take_up(Some(Slot::Primary), Weapon::Shotgun, mag);
+    idle(&mut h);
+    h
+}
+
+#[test]
+fn the_shotgun_pumps_after_every_shot_and_waits_for_it() {
+    let mut s = shotgun(5, 0);
+    assert_eq!(s.update(FIRE, DT), vec![Act::Shoot]);
+    // Not again till it's pumped.
+    let acts = run(&mut s, FIRE, 30);
+    assert_eq!(acts, vec![Act::Pump], "one pump, no shot");
+    assert!(s.update(FIRE, DT).is_empty(), "still racking");
+    let mut frames = 0;
+    while !s.update(FIRE, DT).contains(&Act::Shoot) {
+        frames += 1;
+        assert!(frames < 60, "never fired again");
+    }
+    assert_eq!(s.mag, 3);
+}
+
+#[test]
+fn shells_go_in_one_at_a_time_till_its_full_or_theyre_gone() {
+    let mut s = shotgun(1, 3);
+    let acts = run(&mut s, RELOAD, 300);
+    assert_eq!(acts.iter().filter(|a| **a == Act::ShellIn).count(), 3, "{acts:?}");
+    assert_eq!(acts.last(), Some(&Act::Pump), "racked when done");
+    assert_eq!((s.mag, s.spare, s.clip().0), (4, 0, Clip::Idle));
+    // Full: another press does nothing.
+    let mut s = shotgun(5, 10);
+    assert!(run(&mut s, RELOAD, 30).is_empty());
+    assert_eq!(s.clip().0, Clip::Idle);
+}
+
+#[test]
+fn the_trigger_cuts_a_shell_reload_short_to_fire_whats_in() {
+    let mut s = shotgun(0, 10);
+    run(&mut s, RELOAD, 1);
+    // Till the first shell's in, the trigger does nothing.
+    let mut frames = 0;
+    let mut acts = Vec::new();
+    while s.mag == 0 {
+        acts = s.update(FIRE, DT);
+        assert!(!acts.contains(&Act::Shoot) && !acts.contains(&Act::DryFire), "fired an empty gun: {acts:?}");
+        frames += 1;
+        assert!(frames < 120, "no shell ever went in");
+    }
+    // One in, the trigger held: the reload ends and it fires, soon.
+    assert_eq!(acts, vec![Act::ShellIn]);
+    assert_eq!(s.clip().0, Clip::ReloadEnd);
+    for _ in 0..45 {
+        acts.extend(s.update(Trigger::default(), DT));
+    }
+    assert!(acts.contains(&Act::Shoot), "{acts:?}");
+    assert_eq!((s.mag, s.spare), (0, 9), "the one shell fired, the rest still carried");
+}
+
+#[test]
+fn pellets_hit_in_full_up_close_and_fade_with_distance() {
+    let falloff = Weapon::Shotgun.spec().shot.unwrap().falloff.unwrap();
+    assert_eq!(falloff.at(2.0), 1.0);
+    assert_eq!(falloff.at(falloff.near), 1.0);
+    assert!((falloff.at(falloff.far) - falloff.least).abs() < 1e-9);
+    assert!((falloff.at(100.0) - falloff.least).abs() < 1e-9, "no less than the least");
+    let mid = falloff.at((falloff.near + falloff.far) / 2.0);
+    assert!(mid < 1.0 && mid > falloff.least);
+    // Point blank, every pellet in the body drops a shambler.
+    let shot = Weapon::Shotgun.spec().shot.unwrap();
+    assert!(shot.damage * f64::from(shot.pellets) >= crate::zombie::brain::HP);
+}

@@ -22,6 +22,10 @@ const RATE: u32 = 48_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sfx {
     Shot,
+    /// A shotgun going off; its pump racked; a shell pushed into it.
+    Blast,
+    Pump,
+    ShellIn,
     DryFire,
     MagOut,
     MagIn,
@@ -60,8 +64,11 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 28] = [
+const ALL: [Sfx; 31] = [
     Sfx::Shot,
+    Sfx::Blast,
+    Sfx::Pump,
+    Sfx::ShellIn,
     Sfx::DryFire,
     Sfx::MagOut,
     Sfx::MagIn,

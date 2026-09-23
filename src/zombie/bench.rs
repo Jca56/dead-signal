@@ -28,7 +28,7 @@ fn crowd(n: usize, player: Option<Vec3>) -> World {
         let Some(h) = nav.height_at(at) else { continue };
         let mut z = Zombie::new(0.0, k);
         z.hurt(1.0, false, false, player);
-        world.spawn((z, Body::at(Vec3::new(at.x, h, at.z)), Figure::default()));
+        world.spawn((z, Body::at(Vec3::new(at.x, h, at.z)), Figure::default(), super::Beat::new(k)));
         placed += 1;
     }
     world.spawn((Body::at(player), Player));

@@ -1,8 +1,8 @@
 """Everything that can be carried: supplies (ITEM_Bandage, ITEM_Medkit,
 ITEM_Ammo), food and water (ITEM_Beans, ITEM_Water), valuables (ITEM_Pills,
 ITEM_Cash, ITEM_Watch, ITEM_Ring, ITEM_Chain, ITEM_Radio, ITEM_Battery,
-ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key) and the weapons
-(ITEM_Pistol). Each its own object
+ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key), the weapons
+(ITEM_Pistol, ITEM_Shotgun) and shotgun shells (ITEM_Shells). Each its own object
 sitting on its origin, for the game to set down wherever it likes and to
 draw its icon from (seen from the front, +Y, a little above: an item's
 long side runs along X, a tall one stands up Z).
@@ -274,6 +274,46 @@ def pistol():
     p.finish()
 
 
+WALNUT = (0.40, 0.23, 0.12)
+BLUED = (0.12, 0.13, 0.15)
+SHELL_RED = (0.62, 0.10, 0.08)
+BEAD = (0.95, 0.45, 0.08)
+
+
+def shotgun():
+    """A pump shotgun lying on its side, muzzle along +X, its underside
+    (forend, trigger guard) towards the front."""
+    p = Part("ITEM_Shotgun")
+    z = 0.024
+    # (Each box by its middle and its size.) The stock and its pad, the
+    # wrist, the receiver.
+    p.box((-0.33, 0.02, z), (0.32, 0.07, 0.044), WALNUT, turn=0.12)
+    p.box((-0.495, 0.04, z), (0.02, 0.10, 0.046), BLACK, turn=0.12)
+    p.box((-0.08, 0.0, z), (0.16, 0.05, 0.04), WALNUT, turn=0.2)
+    p.box((0.10, 0.0, z), (0.24, 0.07, 0.048), BLUED)
+    p.box((0.52, -0.012, z), (0.60, 0.028, 0.03), BLUED)
+    p.box((0.45, 0.028, z), (0.46, 0.026, 0.026), BLUED)
+    p.box((0.38, 0.034, z), (0.20, 0.05, 0.05), WALNUT)
+    p.box((0.04, 0.045, z), (0.06, 0.02, 0.012), BLUED)
+    p.box((0.815, -0.03, z), (0.01, 0.01, 0.01), BEAD)
+    p.finish()
+
+
+def shells():
+    """A small carton, its lid off, shells standing in two rows, red hulls
+    and brass bases."""
+    p = Part("ITEM_Shells")
+    w, d, h = 0.16, 0.08, 0.07
+    p.box((0, 0, h / 2), (w, d, h), CARTON)
+    p.box((0, 0, h * 0.5), (w + 0.004, d + 0.004, 0.026), LABEL)
+    for row in (-0.018, 0.018):
+        for i in range(5):
+            x = -0.06 + i * 0.03
+            p.box((x, row, h + 0.012), (0.022, 0.022, 0.024), SHELL_RED)
+            p.box((x, row, h + 0.001), (0.024, 0.024, 0.004), BRASS)
+    p.finish()
+
+
 def gold_bar():
     p = Part("ITEM_GoldBar")
     m = Matrix.Translation((0, 0, 0.03)) @ Matrix.Diagonal((0.1, 0.045, 0.03, 1.0))
@@ -303,6 +343,8 @@ def main():
     key()
     gold_bar()
     pistol()
+    shotgun()
+    shells()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"items: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")
 

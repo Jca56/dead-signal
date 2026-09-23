@@ -29,13 +29,52 @@ const PERSONAL: f64 = 0.65;
 const SEARCHES: u32 = 8;
 /// How hard the dead keep out of each other's way, per metre too close.
 const ELBOW: f64 = 3.0;
-/// How hard a shot and a blow shove one, m/s (a blow sends it about a
-/// metre back).
-const SHOT_SHOVE: f64 = 0.6;
+/// How hard a blow shoves one, m/s (about a metre back); a shot's is its
+/// gun's (`weapon/spec.rs`).
 const BLOW_SHOVE: f64 = 7.0;
 /// Where a new one comes from: this far off, and out of sight.
 const SPAWN_NEAR: f64 = 35.0;
 const SPAWN_FAR: f64 = 60.0;
+/// The far dead take their steps less often (and longer, so they go as
+/// far): every step within `CLOSE` of the player, every `MID_EVERY` out to
+/// `MID`, every `FAR_EVERY` past that. Only the close ones keep out of
+/// each other's way.
+const CLOSE: f64 = 60.0;
+const MID: f64 = 130.0;
+const MID_EVERY: u32 = 3;
+const FAR_EVERY: u32 = 8;
+/// Past this, nothing of them shows (the fog has them): not posed. Past
+/// `MID`, posed every third frame.
+const UNSEEN: f64 = 240.0;
+const POSE_FAR_EVERY: u32 = 3;
+
+/// How often one of the dead takes its step (every how many of the
+/// world's), and how many it has let go by since it last did.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Beat {
+    every: u32,
+    since: u32,
+    /// Its place in the beat, so the far ones don't all step at once.
+    phase: u32,
+}
+
+impl Beat {
+    /// Stepping every step to begin with, at `phase` in the beat.
+    pub fn new(phase: u32) -> Self {
+        Self { every: 1, since: 0, phase }
+    }
+}
+
+/// How often one this far (flat) from the player steps.
+fn every(distance: f64) -> u32 {
+    if distance < CLOSE {
+        1
+    } else if distance < MID {
+        MID_EVERY
+    } else {
+        FAR_EVERY
+    }
+}
 
 /// How far the dead see the player: a share of how far they see (the
 /// player's light feet).
@@ -69,16 +108,42 @@ pub struct Horde {
     pub blows: Vec<Vec3>,
     pub gone: usize,
     seed: u32,
+    /// The world's steps so far.
+    tick: u32,
+    /// What was heard over the last few steps (shots, snarls), and on
+    /// which: kept long enough for the far dead, who step less often, to
+    /// hear them on their next.
+    shots: Vec<(u32, (Vec3, f64))>,
+    snarls: Vec<(u32, (Vec3, Vec3))>,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, stealth: Option<Res<Stealth>>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
+fn think(mut dead: Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, stealth: Option<Res<Stealth>>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
     let player = players.iter().next().map(|b| b.pos);
-    let heard = std::mem::take(&mut *noises);
+    horde.tick = horde.tick.wrapping_add(1);
+    let tick = horde.tick;
+    let new = std::mem::take(&mut *noises);
+    let fresh = |at: u32| tick.wrapping_sub(at) < FAR_EVERY;
+    horde.shots.retain(|(at, _)| fresh(*at));
+    horde.snarls.retain(|(at, _)| fresh(*at));
+    horde.shots.extend(new.shots.into_iter().map(|n| (tick, n)));
+    horde.snarls.extend(new.snarls.into_iter().map(|n| (tick, n)));
+    let shots: Vec<(Vec3, f64)> = horde.shots.iter().map(|(_, n)| *n).collect();
+    let snarls: Vec<(Vec3, Vec3)> = horde.snarls.iter().map(|(_, n)| *n).collect();
     let searches = std::cell::Cell::new(SEARCHES);
-    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &heard.shots, alerts: &heard.snarls, searches: &searches, sight: stealth.map_or(1.0, |s| s.0) };
-    for (mut z, mut body) in &mut dead {
-        let mut intent = z.think(&body, &senses, STEP);
+    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: stealth.map_or(1.0, |s| s.0) };
+    for (mut z, mut body, mut beat) in &mut dead {
+        // Far off, it steps less often, and further each time. (What's
+        // heard is kept as long as the farthest go between steps.)
+        let far = player.map_or(0.0, |p| Vec2::new(body.pos.x - p.x, body.pos.z - p.z).length());
+        let n = every(far);
+        if !(tick + beat.phase).is_multiple_of(n) {
+            beat.since += 1;
+            continue;
+        }
+        *beat = Beat { every: n, since: 0, ..*beat };
+        let dt = STEP * f64::from(n);
+        let mut intent = z.think(&body, &senses, dt);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
         horde.sounds.extend(intent.sounds.drain(..).map(|(sfx, gain)| (sfx, voice, gain)));
         if let Some(push) = intent.hit {
@@ -93,7 +158,7 @@ fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Qu
         }
         let before = body.pos;
         let gait = z.gait;
-        player::step_body(&mut body, z.yaw, &mut intent.controls, &solid.0, &gait, STEP);
+        player::step_body(&mut body, z.yaw, &mut intent.controls, &solid.0, &gait, dt);
         // Kept out of the player's way.
         if let Some(p) = player {
             let off = Vec2::new(body.pos.x - p.x, body.pos.z - p.z);
@@ -109,10 +174,11 @@ fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Qu
     elbow(&mut dead);
 }
 
-/// The living dead nudge each other apart (a shove, so walls still stop
-/// them), and a crowd spreads round the player instead of stacking.
-fn elbow(dead: &mut Query<(&mut Zombie, &mut Body), Without<Player>>) {
-    let at: Vec<Option<Vec3>> = dead.iter().map(|(z, b)| (!z.dead()).then_some(b.pos)).collect();
+/// The living dead near the player nudge each other apart (a shove, so
+/// walls still stop them), and a crowd spreads round the player instead
+/// of stacking.
+fn elbow(dead: &mut Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>) {
+    let at: Vec<Option<Vec3>> = dead.iter().map(|(z, b, beat)| (!z.dead() && beat.every == 1).then_some(b.pos)).collect();
     let apart = RADIUS * 2.0;
     let mut nudges = vec![Vec3::ZERO; at.len()];
     for i in 0..at.len() {
@@ -134,7 +200,7 @@ fn elbow(dead: &mut Query<(&mut Zombie, &mut Body), Without<Player>>) {
             nudges[j] -= nudge;
         }
     }
-    for ((_, mut body), nudge) in dead.iter_mut().zip(nudges) {
+    for ((_, mut body, _), nudge) in dead.iter_mut().zip(nudges) {
         if nudge != Vec3::ZERO {
             body.push += nudge;
         }
@@ -142,13 +208,27 @@ fn elbow(dead: &mut Query<(&mut Zombie, &mut Body), Without<Player>>) {
 }
 
 /// Pose each one for this frame: its animation, where it stands between
-/// steps, and sinking once it has lain long enough.
-fn pose(model: Option<Res<Model>>, blend: Res<Blend>, mut dead: Query<(&Zombie, &Body, &mut Figure)>) {
+/// its steps, and sinking once it has lain long enough. Lost in the fog,
+/// it isn't; far off, only now and then.
+fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<&Body, With<Player>>, mut frames: Local<u32>, mut dead: Query<(&Zombie, &Body, &Beat, &mut Figure), Without<Player>>) {
     let Some(model) = model else { return };
-    for (z, body, mut figure) in &mut dead {
+    let player = players.iter().next().map(|b| b.pos);
+    *frames = frames.wrapping_add(1);
+    for (z, body, beat, mut figure) in &mut dead {
+        let far = player.map_or(0.0, |p| Vec2::new(body.pos.x - p.x, body.pos.z - p.z).length());
+        if far > UNSEEN {
+            figure.hide();
+            continue;
+        }
+        if far > MID && !figure.joints.is_empty() && !(*frames + beat.phase).is_multiple_of(POSE_FAR_EVERY) {
+            continue;
+        }
         let (clip, t) = z.clip();
         let (joints, points) = model.pose(clip, t);
-        let at = body.prev + (body.pos - body.prev) * blend.0;
+        // Between the step it took and the next it will, over as many of
+        // the world's steps as it lets go by.
+        let along = ((f64::from(beat.since) + blend.0) / f64::from(beat.every)).min(1.0);
+        let at = body.prev + (body.pos - body.prev) * along;
         let sink = match z.state {
             State::Dead { t } => ((t - LIE_FOR) / SINK_FOR).clamp(0.0, 1.0) * 1.8,
             _ => 0.0,
@@ -180,7 +260,7 @@ pub fn spawn(world: &mut World, at: Vec3, yaw: f64) {
         h.seed = h.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         h.seed
     };
-    world.spawn((Zombie::new(yaw, seed), Body::at(at), Figure::default()));
+    world.spawn((Zombie::new(yaw, seed), Body::at(at), Figure::default(), Beat::new(seed % 64)));
 }
 
 /// Put a Shambler somewhere the player at `eye`, looking along `forward`,
@@ -253,19 +333,38 @@ pub fn raycast(world: &mut World, from: Vec3, dir: Vec3, max: f64) -> Option<(En
     best
 }
 
-/// Hurt the Shambler `e` with a hit along `dir` from `from` (a blow's shove
-/// `shove` times the usual). Whether it died.
-#[allow(clippy::too_many_arguments)]
-pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, head: bool, blow: bool, shove: f64) -> bool {
+/// A hit on one of the dead: how much, whether to the head, whether a
+/// blow (not a shot), how hard it shoves, m/s, and whether it sends it
+/// stumbling (a blow always does).
+#[derive(Clone, Copy, Debug)]
+pub struct Impact {
+    pub damage: f64,
+    pub head: bool,
+    pub blow: bool,
+    pub shove: f64,
+    pub stumble: bool,
+}
+
+/// A blow's shove, m/s, `times` the usual.
+pub fn blow_shove(times: f64) -> f64 {
+    BLOW_SHOVE * times
+}
+
+/// Hurt the Shambler `e` with `hit` along `dir` from `from`. Whether it
+/// died.
+pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) -> bool {
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
-    let killed = z.hurt(damage, head, blow, from);
+    let killed = z.hurt(hit.damage, hit.head, hit.blow, from);
+    if hit.stumble && !killed {
+        z.stumble();
+    }
     let mut sounds = Vec::new();
     if killed {
         sounds.push(Sfx::Gurgle);
     }
     // (Shot from straight above, it isn't shoved at all.)
     let flat = Vec3::new(dir.x, 0.0, dir.z);
-    let push = if flat.length() > 1e-6 { flat.normalize() * if blow { BLOW_SHOVE * shove } else { SHOT_SHOVE } } else { Vec3::ZERO };
+    let push = if flat.length() > 1e-6 { flat.normalize() * hit.shove } else { Vec3::ZERO };
     let at = world.get_mut::<Body>(e).map(|mut body| {
         body.push += push;
         body.pos

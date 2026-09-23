@@ -31,6 +31,8 @@ pub const STEPS: usize = 15;
 pub const TREAD: f64 = 0.28;
 /// The hall that holds the stairs, metres across.
 const HALL: i32 = 3;
+/// How high a gable's ridge stands over the eaves, usually.
+pub const RIDGE: f64 = 2.2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -38,6 +40,10 @@ pub enum Kind {
     Store,
     /// Boarded up all round: not to be got into.
     Shell,
+    /// Out in the country (`country.rs`): a barn, one tall room open at
+    /// both ends; a hunter's cabin, of logs.
+    Barn,
+    Cabin,
 }
 
 /// What a room is for.
@@ -50,6 +56,11 @@ pub enum Use {
     Hall,
     Shop,
     Back,
+    /// A farmhouse's or a cabin's living room: the gun cabinet stands in
+    /// it, the stove warms it.
+    Den,
+    /// A barn's floor: hay, tools.
+    Barn,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,20 +137,22 @@ pub struct Plan {
     pub walls: Vec<Wall>,
     pub openings: Vec<Opening>,
     pub stair: Option<Stair>,
-    /// A flat roof (a store's), else a gable, its ridge along x or z.
+    /// A flat roof (a store's), else a gable, its ridge along x or z and
+    /// standing so high over the eaves.
     pub flat_roof: bool,
     pub ridge_along_x: bool,
+    pub ridge: f64,
 }
 
 /// A cut to make across a region: along x (at z) or along z (at x), and
 /// where its doorway is.
-struct Cut {
-    along_x: bool,
-    at: i32,
-    door: f64,
+pub(super) struct Cut {
+    pub along_x: bool,
+    pub at: i32,
+    pub door: f64,
 }
 
-fn between(dice: &mut Dice, lo: i32, hi: i32) -> i32 {
+pub(super) fn between(dice: &mut Dice, lo: i32, hi: i32) -> i32 {
     lo + (dice.next() % (hi - lo + 1) as u32) as i32
 }
 
@@ -186,7 +199,7 @@ fn cut_up(dice: &mut Dice, r: (i32, i32, i32, i32), most: i32, doors: &[(bool, i
 
 /// Every wall on a storey: wherever a room's edge is, split where what's
 /// on the other side changes.
-fn walls_of(rooms: &[Room], storey: u8) -> Vec<Wall> {
+pub(super) fn walls_of(rooms: &[Room], storey: u8) -> Vec<Wall> {
     let on: Vec<(usize, &Room)> = rooms.iter().enumerate().filter(|(_, r)| r.storey == storey).collect();
     let mut lines: Vec<(bool, i32)> = Vec::new();
     for (_, r) in &on {
@@ -246,7 +259,7 @@ fn wall_at(walls: &[Wall], storey: u8, along_x: bool, at: i32, centre: f64) -> O
 /// Spots along wall `w` for gaps `width` wide, whole-metre middles half a
 /// metre in, every `every` metres, clear of the ends and of the gaps
 /// already in it.
-fn spots_along(plan: &Plan, w: usize, width: f64, every: f64) -> Vec<f64> {
+pub(super) fn spots_along(plan: &Plan, w: usize, width: f64, every: f64) -> Vec<f64> {
     let wall = plan.walls[w];
     let margin = 0.6 + width * 0.5;
     let taken: Vec<(f64, f64)> = plan.openings.iter().filter(|o| o.wall == w).map(|o| (o.centre, o.width)).collect();
@@ -265,7 +278,7 @@ fn spots_along(plan: &Plan, w: usize, width: f64, every: f64) -> Vec<f64> {
 
 /// A house `w` by `d`, of one storey or two.
 pub fn house(dice: &mut Dice, w: i32, d: i32, two: bool) -> Plan {
-    let mut plan = Plan { kind: Kind::House, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d };
+    let mut plan = Plan { kind: Kind::House, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE };
     let two = two && d >= 8 && w >= HALL + 2 * MIN_ROOM;
     let mut cuts = Vec::new();
     let mut rects = Vec::new();
@@ -347,7 +360,7 @@ pub fn house(dice: &mut Dice, w: i32, d: i32, two: bool) -> Plan {
 
 /// A store `w` by `d`: the shop floor at the front, a back room.
 pub fn store(dice: &mut Dice, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind: Kind::Store, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true };
+    let mut plan = Plan { kind: Kind::Store, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true, ridge: RIDGE };
     let back = 4.min(d - MIN_ROOM - 5).max(MIN_ROOM);
     plan.rooms.push(Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d - back, use_: Use::Shop });
     plan.rooms.push(Room { storey: 0, x0: 0, z0: d - back, x1: w, z1: d, use_: Use::Back });
@@ -357,7 +370,7 @@ pub fn store(dice: &mut Dice, w: i32, d: i32) -> Plan {
 
 /// A house boarded up all round, nothing inside worth drawing.
 pub fn shell(dice: &mut Dice, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind: Kind::Shell, w, d, storeys: 1, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_: Use::Hall }], walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d };
+    let mut plan = Plan { kind: Kind::Shell, w, d, storeys: 1, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_: Use::Hall }], walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE };
     plan.walls = walls_of(&plan.rooms, 0);
     for i in 0..plan.walls.len() {
         let spots = spots_along(&plan, i, 1.2, 3.0);
@@ -371,7 +384,7 @@ pub fn shell(dice: &mut Dice, w: i32, d: i32) -> Plan {
 
 /// The walls from the rooms, the doorways the cuts made, and the doors
 /// and windows out.
-fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Plan {
+pub(super) fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Plan {
     for s in 0..plan.storeys {
         plan.walls.extend(walls_of(&plan.rooms, s));
     }
@@ -383,11 +396,12 @@ fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Plan {
         }
     }
     let store = plan.kind == Kind::Store;
-    // The way in, at the front: into the living room, the hall, the shop.
+    // The way in, at the front: into the living room (or den), the hall,
+    // the shop.
     let front: Vec<usize> = (0..plan.walls.len())
         .filter(|&i| {
             let w = plan.walls[i];
-            w.storey == 0 && w.along_x && w.at == 0 && w.sides[1].is_some_and(|r| matches!(plan.rooms[r].use_, Use::Living | Use::Hall | Use::Shop))
+            w.storey == 0 && w.along_x && w.at == 0 && w.sides[1].is_some_and(|r| matches!(plan.rooms[r].use_, Use::Living | Use::Den | Use::Hall | Use::Shop))
         })
         .collect();
     // (Whichever stretch of the front has room for it; failing that, any

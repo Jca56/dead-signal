@@ -217,6 +217,13 @@ impl Zombie {
         false
     }
 
+    /// Sent stumbling back (a blast at close range), if it's alive.
+    pub fn stumble(&mut self) {
+        if !self.dead() {
+            self.set(State::Stagger { t: 0.0, until: STUMBLE_TIME });
+        }
+    }
+
     /// Whether it sees a player standing at `player`, as far as `reach`
     /// of its sight.
     fn sees(&self, body: &Body, player: Vec3, solids: &Solids, reach: f64) -> bool {

@@ -20,12 +20,14 @@ pub enum Source {
     Shelf,
     /// A store's till counter.
     Register,
+    /// At a farm or a hunter's cabin: long guns, shells.
+    GunCabinet,
     /// On one of the dead, sometimes.
     Corpse,
 }
 
 /// Every container there is (not the dead).
-pub const CONTAINERS: [Source; 10] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register];
+pub const CONTAINERS: [Source; 11] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet];
 
 /// One line of a table: what, how likely against the rest, how many.
 type Line = (Kind, u32, (u32, u32));
@@ -38,6 +40,7 @@ const CRATE: &[Line] = &[
     (Kind::Cash, 8, (1, 2)),
     (Kind::Pills, 5, (1, 1)),
     (Kind::Fuel, 4, (1, 1)),
+    (Kind::Shells, 12, (4, 10)),
 ];
 
 const LOCKER: &[Line] = &[
@@ -50,6 +53,7 @@ const LOCKER: &[Line] = &[
     (Kind::Radio, 8, (1, 1)),
     (Kind::Ring, 2, (1, 1)),
     (Kind::Pistol, 5, (1, 1)),
+    (Kind::Shells, 8, (4, 10)),
 ];
 
 // A map has a score of wrecks: their gold is rare.
@@ -64,6 +68,8 @@ const CAR: &[Line] = &[
     (Kind::Radio, 12, (1, 1)),
     (Kind::Chain, 1, (1, 1)),
     (Kind::Pistol, 4, (1, 1)),
+    (Kind::Shotgun, 2, (1, 1)),
+    (Kind::Shells, 10, (4, 10)),
 ];
 
 const CAGE: &[Line] = &[
@@ -75,6 +81,8 @@ const CAGE: &[Line] = &[
     (Kind::Radio, 8, (1, 1)),
     (Kind::Battery, 6, (1, 1)),
     (Kind::GoldBar, 6, (1, 1)),
+    (Kind::Shotgun, 5, (1, 1)),
+    (Kind::Shells, 14, (8, 16)),
 ];
 
 const FRIDGE: &[Line] = &[
@@ -113,6 +121,8 @@ const WARDROBE: &[Line] = &[
     (Kind::Ring, 1, (1, 1)),
     (Kind::Chain, 1, (1, 1)),
     (Kind::Pistol, 3, (1, 1)),
+    (Kind::Shotgun, 2, (1, 1)),
+    (Kind::Shells, 6, (4, 8)),
 ];
 
 const SHELF: &[Line] = &[
@@ -123,6 +133,7 @@ const SHELF: &[Line] = &[
     (Kind::Rounds, 8, (8, 16)),
     (Kind::Fuel, 3, (1, 1)),
     (Kind::Battery, 2, (1, 1)),
+    (Kind::Shells, 6, (4, 10)),
 ];
 
 const REGISTER: &[Line] = &[
@@ -138,6 +149,16 @@ const CORPSE: &[Line] = &[
     (Kind::Pills, 10, (1, 1)),
     (Kind::Watch, 5, (1, 1)),
     (Kind::Ring, 2, (1, 1)),
+    (Kind::Shells, 10, (2, 5)),
+];
+
+// A farm's or a cabin's: the long gun that was kept there, likely as not.
+const GUN_CABINET: &[Line] = &[
+    (Kind::Shotgun, 30, (1, 1)),
+    (Kind::Shells, 40, (5, 12)),
+    (Kind::Rounds, 20, (10, 20)),
+    (Kind::Pistol, 10, (1, 1)),
+    (Kind::Cash, 8, (1, 2)),
 ];
 
 /// How one of the dead carries something at all.
@@ -156,6 +177,7 @@ impl Source {
             Source::Wardrobe => WARDROBE,
             Source::Shelf => SHELF,
             Source::Register => REGISTER,
+            Source::GunCabinet => GUN_CABINET,
             Source::Corpse => CORPSE,
         }
     }
@@ -179,6 +201,7 @@ impl Source {
             Source::Wardrobe => (1, 2),
             Source::Shelf => (1, 3),
             Source::Register => (1, 1),
+            Source::GunCabinet => (2, 3),
             Source::Corpse => (1, 1),
         }
     }
@@ -196,6 +219,7 @@ impl Source {
             Source::Wardrobe => (4, 4),
             Source::Shelf => (5, 3),
             Source::Register => (3, 2),
+            Source::GunCabinet => (5, 3),
             Source::Corpse => (2, 2),
         }
     }
@@ -212,6 +236,7 @@ impl Source {
             Source::Wardrobe => "WARDROBE",
             Source::Shelf => "STORE SHELF",
             Source::Register => "CASH REGISTER",
+            Source::GunCabinet => "GUN CABINET",
             Source::Corpse => "REMAINS",
         }
     }
@@ -229,6 +254,7 @@ impl Source {
             Source::Wardrobe => 2.0,
             Source::Shelf => 2.0,
             Source::Register => 1.5,
+            Source::GunCabinet => 2.0,
             Source::Corpse => 0.0,
         }
     }

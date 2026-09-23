@@ -4,9 +4,8 @@
 //! houses round them (some of two storeys, some boarded up), and a few
 //! lots lie empty. Cars are left parked along the kerbs.
 
-use lntrn_math::{Vec2, Vec3};
+use lntrn_math::Vec2;
 
-use super::building::shape::RAISED;
 use super::building::{Building, plan};
 use super::roads::Kind as RoadKind;
 use super::sites::Site;
@@ -118,16 +117,8 @@ pub fn lay_out(dice: &mut Dice, site: &Site) -> Town {
         } else {
             plan::house(&mut own, w, d, dice.unit() < 0.38)
         };
-        // Its front faces the street: its own -z along `out`. The corner it
-        // stands on, found in the town's frame and put on a half metre.
-        let theta = (-lot.out.x).atan2(-lot.out.y);
-        let quarter = ((plot.yaw + theta) / std::f64::consts::FRAC_PI_2).round().rem_euclid(4.0) as u8;
-        let across = Vec2::new(theta.cos(), -theta.sin());
-        let front_mid = lot.front - lot.out * setback;
-        let corner = front_mid - across * (f64::from(w) * 0.5);
-        let corner = plot.world(corner);
-        let origin = Vec3::new(corner.x.floor() + 0.5, plot.height + RAISED, corner.y.floor() + 0.5);
-        buildings.push(Building { plan, origin, quarter, seed });
+        // Its front faces the street, set back from it.
+        buildings.push(Building::facing(plan, plot, lot.front - lot.out * setback, lot.out, seed));
     }
 
     // Cars left at the kerbs.
@@ -148,6 +139,7 @@ pub fn lay_out(dice: &mut Dice, site: &Site) -> Town {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lntrn_math::Vec3;
     use crate::map::sites::Kind;
     use crate::map::terrain::Plot;
 

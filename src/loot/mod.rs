@@ -62,9 +62,11 @@ pub enum Kind {
     Key,
     GoldBar,
     Pistol,
+    Shotgun,
+    Shells,
 }
 
-pub const ALL: [Kind; 16] = [
+pub const ALL: [Kind; 18] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -81,6 +83,8 @@ pub const ALL: [Kind; 16] = [
     Kind::Key,
     Kind::GoldBar,
     Kind::Pistol,
+    Kind::Shotgun,
+    Kind::Shells,
 ];
 
 impl Kind {
@@ -104,6 +108,8 @@ impl Kind {
             Kind::Key => "cage_key",
             Kind::GoldBar => "gold_bar",
             Kind::Pistol => "pistol",
+            Kind::Shotgun => "shotgun",
+            Kind::Shells => "shells_12ga",
         }
     }
 
@@ -115,6 +121,7 @@ impl Kind {
     pub fn weapon(self) -> Option<Weapon> {
         match self {
             Kind::Pistol => Some(Weapon::Pistol),
+            Kind::Shotgun => Some(Weapon::Shotgun),
             _ => None,
         }
     }
@@ -155,6 +162,8 @@ impl Kind {
             Kind::Key => d("CAGE KEY", (1, 1), 1, Rare, 25, "ITEM_Key"),
             Kind::GoldBar => d("GOLD BAR", (2, 1), 1, Legendary, 1000, "ITEM_GoldBar"),
             Kind::Pistol => d("PISTOL", (2, 1), 1, Uncommon, 150, "ITEM_Pistol"),
+            Kind::Shotgun => d("SHOTGUN", (4, 1), 1, Rare, 320, "ITEM_Shotgun"),
+            Kind::Shells => d("12GA SHELLS", (1, 1), 20, Common, 4, "ITEM_Shells"),
         }
     }
 }
@@ -281,6 +290,7 @@ mod tests {
                 (Source::Wardrobe, "wardrobe"),
                 (Source::Shelf, "shelf"),
                 (Source::Register, "register"),
+                (Source::GunCabinet, "gun cabinet"),
                 (Source::Corpse, "zombies"),
             ]
                 .iter()

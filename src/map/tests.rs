@@ -143,6 +143,8 @@ fn the_ground_under_a_road_never_pokes_through_it() {
 #[test]
 fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     use crate::world::{Game, Ground, Solid};
+    use bevy_ecs::prelude::With;
+    use lntrn_math::Vec3;
     let built = build::build(777, &crate::testing::kit(), &|_| {});
     let mut game = Game::new();
     game.world.insert_resource(Solid(built.solids));
@@ -159,7 +161,17 @@ fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     let mut run = crate::run::Run::default();
     let mut combat = crate::combat::Combat::new();
     run.start(&mut game, &mut combat, crate::loot::bag::Bag::empty(), 0, crate::profile::perks::Perks::default(), &built.map);
-    assert!(crate::zombie::alive(&mut game.world) >= crate::zombie::director::FIRST / 2, "the dead are out there");
+    // The map peopled: nearly all of the first, most of them at the
+    // places, none close to the start.
+    let up = crate::zombie::alive(&mut game.world);
+    assert!(up >= crate::zombie::director::FIRST * 9 / 10, "only {up} of the dead are out there");
+    let bodies: Vec<Vec3> = game.world.query_filtered::<&crate::player::Body, With<crate::zombie::brain::Zombie>>().iter(&game.world).map(|b| b.pos).collect();
+    let at_places = bodies.iter().filter(|p| built.map.sites.iter().any(|s| s.plot.outside(Vec2::new(p.x, p.z)) < 1.0)).count();
+    let in_town = bodies.iter().filter(|p| built.map.sites[0].plot.outside(Vec2::new(p.x, p.z)) < 1.0).count();
+    let closest = bodies.iter().map(|p| Vec2::new(p.x - at.x, p.z - at.z).length()).fold(f64::INFINITY, f64::min);
+    eprintln!("{up} dead: {at_places} at the places ({in_town} in town), the closest {closest:.0} m off");
+    assert!(at_places > up / 2 && in_town >= 40, "{at_places} at the places, {in_town} in town");
+    assert!(closest > 40.0, "one {closest:.0} m from the start");
     assert!(game.world.query::<&crate::items::Pickup>().iter(&game.world).count() >= 15, "things lie about");
     // Ten seconds walking in towards the middle of the map, the dead
     // coming after.
@@ -226,5 +238,33 @@ fn every_room_and_container_in_town_can_be_got_to() {
     all_reached(built_map());
     for seed in [11, 222, 3333, 44_444] {
         all_reached(&build::build(seed, &crate::testing::kit(), &|_| {}));
+    }
+}
+
+#[test]
+fn farms_and_cabins_are_built_on_the_level_with_a_gun_cabinet() {
+    use building::plan::Kind as Plan;
+    for seed in 1..13u32 {
+        let map = generate(seed * 101);
+        let farms = map.sites.iter().filter(|s| s.kind == SiteKind::Farm).count();
+        let cabins = map.sites.iter().filter(|s| s.kind == SiteKind::Cabin).count();
+        let of = |k: Plan| map.buildings.iter().filter(|b| b.plan.kind == k).count();
+        assert_eq!(of(Plan::Barn), farms, "seed {seed}: a barn a farm");
+        assert_eq!(of(Plan::Cabin), cabins, "seed {seed}: a cabin at the cabin");
+        for b in map.buildings.iter().filter(|b| matches!(b.plan.kind, Plan::Barn | Plan::Cabin) || b.plan.rooms.iter().any(|r| r.use_ == building::plan::Use::Den)) {
+            // Level: the land under its corners where its floor's raised off.
+            for c in b.footprint() {
+                let ground = map.field.height_at(c.x, c.y).unwrap();
+                let under = b.origin.y - building::shape::RAISED;
+                assert!((ground - under).abs() < 0.15, "seed {seed}: the {:?}'s corner is {:.2} m off the level", b.plan.kind, ground - under);
+            }
+            // A farmhouse's den and a cabin's have their gun cabinet in.
+            if b.plan.kind != Plan::Barn {
+                let inside = building::furnish::furnish(b, &mut Dice(b.seed.rotate_left(9) | 1));
+                assert!(inside.containers.iter().any(|(s, _)| *s == Source::GunCabinet), "seed {seed}: no gun cabinet in the {:?}", b.plan.kind);
+            }
+        }
+        // And none left out in the open.
+        assert!(!map.containers.iter().any(|(s, (x, z, _, _))| *s == Source::GunCabinet && !map.buildings.iter().any(|b| b.covers(Vec2::new(*x, *z), 0.0))), "seed {seed}");
     }
 }

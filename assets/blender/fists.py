@@ -18,7 +18,7 @@ from mathutils import Matrix, Vector
 import poses
 
 
-def build(b, wrist, fwd, back, across, hand):
+def build(b, wrist, fwd, back, across, hand, left=None):
     """Nothing in the hands: no parts, no bones."""
     return {}, None
 

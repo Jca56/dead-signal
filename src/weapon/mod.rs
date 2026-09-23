@@ -11,7 +11,7 @@ mod spec;
 #[cfg(test)]
 mod tests;
 
-pub use spec::{Spec, Weapon};
+pub use spec::{Falloff, Reload, Spec, Weapon};
 
 use crate::loot::bag::Slot;
 
@@ -20,7 +20,12 @@ use crate::loot::bag::Slot;
 pub enum Clip {
     Idle,
     Fire,
+    /// A magazine out and in; or, a round at a time, getting ready, a
+    /// round in (again and again), and done.
     Reload,
+    ReloadStart,
+    ReloadShell,
+    ReloadEnd,
     Bash,
     /// Coming up into view, going down out of it, and gone (waiting to be
     /// told what to take up next).
@@ -37,8 +42,15 @@ impl Clip {
             Clip::Idle | Clip::Draw | Clip::Holster | Clip::Stowed => "Idle",
             Clip::Fire => "Fire",
             Clip::Reload => "Reload",
+            Clip::ReloadStart => "ReloadStart",
+            Clip::ReloadShell => "ReloadShell",
+            Clip::ReloadEnd => "ReloadEnd",
             Clip::Bash => "Bash",
         }
+    }
+
+    fn reloading(self) -> bool {
+        matches!(self, Clip::Reload | Clip::ReloadStart | Clip::ReloadShell | Clip::ReloadEnd)
     }
 }
 
@@ -50,6 +62,9 @@ pub enum Act {
     MagOut,
     MagIn,
     SlideRack,
+    /// A pump racked back and home; a round pushed into a tube.
+    Pump,
+    ShellIn,
     Swing,
     Strike,
 }
@@ -83,11 +98,13 @@ pub struct Hands {
     next: Option<Option<Slot>>,
     /// How far the sights are raised to the eye, 0–1.
     aim: f64,
+    /// The trigger cut a reload short: fire as soon as it's done.
+    fire_after: bool,
 }
 
 impl Default for Hands {
     fn default() -> Self {
-        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0 }
+        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false }
     }
 }
 
@@ -132,6 +149,14 @@ impl Hands {
         self.t = 0.0;
     }
 
+    fn start_reload(&mut self) {
+        match self.spec().reload {
+            Some(Reload::Magazine { .. }) => self.start(Clip::Reload),
+            Some(Reload::Rounds { .. }) => self.start(Clip::ReloadStart),
+            None => {}
+        }
+    }
+
     /// Put what's held away, to take up what's in `to` (none: bare fists)
     /// next. Not mid-blow; nor for what's already in hand. Whether it's
     /// going.
@@ -169,6 +194,7 @@ impl Hands {
         self.gap = 0.0;
         self.next = None;
         self.aim = 0.0;
+        self.fire_after = false;
         self.start(Clip::Draw);
     }
 
@@ -178,21 +204,39 @@ impl Hands {
         let spec = self.spec();
         let before = self.t;
         // A reload runs quicker in quick hands (the animation with it).
-        self.t += if self.clip == Clip::Reload { dt * self.reload_speed } else { dt };
+        self.t += if self.clip.reloading() { dt * self.reload_speed } else { dt };
         self.gap = (self.gap - dt).max(0.0);
         let crossed = |at: f64| before < at && self.t >= at;
-        match self.clip {
-            Clip::Reload => {
-                let reload = spec.reload.expect("only a gun reloads");
-                acts.extend(reload.marks.iter().filter(|(at, _)| crossed(*at)).map(|(_, act)| *act));
-                if self.t >= reload.time {
+        let marks = |marks: &[(f64, Act)]| marks.iter().filter(|(at, _)| crossed(*at)).map(|(_, act)| *act).collect::<Vec<Act>>();
+        let room = |h: &Self| h.mag < spec.mag && h.spare > 0;
+        match (self.clip, spec.reload) {
+            (Clip::Reload, Some(Reload::Magazine { time, marks: m })) => {
+                acts.extend(marks(m));
+                if self.t >= time {
                     let taken = (spec.mag - self.mag).min(self.spare);
                     self.mag += taken;
                     self.spare -= taken;
                     self.start(Clip::Idle);
                 }
             }
-            Clip::Bash => {
+            (Clip::ReloadStart, Some(Reload::Rounds { start, .. })) if self.t >= start => self.start(Clip::ReloadShell),
+            (Clip::ReloadShell, Some(Reload::Rounds { each, insert_at, .. })) => {
+                if crossed(insert_at) && room(self) {
+                    self.mag += 1;
+                    self.spare -= 1;
+                    acts.push(Act::ShellIn);
+                }
+                if self.t >= each {
+                    self.start(if room(self) { Clip::ReloadShell } else { Clip::ReloadEnd });
+                }
+            }
+            (Clip::ReloadEnd, Some(Reload::Rounds { end, end_marks, .. })) => {
+                acts.extend(marks(end_marks));
+                if self.t >= end {
+                    self.start(Clip::Idle);
+                }
+            }
+            (Clip::Bash, _) => {
                 for (at, act) in [(spec.bash.swing_at, Act::Swing), (spec.bash.strike_at, Act::Strike)] {
                     if crossed(at) {
                         acts.push(act);
@@ -202,10 +246,21 @@ impl Hands {
                     self.start(Clip::Idle);
                 }
             }
-            Clip::Fire if spec.shot.is_none_or(|s| self.t >= s.time) => self.start(Clip::Idle),
-            Clip::Draw if self.t >= spec.draw => self.start(Clip::Idle),
-            Clip::Holster if self.t >= spec.holster => self.start(Clip::Stowed),
+            (Clip::Fire, _) => {
+                acts.extend(marks(spec.shot.map_or(&[], |s| s.marks)));
+                if spec.shot.is_none_or(|s| self.t >= s.time) {
+                    self.start(Clip::Idle);
+                }
+            }
+            (Clip::Draw, _) if self.t >= spec.draw => self.start(Clip::Idle),
+            (Clip::Holster, _) if self.t >= spec.holster => self.start(Clip::Stowed),
             _ => {}
+        }
+        // The trigger cuts a round-at-a-time reload short, to fire what's
+        // in as soon as the gun's ready.
+        if input.fire && matches!(self.clip, Clip::ReloadStart | Clip::ReloadShell) && self.mag > 0 {
+            self.fire_after = true;
+            self.start(Clip::ReloadEnd);
         }
         // The sights come up (a gun, ready or firing) and go down.
         if let Some(shot) = spec.shot {
@@ -216,11 +271,12 @@ impl Hands {
         if self.busy() {
             return acts;
         }
+        let fire = input.fire || std::mem::take(&mut self.fire_after);
         if input.melee {
             self.start(Clip::Bash);
         } else if input.reload && self.can_reload() {
-            self.start(Clip::Reload);
-        } else if input.fire && self.gap <= 0.0 {
+            self.start_reload();
+        } else if fire && self.gap <= 0.0 {
             match spec.shot {
                 // No gun: the trigger strikes.
                 None => self.start(Clip::Bash),
@@ -233,7 +289,7 @@ impl Hands {
                 Some(_) => {
                     acts.push(Act::DryFire);
                     if self.can_reload() {
-                        self.start(Clip::Reload);
+                        self.start_reload();
                     }
                 }
             }

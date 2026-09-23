@@ -245,12 +245,21 @@ mod model_tests {
             if let Some(shot) = spec.shot {
                 assert!((length(&g, "Fire") - shot.time).abs() < 0.05, "{} fire lasts {}", spec.name, length(&g, "Fire"));
             }
-            if let Some(reload) = spec.reload {
-                assert!((length(&g, "Reload") - reload.time).abs() < 0.05, "{} reload lasts {}", spec.name, length(&g, "Reload"));
+            let clips = match spec.reload {
+                Some(crate::weapon::Reload::Magazine { time, .. }) => vec![("Reload", time)],
+                Some(crate::weapon::Reload::Rounds { start, each, end, .. }) => vec![("ReloadStart", start), ("ReloadShell", each), ("ReloadEnd", end)],
+                None => vec![],
+            };
+            for (clip, time) in clips {
+                assert!((length(&g, clip) - time).abs() < 0.05, "{} {clip} lasts {}", spec.name, length(&g, clip));
+            }
+            if spec.shot.is_some() {
+                assert!(length(&g, "Aim") > 0.0 && length(&g, "AimFire") > 0.0, "{} has sights", spec.name);
             }
         }
         assert_eq!(viewmodel(Weapon::Fists).skins[0].joints.len(), 19, "the arms alone");
         assert_eq!(viewmodel(Weapon::Pistol).skins[0].joints.len(), 23, "19 for the arms, 4 for the pistol");
+        assert_eq!(viewmodel(Weapon::Shotgun).skins[0].joints.len(), 23, "19 for the arms, 4 for the shotgun");
     }
 
     #[test]
@@ -369,5 +378,77 @@ mod model_tests {
         let muzzle = bone_at(&g, "Idle", 1.0, "flash").translation();
         let (x, y) = on_screen(muzzle).expect("in front");
         assert!(x > 0.0 && x < 0.7 && y < 0.0 && y > -0.8, "muzzle at {x:.2}, {y:.2}");
+    }
+
+    /// Where `bone`'s vertices whose colour passes `pick` are, posed by
+    /// `anim` at `t`: their middle.
+    fn painted(g: &Gltf, anim: &str, t: f64, bone: &str, pick: impl Fn([f32; 4]) -> bool) -> Vec3 {
+        let skin = &g.skins[0];
+        let prim = &g.meshes[g.nodes.iter().find_map(|n| n.skin.and(n.mesh)).unwrap()].primitives[0];
+        let joint = skin.joints.iter().position(|&j| g.nodes[j].name.as_deref() == Some(bone)).unwrap() as u16;
+        let mut pose = g.rest_pose();
+        g.animations.iter().find(|a| a.name.as_deref() == Some(anim)).unwrap().sample(t, &mut pose);
+        let m = skin.joint_matrices(&g.world_matrices(&pose))[usize::from(joint)];
+        let found: Vec<Vec3> = prim
+            .positions
+            .iter()
+            .zip(prim.joints.iter().zip(&prim.weights))
+            .zip(&prim.colors)
+            .filter(|((_, (j, w)), c)| j[0] == joint && w[0] > 0.99 && pick(**c))
+            .map(|((p, _), _)| m.transform_point(Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]))))
+            .collect();
+        assert!(!found.is_empty(), "nothing so painted on {bone}");
+        found.iter().fold(Vec3::ZERO, |a, p| a + *p) * (1.0 / found.len() as f64)
+    }
+
+    /// The orange of a bead or a post.
+    fn orange(c: [f32; 4]) -> bool {
+        c[0] > 0.5 && c[1] < c[0] * 0.6 && c[2] < 0.1
+    }
+
+    #[test]
+    fn aimed_the_shotguns_bead_is_on_the_middle_of_the_view() {
+        let g = viewmodel(Weapon::Shotgun);
+        for (anim, t) in [("Aim", 0.0), ("Aim", 1.5), ("AimFire", 0.79)] {
+            let (x, y) = on_screen(painted(&g, anim, t, "gun", orange)).expect("in front");
+            assert!(x.abs() < 0.01 && y.abs() < 0.01, "{anim} at {t}: the bead at {x:.3}, {y:.3}");
+        }
+    }
+
+    #[test]
+    fn the_shotgun_is_held_in_both_hands_and_pumped() {
+        let g = viewmodel(Weapon::Shotgun);
+        let pump = |anim: &str, t: f64| bone_at(&g, anim, t, "pump").translation();
+        let gun = |anim: &str, t: f64| bone_at(&g, anim, t, "gun").translation();
+        for (anim, t) in [("Idle", 0.0), ("Idle", 1.5), ("Aim", 0.0), ("Fire", 0.4), ("AimFire", 0.4), ("Bash", 0.27)] {
+            let left = bone_at(&g, anim, t, "hand.L").translation();
+            let right = bone_at(&g, anim, t, "hand.R").translation();
+            assert!((left - pump(anim, t)).length() < 0.12, "{anim} at {t}: the left hand {:.3} m off the forend", (left - pump(anim, t)).length());
+            assert!((right - gun(anim, t)).length() < 0.12, "{anim} at {t}: the right hand {:.3} m off the stock", (right - gun(anim, t)).length());
+        }
+        // The pump back along the gun mid-Fire, and home after.
+        let along = |anim: &str, t: f64| (pump(anim, t) - gun(anim, t)).length();
+        assert!(along("Fire", 0.0) - along("Fire", 0.4) > 0.05, "racked back: {:.3} vs {:.3}", along("Fire", 0.4), along("Fire", 0.0));
+        assert!((along("Fire", 0.8) - along("Fire", 0.0)).abs() < 0.005, "and home");
+        // The muzzle and the forend on screen at the hip.
+        for bone in ["flash", "pump"] {
+            let (x, y) = on_screen(bone_at(&g, "Idle", 1.0, bone).translation()).expect("in front");
+            assert!(x > -0.2 && x < 0.9 && y < 0.1 && y > -0.95, "{bone} at {x:.2}, {y:.2}");
+        }
+    }
+
+    #[test]
+    fn a_shell_is_only_in_hand_to_load_it_and_goes_in_the_port() {
+        let g = viewmodel(Weapon::Shotgun);
+        let size = |anim: &str, t: f64| bone_at(&g, anim, t, "shell").col(0).length();
+        for (anim, t) in [("Idle", 1.0), ("Fire", 0.3), ("Aim", 0.5), ("ReloadEnd", 0.4), ("ReloadShell", 0.36)] {
+            assert!(size(anim, t) < 0.05, "a shell in hand in {anim} at {t}");
+        }
+        assert!(size("ReloadShell", 0.0) > 0.9 && size("ReloadShell", 0.29) > 0.9, "a shell in hand to load");
+        // Just before it's thumbed in, it's at the loading port: under the
+        // receiver, a little ahead of the grip.
+        let port = bone_at(&g, "ReloadShell", 0.3, "gun").transform_point(Vec3::ZERO);
+        let shell = bone_at(&g, "ReloadShell", 0.3, "shell").translation();
+        assert!((shell - port).length() < 0.25, "the shell {:.3} m off the gun", (shell - port).length());
     }
 }

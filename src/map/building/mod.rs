@@ -1,7 +1,9 @@
-//! Buildings: a floor plan (`plan.rs`), the blocks it's built of
-//! (`shape.rs`), and what's put in its rooms (`furnish.rs`); each set down
-//! on the map square to the walking grid, turned a whole quarter.
+//! Buildings: a floor plan (`plan.rs`, and out in the country
+//! `country.rs`), the blocks it's built of (`shape.rs`), and what's put in
+//! its rooms (`furnish.rs`); each set down on the map square to the
+//! walking grid, turned a whole quarter.
 
+pub mod country;
 pub mod furnish;
 pub mod plan;
 pub mod shape;
@@ -9,6 +11,8 @@ pub mod shape;
 use lntrn_math::{Vec2, Vec3};
 
 use plan::Plan;
+
+use super::terrain::Plot;
 
 /// A building on the map: its plan, where its front left corner stands
 /// (on its ground floor, on a half metre each way so its walls fall
@@ -23,6 +27,19 @@ pub struct Building {
 }
 
 impl Building {
+    /// `plan` set down on `plot`, the middle of its front at `front` (in
+    /// the plot's frame: x across, y along) and facing `out` (square to
+    /// that frame); its corner on a half metre, its floor raised off the
+    /// plot's level.
+    pub fn facing(plan: Plan, plot: &Plot, front: Vec2, out: Vec2, seed: u32) -> Self {
+        let theta = (-out.x).atan2(-out.y);
+        let quarter = ((plot.yaw + theta) / std::f64::consts::FRAC_PI_2).round().rem_euclid(4.0) as u8;
+        let across = Vec2::new(theta.cos(), -theta.sin());
+        let corner = plot.world(front - across * (f64::from(plan.w) * 0.5));
+        let origin = Vec3::new(corner.x.floor() + 0.5, plot.height + shape::RAISED, corner.y.floor() + 0.5);
+        Self { plan, origin, quarter, seed }
+    }
+
     /// Which way it's turned, as a yaw.
     #[cfg(test)]
     pub fn yaw(&self) -> f64 {

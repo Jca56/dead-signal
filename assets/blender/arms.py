@@ -8,9 +8,9 @@ Run headless from the project root:
 Writes one viewmodel a weapon, assets/models/viewmodel_<weapon>.glb: the
 arms and that weapon as one skinned mesh on one armature, and the
 weapon's clips (every one has Idle and Bash; a gun has Fire and Reload
-too). Each weapon is a module (`fists.py`, `pistol.py`) that adds its
-parts and bones to the arms (`build`, none for bare fists) and makes its
-clips (`animate`). Built in camera space: the eye at the origin,
+too). Each weapon is a module (`fists.py`, `pistol.py`, `shotgun.py`)
+that adds its parts and bones to the arms (`build`, none for bare fists)
+and makes its clips (`animate`). Built in camera space: the eye at the origin,
 looking down Blender's +Y (the exporter makes that glTF's -Z), +Z up, +X
 right. The mesh is modelled in the guard pose, which is the rest pose, so
 nothing moves until an animation says so.
@@ -33,11 +33,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import fists  # noqa: E402
 import pistol  # noqa: E402
+import shotgun  # noqa: E402
 from kit import Builder, banded, norm, rotate  # noqa: E402
 MODELS = os.path.join(HERE, "..", "models")
 
 # Every weapon's viewmodel: its name in the file's, and its module.
-WEAPONS = [("fists", fists), ("pistol", pistol)]
+WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun)]
 
 # Colours (sRGB, as in the title scene).
 SLEEVE = (0.30, 0.29, 0.20)
@@ -192,7 +193,7 @@ def build(weapon):
     bones.update(right_bones)
     left_bones, (l_wrist, l_fwd, l_back, _) = arm(b, -1.0, ".L")
     bones.update(left_bones)
-    weapon_bones, weapon_rest = weapon.build(b, wrist, fwd, back, across, "hand.R")
+    weapon_bones, weapon_rest = weapon.build(b, wrist, fwd, back, across, "hand.R", left=(l_wrist, l_fwd, l_back))
     bones.update(weapon_bones)
 
     # Every ring runs round its axis the same way whichever side it is on,

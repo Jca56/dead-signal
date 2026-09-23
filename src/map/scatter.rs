@@ -5,6 +5,7 @@
 
 use lntrn_math::{Vec2, Vec3};
 
+use super::building::Building;
 use super::building::furnish::Furn;
 use super::noise::Noise;
 use super::roads::{Kind as RoadKind, Network};
@@ -200,11 +201,19 @@ pub struct Things {
 /// Containers at every place (the cage at the camp), wrecks along the
 /// highway and jammed across its far end (`jammed` is the end that isn't
 /// the way out), and boxes of rounds and kits about the places.
-pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site], exits: &[exits::Spot], out_end: usize) -> Things {
+pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site], exits: &[exits::Spot], buildings: &[Building], out_end: usize) -> Things {
     let mut containers: Vec<(Source, Spot)> = Vec::new();
     let mut pickups: Vec<crate::items::Spot> = Vec::new();
+    // (Nothing left out where a building stands, or its porch or steps.)
+    let walled = |p: Vec2| {
+        buildings.iter().any(|b| {
+            let f = b.footprint();
+            let (lo, hi) = f.iter().fold((Vec2::splat(f64::INFINITY), Vec2::splat(f64::NEG_INFINITY)), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
+            p.x > lo.x - 2.5 && p.x < hi.x + 2.5 && p.y > lo.y - 2.5 && p.y < hi.y + 2.5
+        })
+    };
     let taken = |containers: &[(Source, Spot)], p: Vec2, room: f64| {
-        containers.iter().any(|(_, (x, z, _, _))| (Vec2::new(*x, *z) - p).length() < room) || exits.iter().any(|(_, (x, z, _, _), _, r)| (Vec2::new(*x, *z) - p).length() < room + r.max(4.0))
+        walled(p) || containers.iter().any(|(_, (x, z, _, _))| (Vec2::new(*x, *z) - p).length() < room) || exits.iter().any(|(_, (x, z, _, _), _, r)| (Vec2::new(*x, *z) - p).length() < room + r.max(4.0))
     };
     let floor = |p: Vec2| field.height_at(p.x, p.y).unwrap_or(0.0) + 3.0;
     let car_yaw = |dir: Vec2| (-dir.y).atan2(dir.x);

@@ -4,13 +4,13 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 
 | Item | Size | Stack | Rarity | Value | Found in | Flavor |
 |---|---|---|---|---|---|---|
-| 9MM ROUNDS | 1×1 | 30 | Common | $2 | crate, locker, car, cage, drawers, desk, wardrobe, shelf, register, zombies, lying about | Brass, for the only conversation the dead still understand. |
+| 9MM ROUNDS | 1×1 | 30 | Common | $2 | crate, locker, car, cage, drawers, desk, wardrobe, shelf, register, gun cabinet, zombies, lying about | Brass, for the only conversation the dead still understand. |
 | BANDAGE | 1×1 | 3 | Common | $15 | crate, locker, drawers, wardrobe, shelf, zombies, lying about | Clean-ish. Wrap it tight and don't look. |
 | MEDKIT | 2×1 | 1 | Uncommon | $60 | locker, cage, wardrobe, lying about | Somebody packed this for a bad day. Today qualifies. |
 | CANNED BEANS | 1×1 | 1 | Common | $10 | crate, car, fridge, drawers, shelf | Best before the end of the world. Still fine. |
 | WATER | 1×2 | 1 | Common | $12 | crate, car, fridge, shelf | Sealed. Worth more than it used to be. |
 | ANTIBIOTICS | 1×1 | 1 | Uncommon | $45 | crate, locker, fridge, drawers, desk, shelf, zombies | Half a bottle. Someone never finished the course. |
-| CASH | 1×1 | 5 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, zombies | Nobody takes it anymore. Everybody still wants it. |
+| CASH | 1×1 | 5 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, zombies | Nobody takes it anymore. Everybody still wants it. |
 | WATCH | 1×1 | 1 | Rare | $120 | locker, car, cage, drawers, desk, wardrobe, register, zombies | Still ticking. Doesn't know what it's counting down to. |
 | RADIO | 1×2 | 1 | Rare | $150 | locker, car, cage, desk | Static on every channel. Every channel but one. |
 | CAR BATTERY | 2×2 | 1 | Rare | $180 | car, cage, shelf | Heavy, leaking, and the closest thing left to electricity. |
@@ -19,7 +19,9 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | GOLD CHAIN | 1×1 | 1 | Epic | $350 | car, cage, desk, wardrobe | Off someone who didn't need it anymore. |
 | CAGE KEY | 1×1 | 1 | Rare | $25 | one locker, car, desk or wardrobe each run | Tagged SUPPLY. Someone locked up the good stuff and never came back. |
 | GOLD BAR | 2×1 | 1 | Legendary | $1000 | cage | Useless, heavy, and absolutely coming home with you. |
-| PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
+| PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe, gun cabinet | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
+| SHOTGUN | 4×1 | 1 | Rare | $320 | car, cage, wardrobe, gun cabinet | Five shells and a very loud opinion. Rack it and they all come running. |
+| 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, zombies | Red paper, brass base, a fistful of lead. Loaded one at a time. |
 
 ## Rarity
 
@@ -45,5 +47,6 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | Wardrobe | 4×4 | 2 s | bedrooms | Cash, rounds, now and then gold; may hold the cage key. |
 | Store shelf | 5×3 | 2 s | stores | Food, water, bandages; fuel and batteries rarely. |
 | Cash register | 3×2 | 1.5 s | stores | Cash. |
+| Gun cabinet | 5×3 | 2 s | the den of every farmhouse and hunter's cabin | Long guns behind glass: likely a shotgun, and shells. |
 
 Searching makes noise the dead hear within 14 m. About 1 in 5 zombies drops something when killed.
