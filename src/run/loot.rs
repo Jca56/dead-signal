@@ -37,6 +37,8 @@ pub enum Aimed {
     Nothing,
     Pickup(Entity, Stack),
     Container(Entity),
+    /// One of the ways out, by its place in the list.
+    Exit(usize),
 }
 
 /// A search under way: of what, for how long so far, till the next rummage.
@@ -81,7 +83,10 @@ impl Run {
         if let Some((e, stack)) = items::in_view(&mut game.world, eye, dir) {
             return Aimed::Pickup(e, stack);
         }
-        containers::in_view(&mut game.world, eye, dir).map_or(Aimed::Nothing, Aimed::Container)
+        if let Some(e) = containers::in_view(&mut game.world, eye, dir) {
+            return Aimed::Container(e);
+        }
+        crate::exits::in_view(&game.world, eye, dir).map_or(Aimed::Nothing, Aimed::Exit)
     }
 
     /// The HUD's prompt for what's aimed at: the key (none when E does
@@ -89,6 +94,7 @@ impl Run {
     pub(super) fn prompt(&self, game: &Game, aimed: &Aimed) -> Option<(&'static str, String)> {
         match *aimed {
             Aimed::Nothing => None,
+            Aimed::Exit(i) => self.exit_prompt(game, i),
             Aimed::Pickup(_, stack) => Some(("E", stack.label())),
             Aimed::Container(e) => {
                 let c = game.world.get::<Container>(e)?;
@@ -136,7 +142,7 @@ impl Run {
                 }
             }
             Aimed::Container(e) => self.at_container(ui, cx, game, combat, e, dt),
-            Aimed::Nothing => self.search = None,
+            Aimed::Nothing | Aimed::Exit(_) => self.search = None,
         }
     }
 

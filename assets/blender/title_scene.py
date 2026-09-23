@@ -22,7 +22,7 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from terrain import height, in_clearing  # noqa: E402
+from terrain import height, in_clearing, on_road  # noqa: E402
 OUT = os.path.join(HERE, "..", "models", "title_scene.glb")
 
 rng = random.Random(1987)
@@ -147,6 +147,9 @@ def ground(flat):
         # The worn track up to the tower.
         if abs(centre.x - (centre.y - 20.0) * 0.18 - 6.0) < 3.5 and -20 < centre.y < 48:
             c = mix(c, DIRT, 0.75)
+        # The road out, behind the proving ground (out of the title's view).
+        if on_road(centre.x, centre.y):
+            c = mix(c, DIRT, 0.85)
         return jitter(c, 0.1)
 
     face_colours(bm, layer, pick)
@@ -217,6 +220,8 @@ KEEP_OUT = [(0.0, 5.0, 22.0), (TOWER.x, TOWER.y, 10.0), (SHACK.x, SHACK.y, 8.0),
 PINE_SPOTS = []
 DEAD_SPOTS = []
 POLE_SPOTS = []
+# Trees and rocks grown into the throwaway mesh (for the build's report).
+JUNKED = []
 
 
 def pines(flat):
@@ -238,6 +243,8 @@ def pines(flat):
         into, into_layer = (junk, junk_layer) if in_clearing(x, y) else (bm, layer)
         if into is bm:
             PINE_SPOTS.append((base, s))
+        else:
+            JUNKED.append((x, y))
         add_cone(into, into_layer, base, 0.35 * s, 0.25 * s, 2.0 * s, 6, BARK)
         tiers = rng.choice((3, 3, 4))
         z = 1.4 * s
@@ -289,6 +296,8 @@ def rocks(flat):
         m = Matrix.Translation((x, y, height(x, y) - 0.2 * s)) @ Matrix.Rotation(rng.uniform(0, math.tau), 4, "Z")
         m = m @ Matrix.Diagonal((s * rng.uniform(1.0, 1.6), s, s * rng.uniform(0.5, 0.8), 1.0))
         into, into_layer = (junk, junk_layer) if in_clearing(x, y) else (bm, layer)
+        if into is junk:
+            JUNKED.append((x, y))
         rock = bmesh.ops.create_icosphere(into, subdivisions=1, radius=1.0, matrix=m)
         for v in rock["verts"]:
             v.co += Vector((rng.uniform(-0.15, 0.15) for _ in range(3))) * s
@@ -443,6 +452,7 @@ def main():
     )
     tris = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
     print(f"title_scene: {len(bpy.data.objects)} objects, {tris} faces -> {os.path.abspath(OUT)}")
+    print(f"title_scene: cleared {sorted((round(x), round(y)) for x, y in JUNKED)}")
 
 
 main()

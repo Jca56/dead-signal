@@ -15,7 +15,7 @@ use crate::assets;
 use crate::perf::{Perf, Phase};
 use crate::bag_ui::Icons;
 use crate::camera::Camera;
-use crate::death::After;
+use crate::ending::After;
 use crate::run::Run;
 use crate::combat::Combat;
 use crate::menu::SideMenu;
@@ -27,6 +27,7 @@ use crate::viewmodel::Viewmodel;
 use crate::weapon::Clip;
 use crate::world::{Game, Look, Model, Placed, Solid};
 use crate::loot::tables::Source;
+use crate::exits::{self, Way};
 use crate::{containers, icons, loot};
 use crate::zombie::{self, figure::Figure};
 
@@ -163,7 +164,8 @@ impl DeadSignal {
                 self.game.despawn_player();
                 zombie::clear(&mut self.game.world);
                 crate::items::clear(&mut self.game.world);
-                self.run.death = None;
+                self.run.ending = None;
+                crate::exits::hide(&mut self.game.world);
                 self.title_menu.reset();
             }
         }
@@ -185,8 +187,8 @@ impl DeadSignal {
 
     /// A run's frame: look, move, pause; or, dead, the way out.
     fn run_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, active: bool) {
-        if self.run.death.is_some() {
-            match self.run.dying(ui, cx, &mut self.game, &mut self.combat, active) {
+        if self.run.ending.is_some() {
+            match self.run.ending(ui, cx, &mut self.game, &mut self.combat, active, &self.icons) {
                 Some(After::Again) => self.fade_to(Then::Show(Screen::Run)),
                 Some(After::Title) => self.fade_to(Then::Show(Screen::Title)),
                 None => {}
@@ -244,8 +246,8 @@ impl DeadSignal {
                     (self.camera.yaw, self.camera.pitch) = view.aim();
                     self.camera.fov_y = view.fov_y();
                     self.camera.roll = 0.0;
-                    if let Some(death) = &self.run.death {
-                        death.fall(&mut self.camera);
+                    if let Some(ending) = &self.run.ending {
+                        ending.fall(&mut self.camera);
                     }
                 }
             }
@@ -280,7 +282,7 @@ impl Host for DeadSignal {
     fn draw_body(&mut self, _: (), ui: &mut Ui, cx: &mut AreaCx<()>) -> bool {
         // The world stops for the dead: nothing moves or makes a sound while
         // they fall and read their numbers.
-        self.game.simulating = self.screen == Screen::Run && !self.paused && self.run.death.is_none();
+        self.game.simulating = self.screen == Screen::Run && !self.paused && self.run.ending.is_none();
         self.perf.frame(ui.state.now, self.game.simulating);
         let started = Instant::now();
         self.game.tick(ui.state.now);
@@ -359,6 +361,26 @@ impl AppHost for DeadSignal {
             }
             Err(e) => log_error!("containers: {e}"),
         }
+        match assets::load(&mut renderer, "exits") {
+            Ok(props) => {
+                let find = |n: &str| props.iter().find(|p| p.name == n);
+                let tris = |n: &str| find(n).map(|p| p.triangles.clone()).unwrap_or_default();
+                let mesh = |n: &str| find(n).and_then(|p| p.mesh);
+                let mut shapes = exits::Shapes { meshes: Default::default(), hulls: Default::default(), barricade: tris("EXIT_Gate_Barricade_Hull") };
+                for way in [Way::Radio, Way::Road, Way::Truck] {
+                    let (normal, alt) = way.models();
+                    shapes.hulls.insert(way, tris(&format!("{normal}_Hull")));
+                    if let (Some(a), Some(b)) = (mesh(normal), mesh(alt)) {
+                        shapes.meshes.insert(way, (a, b));
+                    }
+                }
+                let mut placed = exits::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
+                let ground = self.game.ground();
+                placed.ring_zones(|centre, radius| renderer.add_mesh(&exits::ring(ground, centre, radius)));
+                self.game.world.insert_resource(placed);
+            }
+            Err(e) => log_error!("exits: {e}"),
+        }
         match assets::load(&mut renderer, "items") {
             Ok(props) => {
                 let started = std::time::Instant::now();
@@ -407,7 +429,7 @@ impl AppHost for DeadSignal {
         if self.screen == Screen::Run
             && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
         {
-            if self.run.death.is_none() {
+            if self.run.ending.is_none() {
                 let (clip, t) = self.combat.pistol.clip();
                 let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
                 renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping, self.run.lowered()));

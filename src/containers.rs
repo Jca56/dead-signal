@@ -77,42 +77,61 @@ pub struct Placing {
     pub hi: Vec3,
 }
 
-/// Set each container down on whatever is under its spot (its lowest
-/// corner on the floor, so none floats on a slope) and make it solid.
-/// `shapes` holds each kind's collision hull, about its own origin.
+/// Set each container down on whatever is under its spot and make it
+/// solid. `shapes` holds each kind's collision hull, about its own origin.
 pub fn set_down(solids: &mut Solids, shapes: &HashMap<Source, Vec<[Vec3; 3]>>) -> Vec<Placing> {
     let mut out = Vec::new();
     for (source, x, z, yaw, hint) in SPOTS {
         let Some(tris) = shapes.get(&source) else { continue };
-        let (mut lo, mut hi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
-        for p in tris.iter().flatten() {
-            lo = lo.min(*p);
-            hi = hi.max(*p);
-        }
-        let turn = Mat4::from_quat(Quat::from_rotation_y(yaw));
-        // The floor under its middle and its four corners: it sits on the
-        // lowest.
-        let mut floor = f64::INFINITY;
-        for (cx, cz) in [(0.0, 0.0), (lo.x, lo.z), (lo.x, hi.z), (hi.x, lo.z), (hi.x, hi.z)] {
-            let at = turn.transform_point(Vec3::new(cx, 0.0, cz)) + Vec3::new(x, hint + 1.0, z);
-            if let Some(hit) = solids.raycast(at, Vec3::new(0.0, -1.0, 0.0), 20.0) {
-                floor = floor.min(hit.point.y);
-            }
-        }
-        if !floor.is_finite() {
-            continue;
-        }
-        let model = Mat4::from_translation(Vec3::new(x, floor, z)) * turn;
-        let placed: Vec<[Vec3; 3]> = tris.iter().map(|t| t.map(|p| model.transform_point(p))).collect();
-        let (mut wlo, mut whi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
-        for p in placed.iter().flatten() {
-            wlo = wlo.min(*p);
-            whi = whi.max(*p);
-        }
-        solids.add_as(&placed, surface(source));
-        out.push(Placing { source, model, lo: wlo, hi: whi });
+        let Some(seat) = seat(solids, tris, (x, z, yaw, hint), false) else { continue };
+        solids.add_as(&seat.tris, surface(source));
+        out.push(Placing { source, model: seat.model, lo: seat.lo, hi: seat.hi });
     }
     out
+}
+
+/// Where something set down came to be: how it's placed, its triangles in
+/// the world, and their box.
+pub struct Seat {
+    pub model: Mat4,
+    pub tris: Vec<[Vec3; 3]>,
+    pub lo: Vec3,
+    pub hi: Vec3,
+}
+
+/// Set `tris` (about their own origin) down at `(x, z)` turned `yaw`, on
+/// whatever is under it looking down from `hint` + 1 m: the lowest of the
+/// floor under its middle and its four corners, so none floats on a slope
+/// (or the highest, for a thing with a foundation to sink).
+pub fn seat(solids: &Solids, tris: &[[Vec3; 3]], (x, z, yaw, hint): (f64, f64, f64, f64), highest: bool) -> Option<Seat> {
+    let (mut lo, mut hi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
+    for p in tris.iter().flatten() {
+        lo = lo.min(*p);
+        hi = hi.max(*p);
+    }
+    let turn = Mat4::from_quat(Quat::from_rotation_y(yaw));
+    let mut floor: Option<f64> = None;
+    for (cx, cz) in [(0.0, 0.0), (lo.x, lo.z), (lo.x, hi.z), (hi.x, lo.z), (hi.x, hi.z)] {
+        let at = turn.transform_point(Vec3::new(cx, 0.0, cz)) + Vec3::new(x, hint + 1.0, z);
+        if let Some(hit) = solids.raycast(at, Vec3::new(0.0, -1.0, 0.0), 20.0) {
+            let y = hit.point.y;
+            floor = Some(floor.map_or(y, |f| if highest { f.max(y) } else { f.min(y) }));
+        }
+    }
+    let floor = floor?;
+    let model = Mat4::from_translation(Vec3::new(x, floor, z)) * turn;
+    let placed: Vec<[Vec3; 3]> = tris.iter().map(|t| t.map(|p| model.transform_point(p))).collect();
+    let (mut wlo, mut whi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
+    for p in placed.iter().flatten() {
+        wlo = wlo.min(*p);
+        whi = whi.max(*p);
+    }
+    Some(Seat { model, tris: placed, lo: wlo, hi: whi })
+}
+
+/// Whether `p` is within `near` of the box `lo`–`hi`.
+pub fn in_box(p: Vec3, lo: Vec3, hi: Vec3, near: f64) -> bool {
+    p.x >= lo.x - near && p.x <= hi.x + near && p.y >= lo.y - near && p.y <= hi.y + near && p.z >= lo.z - near && p.z <= hi.z + near
 }
 
 /// The containers, placed, into the world: drawn with `meshes` (shut and
@@ -176,9 +195,7 @@ pub fn fill(world: &mut World, seed: u32) {
 /// solid it meets is part of one, within reach).
 pub fn in_view(world: &mut World, eye: Vec3, dir: Vec3) -> Option<Entity> {
     let hit = world.resource::<Solid>().0.raycast(eye, dir, REACH)?;
-    let near = 0.08;
-    let (p, near) = (hit.point.to_array(), [near; 3]);
-    world.query::<(Entity, &Container)>().iter(world).find(|(_, c)| (0..3).all(|k| p[k] >= c.lo.to_array()[k] - near[k] && p[k] <= c.hi.to_array()[k] + near[k])).map(|(e, _)| e)
+    world.query::<(Entity, &Container)>().iter(world).find(|(_, c)| in_box(hit.point, c.lo, c.hi, 0.08)).map(|(e, _)| e)
 }
 
 /// Each kind's collision hull, as the game loads it (for tests).

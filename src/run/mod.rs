@@ -3,6 +3,7 @@
 //! count of what happened; and dying, when it comes to that.
 
 mod loot;
+mod out;
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::{Vec2, Vec3};
@@ -10,7 +11,8 @@ use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
 
 use crate::bag_ui::{BagUi, Icons};
 use crate::combat::Combat;
-use crate::death::{After, Death};
+use crate::ending::{After, Ending, Outcome};
+use crate::exits::{self, Way};
 use crate::hud::{self, Hud};
 use crate::loot::{Dice, Kind};
 use crate::loot::bag::Bag;
@@ -32,7 +34,7 @@ const RUMMAGING_PACE: f64 = 0.5;
 pub struct Run {
     pub vitals: Vitals,
     pub stats: Stats,
-    pub death: Option<Death>,
+    pub ending: Option<Ending>,
     pub bag: Bag,
     heartbeat: f64,
     /// Where the player was last frame, for distance walked.
@@ -48,6 +50,8 @@ pub struct Run {
     note: Option<(&'static str, f64)>,
     /// Luck, for where things thrown down land.
     dice: Dice,
+    /// Finding and working the ways out.
+    out: out::Out,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -64,6 +68,7 @@ impl Run {
         crate::items::scatter(&mut game.world, seed);
         crate::containers::fill(&mut game.world, seed.rotate_left(13));
         self.dice = Dice(seed.rotate_left(7) | 1);
+        self.begin_out(game, seed.rotate_left(21));
         if let Some((eye, forward)) = Self::watching(game) {
             self.director.begin(&mut game.world, eye, forward);
         }
@@ -155,13 +160,15 @@ impl Run {
             self.stats.times_hit += 1;
             self.stats.damage_taken += BLOW_DAMAGE.min(self.vitals.hp);
             if self.vitals.hurt(BLOW_DAMAGE) {
-                self.die(game);
+                let side = if self.stats.times_hit.is_multiple_of(2) { 1.0 } else { -1.0 };
+                self.end(game, Outcome::Died(side), combat);
                 return;
             }
         }
 
-        // More of the dead, as the kills mount.
+        // More of the dead, as the kills mount (and all of them, surging).
         if let Some((eye, forward)) = Self::watching(game) {
+            self.director.surge = self.out.surging;
             self.director.update(&mut game.world, self.stats.kills(), eye, forward, dt);
             self.stats.biggest_horde = self.director.peak as u32;
         }
@@ -200,24 +207,35 @@ impl Run {
                 self.note = None;
             }
         }
-        // Looking about for things, searching, the bag: over the HUD.
+        // Looking about for things, searching, the bag; the ways out.
         let aimed = self.aim(game);
+        let at_exit = if let loot::Aimed::Exit(i) = aimed { Some(i) } else { None };
+        if let Some(way) = self.getting_out(ui, game, combat, at_exit.filter(|_| self.open.is_none()), dt) {
+            self.end(game, Outcome::Extracted(way), combat);
+            return;
+        }
         let prompt = if self.open.is_some() { None } else { self.prompt(game, &aimed) };
-        self.hud(ui, combat, game.clock().time, prompt);
+        self.hud(ui, combat, game, prompt);
         self.looting(ui, cx, game, combat, icons, dt, aimed);
     }
 
-    fn die(&mut self, game: &mut Game) {
+    /// The run is over: dead, or out.
+    fn end(&mut self, game: &mut Game, outcome: Outcome, combat: &mut Combat) {
         if let Some(open) = self.open.take() {
             self.close_bag(game, open);
         }
         self.stats.loot_value = self.bag.value();
-        let side = if self.stats.times_hit.is_multiple_of(2) { 1.0 } else { -1.0 };
-        self.death = Some(Death::new(self.stats.clone(), side));
+        match outcome {
+            Outcome::Extracted(Way::Truck) => combat.play(Sfx::Engine, 1.0),
+            Outcome::Extracted(Way::Radio) => combat.play(Sfx::Rotor, 1.0),
+            _ => {}
+        }
+        self.ending = Some(Ending::new(outcome, self.stats.clone(), &self.bag));
         *game.controls_mut() = Default::default();
     }
 
-    fn hud(&self, ui: &mut Ui, combat: &Combat, time: f64, prompt: Option<(&'static str, String)>) {
+    fn hud(&self, ui: &mut Ui, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>) {
+        let time = game.clock().time;
         let v = &self.vitals;
         hud::draw(
             ui,
@@ -231,27 +249,32 @@ impl Run {
                 winded: v.winded,
                 bandages: self.bag.count(Kind::Bandage),
                 medkits: self.bag.count(Kind::Medkit),
-                heal: v.heal_progress().or(self.search.as_ref().map(loot::Search::progress)),
+                heal: v.heal_progress().or(self.search.as_ref().map(loot::Search::progress)).or(self.out_progress()),
                 prompt: prompt.as_ref().map(|(key, text)| (*key, text.as_str())),
                 note: self.note.map(|(n, _)| n),
                 time,
             },
         );
+        let o = self.out_hud(game);
+        exits::hud::draw(
+            ui,
+            &exits::hud::Compass { heading: o.heading, marks: &o.marks, clock: self.stats.seconds, surging: self.out.surging, under: o.under, chatter: o.chatter, shout: self.out.shout.map(|(w, t)| (w, t.min(1.0))) },
+        );
     }
 
-    /// A frame of dying: the fall, the words, the numbers. What the player
-    /// chose, once they have.
-    pub fn dying(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, active: bool) -> Option<After> {
+    /// A frame of the end: the fall (if it was death), the words, the
+    /// numbers. What the player chose, once they have.
+    pub fn ending(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, active: bool, icons: &Icons) -> Option<After> {
         let dt = game.clock().dt;
-        let death = self.death.as_mut()?;
-        death.update(dt);
-        if death.words_begin(dt) {
-            combat.play(Sfx::Died, 1.0);
+        let ending = self.ending.as_mut()?;
+        ending.update(dt);
+        if ending.words_begin(dt) {
+            combat.play(if matches!(ending.outcome, Outcome::Died(_)) { Sfx::Died } else { Sfx::Safe }, 1.0);
         }
-        if death.showing_stats() && ui.state.pointer_locked {
+        if ending.showing_stats() && ui.state.pointer_locked {
             cx.request(ShellRequest::LockPointer(false));
         }
         combat.answer_the_dead(game, false);
-        death.draw(ui, active)
+        ending.draw(ui, active, icons)
     }
 }

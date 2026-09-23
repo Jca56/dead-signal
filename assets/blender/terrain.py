@@ -23,9 +23,10 @@ PAD_X = 0.0
 PAD_Y = -38.0
 PAD_HALF = 10.0
 # Where no tree or rock may stand: the pad, its access ramp to the east,
-# the shooting lane running on east from it, and a margin. Everything here
+# the shooting lane running on east from it, the road out south of the pad
+# (ROAD), and a margin. Everything here
 # is behind the title camera.
-CLEAR = [(-13.0, 19.0, -52.0, -25.0), (19.0, 66.0, -37.0, -26.0)]
+CLEAR = [(-13.0, 19.0, -52.0, -25.0), (19.0, 66.0, -37.0, -26.0), (-16.0, 2.0, -92.0, -50.0)]
 # The lane: shot along +X from the pad's east edge at y = LANE_Y, with
 # steel plates LANE_PLATES metres out.
 LANE_Y = PAD_Y + 6.0
@@ -35,3 +36,13 @@ LANE_PLATES = (10.0, 25.0, 50.0)
 
 def in_clearing(x, y):
     return any(x0 <= x <= x1 and y0 <= y <= y1 for x0, x1, y0, y1 in CLEAR)
+
+
+# The road out: south from behind the pad to the checkpoint near the edge
+# of the map (x from ROAD_X0 to ROAD_X1, y from ROAD_Y1 up to ROAD_Y0).
+ROAD_X0, ROAD_X1 = -9.5, -2.5
+ROAD_Y0, ROAD_Y1 = -50.0, -90.0
+
+
+def on_road(x, y):
+    return ROAD_X0 <= x <= ROAD_X1 and ROAD_Y1 <= y <= ROAD_Y0

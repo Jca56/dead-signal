@@ -48,6 +48,8 @@ struct Tri {
     c: Vec3,
     normal: Vec3,
     surface: Surface,
+    /// Switched off: there, but nothing meets it.
+    off: bool,
 }
 
 /// Where a ray met a solid.
@@ -132,21 +134,33 @@ impl Solids {
         self.add_as(tris, Surface::Stone);
     }
 
-    /// Make these triangles solid, made of `surface`.
-    pub fn add_as(&mut self, tris: &[[Vec3; 3]], surface: Surface) {
+    /// Make these triangles solid, made of `surface`. Which they are (for
+    /// switching them off and on).
+    pub fn add_as(&mut self, tris: &[[Vec3; 3]], surface: Surface) -> std::ops::Range<u32> {
+        let first = self.tris.len() as u32;
         for &[a, b, c] in tris {
             let n = (b - a).cross(c - a);
             if n.length() < 1e-12 {
                 continue; // a sliver
             }
             let i = self.tris.len() as u32;
-            self.tris.push(Tri { a, b, c, normal: n.normalize(), surface });
+            self.tris.push(Tri { a, b, c, normal: n.normalize(), surface, off: false });
             let (x0, x1) = (a.x.min(b.x).min(c.x), a.x.max(b.x).max(c.x));
             let (z0, z1) = (a.z.min(b.z).min(c.z), a.z.max(b.z).max(c.z));
             for gx in cell_of(x0)..=cell_of(x1) {
                 for gz in cell_of(z0)..=cell_of(z1) {
                     self.cells.entry((gx, gz)).or_default().push(i);
                 }
+            }
+        }
+        first..self.tris.len() as u32
+    }
+
+    /// Switch the triangles `which` on (solid) or off (not there).
+    pub fn switch(&mut self, which: std::ops::Range<u32>, on: bool) {
+        for i in which {
+            if let Some(t) = self.tris.get_mut(i as usize) {
+                t.off = !on;
             }
         }
     }
@@ -178,6 +192,9 @@ impl Solids {
             if let Some(list) = self.cells.get(&(gx, gz)) {
                 for &i in list {
                     let tri = &self.tris[i as usize];
+                    if tri.off {
+                        continue;
+                    }
                     if let Some(t) = ray_triangle(from, dir, tri)
                         && t <= max
                         && best.is_none_or(|b| t < b.t)
@@ -226,6 +243,9 @@ impl Solids {
             let mut moved = false;
             for &i in &near {
                 let t = &self.tris[i as usize];
+                if t.off {
+                    continue;
+                }
                 let (low, high) = capsule.segment(*feet);
                 let (on_seg, on_tri) = closest_segment_triangle(low, high, t);
                 let gap = on_seg - on_tri;
@@ -287,7 +307,11 @@ impl Solids {
         // Lifted a hair, so the floor underfoot does not count.
         let (low, high) = capsule.segment(feet + Vec3::new(0.0, 0.01, 0.0));
         self.near(feet.x - r, feet.x + r, feet.z - r, feet.z + r).into_iter().all(|i| {
-            let (s, t) = closest_segment_triangle(low, high, &self.tris[i as usize]);
+            let tri = &self.tris[i as usize];
+            if tri.off {
+                return true;
+            }
+            let (s, t) = closest_segment_triangle(low, high, tri);
             (s - t).length() >= r - 0.005
         })
     }

@@ -14,6 +14,8 @@ const PER_KILL: usize = 2;
 /// nowhere out of sight to put one.
 const TRICKLE: f64 = 0.75;
 const RETRY: f64 = 0.25;
+/// Between newcomers while the dead surge.
+const SURGE_TRICKLE: f64 = 0.3;
 
 /// How many may be up at once, `kills` into a run.
 pub fn budget(kills: u32) -> usize {
@@ -23,6 +25,8 @@ pub fn budget(kills: u32) -> usize {
 #[derive(Default)]
 pub struct Director {
     wait: f64,
+    /// The dead surging: as many as there can be, coming in fast.
+    pub surge: bool,
     /// The most that were ever up at once.
     pub peak: usize,
 }
@@ -46,10 +50,11 @@ impl Director {
         self.wait -= dt;
         let up = super::alive(world);
         self.peak = self.peak.max(up);
-        if up >= budget(kills) || self.wait > 0.0 {
+        let most = if self.surge { MOST } else { budget(kills) };
+        if up >= most || self.wait > 0.0 {
             return;
         }
-        self.wait = if super::spawn_unseen(world, eye, forward) { TRICKLE } else { RETRY };
+        self.wait = if !super::spawn_unseen(world, eye, forward) { RETRY } else if self.surge { SURGE_TRICKLE } else { TRICKLE };
     }
 }
 

@@ -38,31 +38,39 @@ pub fn load(renderer: &mut Renderer, name: &str) -> Result<Vec<Prop>, String> {
     Ok(props(renderer, &gltf, &path))
 }
 
+/// A mesh's triangles split apart, each face its own normal and each
+/// corner its colour (slivers with no area left out).
+fn faceted(gltf: &Gltf, mesh: &lntrn_model::Mesh) -> Vec<Vertex> {
+    let mut vertices = Vec::new();
+    for p in mesh.primitives.iter().filter(|p| p.mode == Mode::Triangles) {
+        let material = p.material.and_then(|m| gltf.materials.get(m));
+        let base = material.map_or([1.0; 4], |m| m.base_color);
+        let emissive = material.map_or([0.0; 3], |m| m.emissive);
+        for tri in p.indices.chunks_exact(3) {
+            let corner = |k: usize| tri[k] as usize;
+            let pos = [0, 1, 2].map(|k| p.positions[corner(k)]);
+            let v = pos.map(|a| Vec3::new(f64::from(a[0]), f64::from(a[1]), f64::from(a[2])));
+            let n = (v[1] - v[0]).cross(v[2] - v[0]);
+            if n.length() < 1e-12 {
+                continue; // a sliver with no area
+            }
+            let n = n.normalize();
+            let normal = [n.x as f32, n.y as f32, n.z as f32];
+            for (k, &at) in pos.iter().enumerate() {
+                let c = p.colors.get(corner(k)).copied().unwrap_or([1.0; 4]);
+                vertices.push(Vertex { pos: at, normal, color: [c[0] * base[0], c[1] * base[1], c[2] * base[2], c[3] * base[3]], emissive });
+            }
+        }
+    }
+    vertices
+}
+
 fn props(renderer: &mut Renderer, gltf: &Gltf, path: &Path) -> Vec<Prop> {
     let world = gltf.world_matrices(&gltf.rest_pose());
     let mut out = Vec::new();
     for (i, node) in gltf.nodes.iter().enumerate() {
         let Some(mesh) = node.mesh.and_then(|m| gltf.meshes.get(m)) else { continue };
-        let mut vertices = Vec::new();
-        for p in mesh.primitives.iter().filter(|p| p.mode == Mode::Triangles) {
-            let material = p.material.and_then(|m| gltf.materials.get(m));
-            let base = material.map_or([1.0; 4], |m| m.base_color);
-            let emissive = material.map_or([0.0; 3], |m| m.emissive);
-            for tri in p.indices.chunks_exact(3) {
-                let corner = |k: usize| tri[k] as usize;
-                let pos = [0, 1, 2].map(|k| p.positions[corner(k)]);
-                let v = pos.map(|a| Vec3::new(f64::from(a[0]), f64::from(a[1]), f64::from(a[2])));
-                let n = (v[1] - v[0]).cross(v[2] - v[0]).normalize();
-                if !n.x.is_finite() {
-                    continue; // a sliver with no area
-                }
-                let normal = [n.x as f32, n.y as f32, n.z as f32];
-                for (k, &at) in pos.iter().enumerate() {
-                    let c = p.colors.get(corner(k)).copied().unwrap_or([1.0; 4]);
-                    vertices.push(Vertex { pos: at, normal, color: [c[0] * base[0], c[1] * base[1], c[2] * base[2], c[3] * base[3]], emissive });
-                }
-            }
-        }
+        let vertices = faceted(gltf, mesh);
         if vertices.is_empty() {
             continue;
         }
@@ -116,10 +124,11 @@ fn load_skinned(name: &str) -> Result<(Vec<SkinnedVertex>, Gltf, usize), String>
             let corner = |k: usize| tri[k] as usize;
             let pos = [0, 1, 2].map(|k| p.positions[corner(k)]);
             let v = pos.map(|a| Vec3::new(f64::from(a[0]), f64::from(a[1]), f64::from(a[2])));
-            let n = (v[1] - v[0]).cross(v[2] - v[0]).normalize();
-            if !n.x.is_finite() {
+            let n = (v[1] - v[0]).cross(v[2] - v[0]);
+            if n.length() < 1e-12 {
                 continue;
             }
+            let n = n.normalize();
             for (k, &at) in pos.iter().enumerate() {
                 let c = p.colors.get(corner(k)).copied().unwrap_or([1.0; 4]);
                 let joints = p.joints.get(corner(k)).map_or([0; 4], |j| j.map(u32::from));
@@ -161,5 +170,17 @@ mod tests {
         let tri = [[Vec3::new(0.0, 0.0, 0.0), Vec3::new(10.0, 10.0, 0.0), Vec3::new(0.0, 0.0, 10.0)]];
         assert!((height_at(&tri, 5.0, 2.0).unwrap() - 5.0).abs() < 1e-9);
         assert_eq!(height_at(&tri, -1.0, 2.0), None);
+    }
+
+    /// Every model file the game loads goes through as the game takes it
+    /// (a sliver with no area in one must not stop the game).
+    #[test]
+    fn every_model_file_loads() {
+        let dir = root().join("models");
+        for name in ["title_scene", "proving_ground", "items", "containers", "exits"] {
+            let gltf = Gltf::load(dir.join(format!("{name}.glb"))).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let made: usize = gltf.meshes.iter().map(|m| faceted(&gltf, m).len()).sum();
+            assert!(made > 0, "{name} made nothing");
+        }
     }
 }

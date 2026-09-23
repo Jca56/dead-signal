@@ -51,9 +51,16 @@ pub enum Sfx {
     Rummage,
     Unlock,
     Rattle,
+    /// Getting out: the radio opening, a chopper's blades, a starter
+    /// grinding, an engine catching, and the chord of being safe.
+    Static,
+    Rotor,
+    Crank,
+    Engine,
+    Safe,
 }
 
-const ALL: [Sfx; 23] = [
+const ALL: [Sfx; 28] = [
     Sfx::Shot,
     Sfx::DryFire,
     Sfx::MagOut,
@@ -77,6 +84,11 @@ const ALL: [Sfx; 23] = [
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,
+    Sfx::Static,
+    Sfx::Rotor,
+    Sfx::Crank,
+    Sfx::Engine,
+    Sfx::Safe,
 ];
 
 struct Play {

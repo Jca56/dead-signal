@@ -175,7 +175,11 @@ mod tests {
                 for t in p.indices.chunks_exact(3) {
                     let at = [t[0], t[1], t[2]].map(|k| p.positions[k as usize]);
                     let v = at.map(|a| Vec3::new(f64::from(a[0]), f64::from(a[1]), f64::from(a[2])));
-                    let n = (v[1] - v[0]).cross(v[2] - v[0]).normalize();
+                    let n = (v[1] - v[0]).cross(v[2] - v[0]);
+                    if n.length() < 1e-12 {
+                        continue;
+                    }
+                    let n = n.normalize();
                     for &k in t {
                         let c = p.colors.get(k as usize).copied().unwrap_or([1.0; 4]);
                         vs.push(Vertex { pos: p.positions[k as usize], normal: [n.x as f32, n.y as f32, n.z as f32], color: c, emissive: [0.0; 3] });

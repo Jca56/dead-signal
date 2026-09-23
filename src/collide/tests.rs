@@ -60,7 +60,7 @@ fn a_ceiling_pushes_down() {
 
 #[test]
 fn closest_points_agree_with_brute_force() {
-    let t = Tri { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(2.0, 0.0, 0.0), c: Vec3::new(0.0, 0.0, 2.0), normal: Vec3::Y, surface: Surface::Stone };
+    let t = Tri { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(2.0, 0.0, 0.0), c: Vec3::new(0.0, 0.0, 2.0), normal: Vec3::Y, surface: Surface::Stone, off: false };
     // Straight above the middle, off past a corner, and crossing.
     for (p, q, want) in [
         (Vec3::new(0.5, 1.0, 0.5), Vec3::new(0.5, 3.0, 0.5), 1.0),

@@ -243,7 +243,9 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, he
     if killed {
         sounds.push(Sfx::Gurgle);
     }
-    let push = Vec3::new(dir.x, 0.0, dir.z).normalize() * if blow { BLOW_SHOVE } else { SHOT_SHOVE };
+    // (Shot from straight above, it isn't shoved at all.)
+    let flat = Vec3::new(dir.x, 0.0, dir.z);
+    let push = if flat.length() > 1e-6 { flat.normalize() * if blow { BLOW_SHOVE } else { SHOT_SHOVE } } else { Vec3::ZERO };
     let at = world.get_mut::<Body>(e).map(|mut body| {
         body.push += push;
         body.pos

@@ -234,6 +234,54 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 turn + click + spring
             })
         }
+        Sfx::Static => {
+            // A radio opening: a burst of hiss, chirps bleeding through.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.9, 0.45, |t, n| {
+                let x = n.next();
+                let hiss = f.run(x, 3200.0, 0.7).1 * (0.6 + 0.4 * sine(t, 23.0).abs());
+                let chirp = sine(t, 900.0 + 700.0 * sine(t, 3.0)) * (0.5 + 0.5 * sine(t, 11.0)).powi(6) * 0.4;
+                let shape = (t / 0.03).min(1.0) * (1.0 - ((t - 0.75) / 0.15).clamp(0.0, 1.0));
+                (hiss + g.run(chirp, 1400.0, 0.5).1) * shape
+            })
+        }
+        Sfx::Rotor => {
+            // One beat of a chopper's blades: a chop of low air.
+            let mut f = Svf::default();
+            render(0.22, 0.8, |t, n| f.run(n.next(), 180.0, 0.9).0 * env(t, 0.004, 0.06) * 2.0 + sine(t, 62.0) * env(t, 0.003, 0.05) * 0.6)
+        }
+        Sfx::Crank => {
+            // A starter grinding at a dead engine: whine and chug.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.5, 0.6, |t, n| {
+                let x = n.next();
+                let whine = g.run(pulse(t, 140.0 + 20.0 * sine(t, 2.0)), 900.0, 0.8).1 * 0.5;
+                let chug = f.run(x, 300.0, 1.0).0 * (0.5 + 0.5 * sine(t, 9.0)).powi(3) * 1.4;
+                (whine + chug) * (t / 0.02).min(1.0) * (1.0 - ((t - 0.42) / 0.08).clamp(0.0, 1.0))
+            })
+        }
+        Sfx::Engine => {
+            // It catches: a cough, then a rough idle revving up and away.
+            let mut f = Svf::default();
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(2.2, 0.8, move |t, n| {
+                let rpm = 28.0 + 40.0 * (t / 1.2).min(1.0);
+                phase = (phase + rpm * dt).fract();
+                let firing = (1.0 - phase).powi(5);
+                let body = f.run(firing + n.next() * 0.2, 250.0 + 300.0 * (t / 1.5).min(1.0), 1.0).0;
+                let cough = if t < 0.15 { n.next() * env(t, 0.002, 0.05) } else { 0.0 };
+                (body * 2.2 + cough) * (t / 0.05).min(1.0) * (1.0 - ((t - 1.7) / 0.5).clamp(0.0, 1.0))
+            })
+        }
+        Sfx::Safe => {
+            // Out: a low, warm chord swelling up from under the static.
+            render(4.0, 0.6, |t, n| {
+                let swell = (t / 1.5).min(1.0) * (-(t - 1.5).max(0.0) / 1.4).exp();
+                let chord: f32 = [110.0, 164.8, 220.0, 277.2].iter().map(|&f| sine(t, f)).sum::<f32>() * 0.25;
+                (chord + n.next() * 0.03 * (1.0 - t / 4.0)) * swell
+            })
+        }
         Sfx::Rattle => {
             // A locked door shaken: chain-link and a padlock knocking.
             let mut f = Svf::default();
