@@ -5,19 +5,18 @@
 //! what's searched, or pack and pockets; a weapon into its empty slot, or
 //! out of it), or dragged out onto the ground.
 
+mod draw;
 mod slots;
 
 use std::collections::HashMap;
 
 use lntrn_app::lntrn_render::ImageHandle;
-use lntrn_math::{Color, Rect, Vec2};
-use lntrn_text::TextStyle;
+use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{Key, Ui};
 
 use crate::loot::bag::{Bag, Slot};
 use crate::loot::grid::{Grid, Item};
 use crate::loot::{Kind, Stack};
-use crate::style;
 
 /// Every kind of thing's picture, as it lies and turned.
 #[derive(Default)]
@@ -72,12 +71,24 @@ struct Held {
     grab: Vec2,
 }
 
+/// Where the screen is shown.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// In a run: the bag, and what's searched.
+    #[default]
+    Run,
+    /// In the hideout: the stash (the "loot" grid) on the left, the bag,
+    /// and nothing thrown on any ground.
+    Hideout,
+    /// Trading: the stash, and beside it what's to be sold (the "pack"),
+    /// right of the trader's offers.
+    Trade,
+}
+
 #[derive(Default)]
 pub struct BagUi {
     held: Option<Held>,
-    /// In the hideout: the stash (the "loot" grid) on the left, a little
-    /// smaller all over, and nothing thrown on any ground.
-    hideout: bool,
+    mode: Mode,
 }
 
 /// What came of a frame: what was thrown on the ground, and what was taken
@@ -139,42 +150,66 @@ fn release(shelves: &mut Shelves, h: Held, which: Which, at: (i32, i32), over: (
     landed
 }
 
-/// A cell's side in the hideout (a 10 × 10 stash must fit a short screen).
+/// A cell's side in the hideout, at most (a stash must fit a short
+/// screen: a bigger one is drawn smaller).
 const HIDEOUT_CELL: f64 = 70.0;
+/// Room kept under the grids for the way on, logical pixels.
+const BELOW: f64 = 180.0;
+/// Trading: how wide the trader's offers are, at the left.
+pub const OFFERS_W: f64 = 660.0;
 
 impl BagUi {
-    /// The screen as the hideout has it.
-    pub fn hideout() -> Self {
-        Self { held: None, hideout: true }
+    /// The screen as the hideout, or trading, has it.
+    pub fn new(mode: Mode) -> Self {
+        Self { held: None, mode }
     }
 
-    /// A cell's side, logical pixels.
-    fn cell(&self) -> f64 {
-        if self.hideout { HIDEOUT_CELL } else { CELL }
+    /// A cell's side on screen, what's searched (the stash) `loot` big:
+    /// in the hideout, small enough for the stash to fit above the way on.
+    fn cell(&self, ui: &Ui, loot: Option<(u8, u8)>) -> f64 {
+        let s = ui.m.scale;
+        if self.mode == Mode::Run {
+            return CELL * s;
+        }
+        let screen = ui.clip();
+        let top = screen.height() * 0.17 + TITLE * s * 1.6;
+        let rows = f64::from(loot.map_or(1, |(_, h)| h.max(1)));
+        (HIDEOUT_CELL * s).min((screen.height() - top - BELOW * s) / rows)
     }
 
     /// The grids' and slots' places on screen: which, and its rect. In a
     /// run the slots on the left, then the bag, what's searched on the
     /// right; in the hideout the stash on the left, then the bag, the slots
     /// on the right.
-    fn layout(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>) -> Vec<(Which, Rect)> {
+    fn layout(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>, cell: f64) -> Vec<(Which, Rect)> {
         let s = ui.m.scale;
         let screen = ui.clip();
-        let (cell, gap, title) = (self.cell() * s, GAP * s, TITLE * s * 1.6);
+        let (gap, title) = (GAP * s, TITLE * s * 1.6);
+        let size = |(w, h): (u8, u8)| Vec2::new(f64::from(w) * cell, f64::from(h) * cell);
+        if self.mode == Mode::Trade {
+            // The stash and what's to be sold, side by side, in the middle
+            // of what the offers leave.
+            let (x0, x1) = (screen.min.x + (80.0 + OFFERS_W) * s + gap, screen.max.x - 80.0 * s);
+            let stash = size(loot.unwrap_or((0, 0)));
+            let sell = size((bag.pack.w, bag.pack.h));
+            let left = (x0 + x1) * 0.5 - (stash.x + gap + sell.x) * 0.5;
+            let top = screen.min.y + screen.height() * 0.17 + title;
+            return vec![(Which::Loot, Rect::from_min_size(Vec2::new(left, top), stash)), (Which::Pack, Rect::from_min_size(Vec2::new(left + stash.x + gap, top), sell))];
+        }
         let (pack_dims, pocket_dims) = ((bag.pack.w, bag.pack.h), (bag.pockets.w, bag.pockets.h));
         let pack_w = f64::from(pack_dims.0) * cell;
         let loot_w = loot.map_or(0.0, |(w, _)| gap + f64::from(w) * cell);
         let slots_w = slots::WIDTH * cell + gap;
         let left = screen.center().x - (slots_w + pack_w + loot_w) * 0.5;
         let top = screen.min.y + screen.height() * 0.17 + title;
-        let size = |(w, h): (u8, u8)| Vec2::new(f64::from(w) * cell, f64::from(h) * cell);
-        let bag_x = if self.hideout { left + loot_w } else { left + slots_w };
-        let slots_x = if self.hideout { bag_x + pack_w + gap } else { left };
+        let hideout = self.mode == Mode::Hideout;
+        let bag_x = if hideout { left + loot_w } else { left + slots_w };
+        let slots_x = if hideout { bag_x + pack_w + gap } else { left };
         let pack = Rect::from_min_size(Vec2::new(bag_x, top), size(pack_dims));
         let pockets = Rect::from_min_size(Vec2::new(bag_x, pack.max.y + title + gap * 0.5), size(pocket_dims));
         let mut out = vec![(Which::Pack, pack), (Which::Pockets, pockets)];
         if let Some(dims) = loot {
-            let x = if self.hideout { left } else { pack.max.x + gap };
+            let x = if hideout { left } else { pack.max.x + gap };
             out.push((Which::Loot, Rect::from_min_size(Vec2::new(x, top), size(dims))));
         }
         out.extend(slots::layout(Vec2::new(slots_x, top), cell, s));
@@ -183,6 +218,12 @@ impl BagUi {
 }
 
 impl BagUi {
+    /// Where `which` is on screen, as the next frame will lay it out.
+    pub fn rect_of(&self, ui: &Ui, shelves: &Shelves, which: Which) -> Option<Rect> {
+        let loot = shelves.loot.as_ref().map(|(_, g)| (g.w, g.h));
+        self.layout(ui, shelves.bag, loot, self.cell(ui, loot)).into_iter().find(|(w, _)| *w == which).map(|(_, r)| r)
+    }
+
     /// Whatever is held goes back where it came from (the screen closing).
     pub fn let_go(&mut self, shelves: &mut Shelves) {
         if let Some(h) = self.held.take() {
@@ -193,10 +234,10 @@ impl BagUi {
     /// A frame of the screen: what was thrown on the ground and what was
     /// taken.
     pub fn frame(&mut self, ui: &mut Ui, shelves: &mut Shelves, icons: &Icons) -> Moved {
-        let s = ui.m.scale;
-        let cell = self.cell() * s;
+        let loot = shelves.loot.as_ref().map(|(_, g)| (g.w, g.h));
+        let cell = self.cell(ui, loot);
         let mut moved = Moved::default();
-        let places = self.layout(ui, shelves.bag, shelves.loot.as_ref().map(|(_, g)| (g.w, g.h)));
+        let places = self.layout(ui, shelves.bag, loot, cell);
         let p = ui.state.pointer;
         let under_item = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
             Which::Slot(slot) => shelves.bag.slot(slot).map(|_| (which, 0)),
@@ -218,6 +259,18 @@ impl BagUi {
                         _ => r.min + Vec2::new(f64::from(item.x), f64::from(item.y)) * cell,
                     };
                     self.held = Some(Held { item, from: which, was: item, grab: p - at });
+                } else if ui.state.right_pressed
+                    && self.mode == Mode::Trade
+                    && let Some((Which::Loot, i)) = under_item
+                {
+                    // Trading, straight across into what's to be sold (never
+                    // a weapon slot: there's none).
+                    let item = shelves.take(Which::Loot, i).expect("under the pointer");
+                    let rest = shelves.bag.pack.top_up(item.stack);
+                    let rest = shelves.bag.pack.place(rest);
+                    if rest.count > 0 {
+                        put_back(shelves, Held { item: Item { stack: rest, ..item }, from: Which::Loot, was: item, grab: Vec2::ZERO });
+                    }
                 } else if ui.state.right_pressed
                     && let Some((which, i)) = under_item
                 {
@@ -251,94 +304,14 @@ impl BagUi {
                             }
                         }
                         // Out onto the ground (there's none in the hideout).
-                        None if self.hideout => put_back(shelves, h),
+                        None if self.mode != Mode::Run => put_back(shelves, h),
                         None => moved.dropped.push(h.item.stack),
                     }
                 }
             }
         }
-        self.draw(ui, shelves, icons, &places);
+        self.draw(ui, shelves, icons, &places, cell);
         moved
-    }
-
-    fn draw(&self, ui: &mut Ui, shelves: &mut Shelves, icons: &Icons, places: &[(Which, Rect)]) {
-        let s = ui.m.scale;
-        let cell = self.cell() * s;
-        let screen = ui.clip();
-        ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, 0.45));
-        let title = TextStyle::new((TITLE * s) as f32).bold().family(style::FONT);
-        let loot_name = shelves.loot.as_ref().map(|(name, _)| *name);
-        for &(which, r) in places {
-            let name = match which {
-                Which::Pack => "BACKPACK",
-                Which::Pockets => "POCKETS",
-                Which::Loot => loot_name.unwrap_or(""),
-                Which::Slot(slot) => {
-                    // The column's name over the first.
-                    if slot == Slot::ALL[0] {
-                        ui.text_at("WEAPONS", &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, style::BONE);
-                    }
-                    slots::draw(ui, icons, slot, shelves.bag.slot(slot), r, cell);
-                    continue;
-                }
-            };
-            ui.text_at(name, &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, if which == Which::Loot { style::SIGNAL } else { style::BONE });
-            ui.draw.rect(r.expand(6.0 * s), Color::rgba(0.05, 0.05, 0.05, 0.85));
-            let Some(g) = shelves.grid(which) else { continue };
-            for y in 0..g.h {
-                for x in 0..g.w {
-                    let c = Rect::from_min_size(r.min + Vec2::new(f64::from(x), f64::from(y)) * cell, Vec2::splat(cell)).shrink(2.0 * s);
-                    ui.draw.rect(c, Color::rgba(1.0, 1.0, 1.0, 0.05));
-                }
-            }
-            let items = g.items.clone();
-            for item in &items {
-                let at = r.min + Vec2::new(f64::from(item.x), f64::from(item.y)) * cell;
-                tile(ui, icons, *item, at, cell, 1.0);
-            }
-        }
-        // The value of what's carried, under the pack.
-        if let Some(&(_, pack)) = places.iter().find(|(w, _)| *w == Which::Pack) {
-            let style = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
-            let text = format!("VALUE  ${}", shelves.bag.value());
-            let w = ui.measure(&text, &style);
-            let pockets_top = places.iter().find(|(w, _)| *w == Which::Pockets).map_or(pack.max.y, |(_, r)| r.min.y);
-            ui.text_at(&text, &style, Vec2::new(pack.max.x - w, pockets_top), w + 10.0, style::BONE);
-        }
-        let p = ui.state.pointer;
-        match self.held {
-            Some(h) => {
-                // Where it would land, green (fresh, or onto a stack with
-                // room) or red, then the thing itself.
-                if let Some(&(Which::Slot(slot), r)) = places.iter().find(|(_, r)| r.contains(p)) {
-                    let ok = slots::takes(h.item.stack, slot);
-                    ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
-                } else if let Some(&(which, r)) = places.iter().find(|(_, r)| r.contains(p))
-                    && let Some(g) = shelves.grid(which)
-                {
-                    let (x, y) = corner_cell(r, p - h.grab, cell);
-                    let (spot, ok) = match landing(g, h.item, (x, y), cell_under(r, p, cell)) {
-                        Landing::Put(x, y) => (footprint(r, x, y, h.item.shape(), cell), true),
-                        Landing::Merge(i, _) => (footprint(r, i32::from(g.items[i].x), i32::from(g.items[i].y), g.items[i].shape(), cell), true),
-                        Landing::Blocked => (footprint(r, x, y, h.item.shape(), cell), false),
-                    };
-                    ui.draw.rect(spot, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
-                }
-                tile(ui, icons, h.item, p - h.grab, cell, 0.85);
-            }
-            None => {
-                let hovered = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
-                    Which::Slot(slot) => shelves.bag.slot(slot),
-                    _ => {
-                        let (cx, cy) = cell_under(r, p, cell);
-                        shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8).map(|i| g.items[i].stack))
-                    }
-                });
-                if let Some(stack) = hovered {
-                    tooltip(ui, stack, p);
-                }
-            }
-        }
     }
 }
 
@@ -355,64 +328,6 @@ fn corner_cell(r: Rect, corner: Vec2, cell: f64) -> (i32, i32) {
 /// The screen rect of a `shape` with its top-left at cell `(x, y)`.
 fn footprint(r: Rect, x: i32, y: i32, (w, h): (u8, u8), cell: f64) -> Rect {
     Rect::from_min_size(r.min + Vec2::new(f64::from(x), f64::from(y)) * cell, Vec2::new(f64::from(w), f64::from(h)) * cell)
-}
-
-/// A thing drawn at `at`: its rarity's colour behind and round it, its
-/// picture, how many.
-fn tile(ui: &mut Ui, icons: &Icons, item: Item, at: Vec2, cell: f64, alpha: f64) {
-    let s = ui.m.scale;
-    let (w, h) = item.shape();
-    let r = Rect::from_min_size(at, Vec2::new(f64::from(w), f64::from(h)) * cell).shrink(3.0 * s);
-    let c = item.stack.kind.def().rarity.colour();
-    ui.draw.rect(r, Color::rgba(c.r * 0.35, c.g * 0.35, c.b * 0.35, 0.85 * alpha));
-    ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(c.r, c.g, c.b, alpha));
-    if let Some(&(flat, turned)) = icons.0.get(&item.stack.kind) {
-        ui.draw.image(r.shrink(4.0 * s), if item.turned { turned } else { flat }, 0.0, Color::rgba(1.0, 1.0, 1.0, alpha));
-    }
-    // How many; for a gun, the rounds in it.
-    let text = match item.stack.magazine() {
-        Some(mag) => Some(format!("{}/{mag}", item.stack.loaded)),
-        None => (item.stack.count > 1).then(|| item.stack.count.to_string()),
-    };
-    if let Some(text) = text {
-        let style = TextStyle::new((22.0 * s) as f32).bold().family(style::FONT);
-        let tw = ui.measure(&text, &style);
-        let th = f64::from(style.line_height());
-        let at = Vec2::new(r.max.x - tw - 6.0 * s, r.max.y - th - 2.0 * s);
-        ui.text_at(&text, &style, at + Vec2::new(2.0 * s, 2.0 * s), tw + 4.0, Color::rgba(0.0, 0.0, 0.0, 0.8 * alpha));
-        ui.text_at(&text, &style, at, tw + 4.0, Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, alpha));
-    }
-}
-
-/// Name, rarity and worth (and for a weapon, its slot and rounds), beside
-/// the pointer.
-fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2) {
-    let s = ui.m.scale;
-    let def = stack.kind.def();
-    let name = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
-    let line = TextStyle::new((22.0 * s) as f32).family(style::FONT);
-    let worth = if stack.count > 1 { format!("${} each  ·  ${}", def.value, stack.value()) } else { format!("${}", def.value) };
-    let mut lines = vec![(def.name.to_string(), &name, def.rarity.colour()), (def.rarity.name().to_string(), &line, style::DIM)];
-    if let Some(slot) = Slot::of(stack.kind) {
-        let rounds = stack.magazine().map_or(String::new(), |mag| format!("  ·  {}/{mag} ROUNDS", stack.loaded));
-        lines.push((format!("{}{rounds}", slot.name()), &line, style::BONE));
-    }
-    lines.push((worth, &line, style::BONE));
-    let pad = 14.0 * s;
-    let w = lines.iter().map(|(t, st, _)| ui.measure(t, st)).fold(0.0, f64::max) + pad * 2.0;
-    let h: f64 = lines.iter().map(|(_, st, _)| f64::from(st.line_height()) + 4.0 * s).sum::<f64>() + pad * 2.0;
-    let screen = ui.clip();
-    let mut at = p + Vec2::new(24.0 * s, 24.0 * s);
-    at.x = at.x.min(screen.max.x - w - 10.0 * s);
-    at.y = at.y.min(screen.max.y - h - 10.0 * s);
-    let r = Rect::from_min_size(at, Vec2::new(w, h));
-    ui.draw.rect(r, Color::rgba(0.03, 0.03, 0.03, 0.95));
-    ui.draw.stroke_rect(r, 2.0 * s, 0.0, def.rarity.colour());
-    let mut y = at.y + pad;
-    for (text, st, colour) in &lines {
-        ui.text_at(text, st, Vec2::new(at.x + pad, y), w, *colour);
-        y += f64::from(st.line_height()) + 4.0 * s;
-    }
 }
 
 /// Send the thing at `index` in `from` straight across: out of what's

@@ -3,21 +3,23 @@
 //! in its place, so a crash mid-write never leaves half a save. One that
 //! won't read is set aside (`save.toml.broken`), never written over.
 //! Version 2 added the weapons: a gun's rounds, and what's in each slot;
-//! one from before is given the pistol everyone starts with now.
+//! one from before is given the pistol everyone starts with now. Version 3
+//! added trading: money, the stash's size, what's been bought.
 
 use std::path::PathBuf;
 
 use lntrn_core::{log_error, log_info};
 use lntrn_data::{Doc, Map};
 
-use super::{Profile, STASH, starting_pistol};
+use super::trade::{Bought, STASH_TIERS};
+use super::{Profile, starting_pistol};
 use super::perks::Perks;
 use crate::loot::bag::{Bag, Slot};
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
 
 /// The save's layout; a newer one won't be read by an older game.
-const VERSION: i64 = 2;
+const VERSION: i64 = 3;
 
 /// Where the save lives.
 pub fn path() -> Option<PathBuf> {
@@ -81,6 +83,12 @@ pub fn to_text(p: &Profile) -> String {
     d.set("xp", i64::from(p.xp).into());
     d.set("runs", i64::from(p.runs).into());
     d.set("extractions", i64::from(p.extractions).into());
+    d.set("money", i64::from(p.money).into());
+    d.set("stash_tier", i64::from(p.stash_tier).into());
+    let mut bought = Doc::map();
+    bought.set("runs", i64::from(p.bought.runs).into());
+    bought.set("each", Doc::List(p.bought.each.iter().map(|&n| i64::from(n).into()).collect()));
+    d.set("bought", bought);
     let mut perks = Doc::map();
     for perk in super::perks::ALL {
         perks.set(perk.key(), i64::from(p.perks.rank(perk)).into());
@@ -112,13 +120,22 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
         let rank = d.get("perks").and_then(|m| m.get(perk.key())).and_then(Doc::as_i64).unwrap_or(0);
         perks.set(perk, rank.clamp(0, i64::from(super::perks::RANKS)) as u8);
     }
+    let stash_tier = d.get("stash_tier").and_then(Doc::as_i64).unwrap_or(0).clamp(0, STASH_TIERS.len() as i64 - 1) as u8;
+    let each = d.get("bought").and_then(|b| b.get("each")).and_then(Doc::as_list).unwrap_or_default();
+    let bought = Bought {
+        runs: d.get("bought").and_then(|b| b.get("runs")).and_then(Doc::as_i64).unwrap_or(0).clamp(0, i64::from(u32::MAX)) as u32,
+        each: each.iter().map(|n| n.as_i64().unwrap_or(0).clamp(0, 1_000) as u32).collect(),
+    };
     let mut p = Profile {
-        stash: grid_from_doc(d.get("stash"), STASH),
+        stash: grid_from_doc(d.get("stash"), STASH_TIERS[usize::from(stash_tier)].0),
         loadout: Bag { pack: grid_from_doc(d.get("pack"), perks.pack()), pockets: grid_from_doc(d.get("pockets"), perks.pockets()), slots: [None; 3] },
         perks,
         xp: num("xp"),
         runs: num("runs"),
         extractions: num("extractions"),
+        money: num("money"),
+        stash_tier,
+        bought,
     };
     // Each slot holds only what belongs in it; anything else is kept in
     // the stash.
@@ -192,6 +209,11 @@ mod tests {
         p.loadout.pack.put(Stack::new(Kind::Cash, 4), 1, 2, false);
         p.loadout.pockets.put(Stack::new(Kind::Rounds, 17), 2, 2, false);
         p.loadout.pack.put(Stack::gun(Kind::Pistol, 4), 3, 0, false);
+        p.money = 12_345;
+        p.bought = Bought { runs: 7, each: vec![0, 0, 0, 0, 1, 2] };
+        p.stash_tier = 2;
+        p.stash = super::super::trade::regrid(&p.stash, STASH_TIERS[2].0);
+        p.stash.put(Stack::one(Kind::GoldBar), 10, 14, false);
         *p.loadout.slot_mut(Slot::Sidearm) = Some(Stack::gun(Kind::Pistol, 9));
         let text = to_text(&p);
         assert_eq!(from_text(&text).unwrap(), p, "{text}");

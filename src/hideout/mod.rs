@@ -1,16 +1,18 @@
-//! The hideout, between runs, in two tabs: the stash on the left and the
+//! The hideout, between runs, in three tabs: the stash on the left and the
 //! bag to take into the next run on the right, things dragged (or
-//! right-clicked) between them; and the perks (`perks.rs`). The player's
-//! level over it all, and the way on (back to the title, or straight into
-//! a run with what's packed).
+//! right-clicked) between them; trading (`trader.rs`); and the perks
+//! (`perks.rs`). The player's level and money over it all, and the way on
+//! (back to the title, or straight into a run with what's packed).
 
 mod perks;
+mod trader;
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::{Key, Sense, Ui};
 
-use crate::bag_ui::{BagUi, Icons, Shelves};
+use crate::bag_ui::{BagUi, Icons, Mode, Shelves};
+use crate::loot::bag::Bag;
 use crate::profile::Profile;
 use crate::style;
 
@@ -24,27 +26,35 @@ pub enum Leave {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
     Stash,
+    Trader,
     Perks,
 }
 
 pub struct Hideout {
     grids: BagUi,
+    /// Trading: the stash and what's to be sold, and that.
+    trade_grids: BagUi,
+    sell: Bag,
     tab: Tab,
     /// A word flashed at the top ("MAKE ROOM IN THE STASH"), and till when.
-    note: Option<(&'static str, f64)>,
+    note: Option<(String, f64)>,
 }
 
 impl Default for Hideout {
     fn default() -> Self {
-        Self { grids: BagUi::hideout(), tab: Tab::Stash, note: None }
+        Self { grids: BagUi::new(Mode::Hideout), trade_grids: BagUi::new(Mode::Trade), sell: trader::sell_box(), tab: Tab::Stash, note: None }
     }
 }
 
 impl Hideout {
-    /// Put down whatever is held (leaving).
+    /// Put down whatever is held, and put back what was to be sold
+    /// (leaving the page, or the hideout).
     pub fn let_go(&mut self, profile: &mut Profile) {
         let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) };
         self.grids.let_go(&mut shelves);
+        let mut shelves = Shelves { bag: &mut self.sell, loot: Some(("STASH", &mut profile.stash)) };
+        self.trade_grids.let_go(&mut shelves);
+        trader::put_back(profile, &mut self.sell);
     }
 
     /// A frame of it, `active` unless a fade is running. Where it's left
@@ -61,20 +71,30 @@ impl Hideout {
         let hw = ui.measure("HIDEOUT", &heading);
         ui.draw.rect(Rect::from_min_size(Vec2::new(left + 4.0 * s, top + f64::from(heading.line_height()) + 4.0 * s), Vec2::new(160.0 * s, 5.0 * s)), style::SIGNAL);
         crate::levelbar::draw(ui, Vec2::new(left + hw + 80.0 * s, top + 8.0 * s), 560.0 * s, profile.xp, 0, 1.0, 1.0);
-        let stash_worth = format!("STASH ${}", profile.stash.value());
-        let st = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
+        // The money, and what the stash is worth.
+        let money = trader::dollars(profile.money);
+        let big = TextStyle::new((44.0 * s) as f32).bold().family(style::FONT);
+        let mw = ui.measure(&money, &big);
+        ui.text_at(&money, &big, Vec2::new(screen.max.x - 80.0 * s - mw, top), mw + 4.0, trader::GOLD);
+        let stash_worth = format!("STASH WORTH {}", trader::dollars(profile.stash.value()));
+        let st = TextStyle::new((24.0 * s) as f32).bold().family(style::FONT);
         let sw = ui.measure(&stash_worth, &st);
-        ui.text_at(&stash_worth, &st, Vec2::new(screen.max.x - 80.0 * s - sw, top + 16.0 * s), sw + 4.0, style::DIM);
+        ui.text_at(&stash_worth, &st, Vec2::new(screen.max.x - 80.0 * s - sw, top + f64::from(big.line_height()) + 4.0 * s), sw + 4.0, style::DIM);
 
         // The tabs.
         let tab_style = TextStyle::new((34.0 * s) as f32).bold().family(style::FONT);
         let mut tx = left;
         let tab_y = screen.min.y + screen.height() * 0.105;
         let points = profile.points_left();
-        for (tab, label) in [(Tab::Stash, "STASH".to_string()), (Tab::Perks, if points > 0 { format!("PERKS ({points})") } else { "PERKS".to_string() })] {
+        for (tab, label) in [(Tab::Stash, "STASH".to_string()), (Tab::Trader, "TRADER".to_string()), (Tab::Perks, if points > 0 { format!("PERKS ({points})") } else { "PERKS".to_string() })] {
             let w = ui.measure(&label, &tab_style) + 50.0 * s;
             let r = Rect::from_min_size(Vec2::new(tx, tab_y), Vec2::new(w, f64::from(tab_style.line_height()) + 18.0 * s));
-            let hit = ui.interact(ui.id(if tab == Tab::Stash { "tab stash" } else { "tab perks" }), r, Sense::CLICK);
+            let id = match tab {
+                Tab::Stash => "tab stash",
+                Tab::Trader => "tab trader",
+                Tab::Perks => "tab perks",
+            };
+            let hit = ui.interact(ui.id(id), r, Sense::CLICK);
             let on = self.tab == tab;
             ui.draw.rect(r, if on { Color::rgba(1.0, 1.0, 1.0, 0.14) } else if active && hit.hovered { Color::rgba(1.0, 1.0, 1.0, 0.08) } else { Color::rgba(0.0, 0.0, 0.0, 0.3) });
             if on {
@@ -82,13 +102,13 @@ impl Hideout {
             }
             ui.text_at(&label, &tab_style, Vec2::new(r.min.x + 25.0 * s, r.min.y + 9.0 * s), w, if on { style::BONE } else { style::DIM });
             if active && hit.clicked && !on {
-                self.grids.let_go(&mut Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) });
+                self.let_go(profile);
                 self.tab = tab;
             }
             tx += w + 16.0 * s;
         }
-        if let Some((note, until)) = self.note {
-            if ui.now() < until {
+        if let Some((note, until)) = &self.note {
+            if ui.now() < *until {
                 let nw = ui.measure(note, &tab_style);
                 ui.text_at(note, &tab_style, Vec2::new(screen.max.x - 80.0 * s - nw, tab_y + 9.0 * s), nw + 4.0, style::SIGNAL);
             } else {
@@ -102,9 +122,14 @@ impl Hideout {
                 let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) };
                 self.grids.frame(ui, &mut shelves, icons);
             }
+            Tab::Trader => {
+                if let Some(note) = trader::page(ui, profile, &mut self.sell, &mut self.trade_grids, icons, active) {
+                    self.note = Some((note, ui.now() + 2.5));
+                }
+            }
             Tab::Perks => {
                 if let Some(note) = perks::page(ui, profile, active) {
-                    self.note = Some((note, ui.now() + 2.5));
+                    self.note = Some((note.to_string(), ui.now() + 2.5));
                 }
             }
         }

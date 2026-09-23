@@ -10,7 +10,7 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | CANNED BEANS | 1×1 | 1 | Common | $10 | crate, car, fridge, drawers, shelf | Best before the end of the world. Still fine. |
 | WATER | 1×2 | 1 | Common | $12 | crate, car, fridge, shelf | Sealed. Worth more than it used to be. |
 | ANTIBIOTICS | 1×1 | 1 | Uncommon | $45 | crate, locker, fridge, drawers, desk, shelf, zombies | Half a bottle. Someone never finished the course. |
-| CASH | 1×1 | 5 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, zombies | Nobody takes it anymore. Everybody still wants it. |
+| CASH | 1×1 | 50 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, zombies | Nobody takes it anymore. Everybody still wants it. |
 | WATCH | 1×1 | 1 | Rare | $120 | locker, car, cage, drawers, desk, wardrobe, register, zombies | Still ticking. Doesn't know what it's counting down to. |
 | RADIO | 1×2 | 1 | Rare | $150 | locker, car, cage, desk | Static on every channel. Every channel but one. |
 | CAR BATTERY | 2×2 | 1 | Rare | $180 | car, cage, shelf | Heavy, leaking, and the closest thing left to electricity. |
@@ -50,3 +50,14 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | Gun cabinet | 5×3 | 2 s | the den of every farmhouse and hunter's cabin | Long guns behind glass: likely a shotgun, and shells. |
 
 Searching makes noise the dead hear within 14 m. About 1 in 5 zombies drops something when killed.
+
+## Trading
+
+Sparks, on the radio (the hideout's TRADER tab), buys anything for 60% of its value (a gun's loaded rounds counted too) and cash at its full face value. Always in stock, at full value: 9mm rounds ×30, 12ga shells ×20, bandages ×3, a medkit. Two rarer offers come in with every run, only so many of each: a loaded pistol (2), a loaded shotgun (1), or the cage key (1, $400: it opens the best there is).
+
+| Stash | Price |
+|---|---|
+| 10×10 | to begin with |
+| 10×14 | $2,500 |
+| 12×16 | $8,000 |
+| 14×18 | $20,000 |

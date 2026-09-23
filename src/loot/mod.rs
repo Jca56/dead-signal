@@ -152,7 +152,7 @@ impl Kind {
             Kind::Beans => d("CANNED BEANS", (1, 1), 1, Common, 10, "ITEM_Beans"),
             Kind::Water => d("WATER", (1, 2), 1, Common, 12, "ITEM_Water"),
             Kind::Pills => d("ANTIBIOTICS", (1, 1), 1, Uncommon, 45, "ITEM_Pills"),
-            Kind::Cash => d("CASH", (1, 1), 5, Uncommon, 50, "ITEM_Cash"),
+            Kind::Cash => d("CASH", (1, 1), 50, Uncommon, 50, "ITEM_Cash"),
             Kind::Watch => d("WATCH", (1, 1), 1, Rare, 120, "ITEM_Watch"),
             Kind::Radio => d("RADIO", (1, 2), 1, Rare, 150, "ITEM_Radio"),
             Kind::Battery => d("CAR BATTERY", (2, 2), 1, Rare, 180, "ITEM_Battery"),

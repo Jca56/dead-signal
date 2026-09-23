@@ -58,7 +58,7 @@ pub fn draw(ui: &mut Ui, icons: &Icons, slot: Slot, stack: Option<Stack>, r: Rec
     ui.text_at(slot.name(), &label, at + Vec2::new(kw + 12.0 * s, 0.0), r.width(), style::DIM);
     if let Some(stack) = stack {
         let (at, size) = tile(r, stack, cell);
-        super::tile(ui, icons, Item { stack, x: 0, y: 0, turned: false }, at, size, 1.0);
+        super::draw::tile(ui, icons, Item { stack, x: 0, y: 0, turned: false }, at, size, 1.0);
     }
 }
 

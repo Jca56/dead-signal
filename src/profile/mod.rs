@@ -1,10 +1,11 @@
 //! The player between runs: what's kept in the stash, what's carried into
 //! the next run (the backpack and pockets, the loadout), the XP earned
-//! (`xp.rs`) and the perks it's bought (`perks.rs`); kept on disk
-//! (`save.rs`).
+//! (`xp.rs`) and the perks it's bought (`perks.rs`); the money made
+//! trading and what it's bought (`trade.rs`); kept on disk (`save.rs`).
 
 pub mod perks;
 pub mod save;
+pub mod trade;
 pub mod xp;
 
 use perks::{Perk, Perks, RANKS};
@@ -12,7 +13,8 @@ use crate::loot::bag::Bag;
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
 
-/// The stash's size, cells across and down.
+/// The stash's size to begin with, cells across and down (it's made
+/// bigger by trading).
 pub const STASH: (u8, u8) = (10, 10);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -23,6 +25,11 @@ pub struct Profile {
     pub runs: u32,
     pub extractions: u32,
     pub perks: Perks,
+    /// Money, and how many times the stash has been made bigger; what's
+    /// been bought of Sparks' rarer things.
+    pub money: u32,
+    pub stash_tier: u8,
+    pub bought: trade::Bought,
 }
 
 impl Profile {
@@ -35,7 +42,7 @@ impl Profile {
         }
         let mut loadout = Bag::empty();
         loadout.add(starting_pistol());
-        Self { stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default() }
+        Self { stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default(), money: 0, stash_tier: 0, bought: trade::Bought::default() }
     }
 
     /// Perk points not yet spent.
