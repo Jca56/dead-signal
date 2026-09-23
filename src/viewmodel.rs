@@ -7,6 +7,7 @@
 use lntrn_math::{Mat4, Quat, Transform, Vec2, Vec3};
 
 use crate::assets::Rigged;
+use crate::render::SkinnedMeshId;
 use crate::head::{EYE_CROUCH, EYE_STAND, View};
 use crate::player::Body;
 use crate::render::SkinnedDraw;
@@ -43,14 +44,14 @@ impl Sway {
 }
 
 pub struct Viewmodel {
-    rig: Rigged,
+    rig: Rigged<SkinnedMeshId>,
     sway: Sway,
     /// Up or down in the air, metres.
     lift: f64,
 }
 
 impl Viewmodel {
-    pub fn new(rig: Rigged) -> Self {
+    pub fn new(rig: Rigged<SkinnedMeshId>) -> Self {
         Self { rig, sway: Sway::default(), lift: 0.0 }
     }
 

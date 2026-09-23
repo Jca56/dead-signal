@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use lntrn_math::{Mat4, Vec3};
 use lntrn_model::{Gltf, Mode};
 
-use crate::render::{MAX_JOINTS, MeshId, Renderer, SkinnedMeshId, SkinnedVertex, Vertex};
+use crate::render::{FigureMeshId, MAX_JOINTS, MeshId, Renderer, SkinnedMeshId, SkinnedVertex, Vertex};
 
 /// One object of a model file, ready to draw.
 #[derive(Clone, Debug)]
@@ -78,14 +78,27 @@ fn props(renderer: &mut Renderer, gltf: &Gltf, path: &Path) -> Vec<Prop> {
 
 /// A skinned model: its mesh on the GPU, and the file itself for its
 /// bones and animations.
-pub struct Rigged {
-    pub mesh: SkinnedMeshId,
+pub struct Rigged<M> {
+    pub mesh: M,
     pub gltf: Gltf,
     pub skin: usize,
 }
 
-/// Load `models/<name>.glb`, whose first skinned mesh is the model.
-pub fn load_rigged(renderer: &mut Renderer, name: &str) -> Result<Rigged, String> {
+/// The arms: drawn in the viewmodel pass.
+pub fn load_viewmodel(renderer: &mut Renderer, name: &str) -> Result<Rigged<SkinnedMeshId>, String> {
+    let (vertices, gltf, skin) = load_skinned(name)?;
+    Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })
+}
+
+/// A figure out in the world (the dead).
+pub fn load_figure(renderer: &mut Renderer, name: &str) -> Result<Rigged<FigureMeshId>, String> {
+    let (vertices, gltf, skin) = load_skinned(name)?;
+    Ok(Rigged { mesh: renderer.add_figure_mesh(&vertices), gltf, skin })
+}
+
+/// Read `models/<name>.glb`, whose first skinned mesh is the model: its
+/// triangles split apart (a normal a face), the file, and which skin.
+fn load_skinned(name: &str) -> Result<(Vec<SkinnedVertex>, Gltf, usize), String> {
     let path = root().join("models").join(format!("{name}.glb"));
     let gltf = Gltf::load(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let node = gltf.nodes.iter().find(|n| n.skin.is_some() && n.mesh.is_some()).ok_or_else(|| format!("{}: no skinned mesh", path.display()))?;
@@ -112,7 +125,7 @@ pub fn load_rigged(renderer: &mut Renderer, name: &str) -> Result<Rigged, String
             }
         }
     }
-    Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })
+    Ok((vertices, gltf, skin))
 }
 
 /// The height of the highest triangle under `(x, z)`, if any.

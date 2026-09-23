@@ -15,6 +15,7 @@ use crate::sound::{Sfx, Sound};
 use crate::targets::{self, Kind, Target};
 use crate::weapon::{Act, Pistol, Trigger};
 use crate::world::{Game, Solid};
+use crate::zombie::{self, Horde};
 
 /// Damage, and how far a bullet and a blow reach, metres.
 const SHOT_DAMAGE: f64 = 25.0;
@@ -33,7 +34,13 @@ pub struct Combat {
     sound: Sound,
     sprint_block: f64,
     seed: u32,
+    /// How red the edges of the screen are from a blow, 0–1, fading.
+    pub hurt: f64,
 }
+
+/// How hard a blow shoves the player, m/s, and shakes the view, metres.
+const BLOW_SHOVE: f64 = 4.5;
+const BLOW_SHAKE: f64 = 0.035;
 
 /// Where the eye is and which way it looks.
 struct Aim {
@@ -45,7 +52,7 @@ struct Aim {
 
 impl Combat {
     pub fn new() -> Self {
-        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5 }
+        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0 }
     }
 
     pub fn init(&mut self, renderer: &mut Renderer) {
@@ -61,6 +68,30 @@ impl Combat {
     pub fn reset(&mut self) {
         self.pistol = Pistol::default();
         self.sprint_block = 0.0;
+        self.hurt = 0.0;
+    }
+
+    /// What the dead did since last frame: play their sounds where they
+    /// are, and take their blows (a shove, a shake, the edges gone red).
+    pub fn answer_the_dead(&mut self, game: &mut Game) {
+        let (sounds, blows) = {
+            let mut horde = game.world.resource_mut::<Horde>();
+            (std::mem::take(&mut horde.sounds), std::mem::take(&mut horde.blows))
+        };
+        let Some((body, view)) = game.player() else { return };
+        let aim = aim(&view, &body, game.alpha());
+        for (sfx, at, gain) in sounds {
+            self.sound.play_at(sfx, gain, at, aim.eye, aim.right);
+        }
+        for push in blows {
+            self.sound.play(Sfx::Flesh, 0.9);
+            self.hurt = 1.0;
+            if let Some(mut v) = game.player_view_mut() {
+                v.jolt(BLOW_SHAKE);
+                v.recoil(-3.0, (self.rand() - 0.5) * 6.0);
+            }
+            game.push_player(push * BLOW_SHOVE);
+        }
     }
 
     fn rand(&mut self) -> f64 {
@@ -74,6 +105,7 @@ impl Combat {
     pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64) {
         self.fx.update(dt);
         self.sprint_block -= dt;
+        self.hurt = (self.hurt - dt * 1.6).max(0.0);
         let acts = self.pistol.update(trigger, dt);
         if acts.is_empty() {
             return;
@@ -84,6 +116,7 @@ impl Combat {
             match act {
                 Act::Shoot => {
                     self.sound.play(Sfx::Shot, 0.9);
+                    zombie::noise(&mut game.world, aim.eye);
                     self.sprint_block = SPRINT_BLOCK;
                     let side = (self.rand() - 0.5) * 0.8;
                     if let Some(mut v) = game.player_view_mut() {
@@ -127,7 +160,24 @@ impl Combat {
     fn strike(&mut self, game: &mut Game, aim: &Aim, dir: Vec3, range: f64, damage: f64, blow: bool) -> bool {
         let wall = game.world.resource::<Solid>().0.raycast(aim.eye, dir, range);
         let reach = wall.map_or(range, |h| h.t);
-        if let Some((e, t, head)) = targets::raycast(&mut game.world, aim.eye, dir, reach) {
+        let dead = zombie::raycast(&mut game.world, aim.eye, dir, reach);
+        let reach = dead.map_or(reach, |(_, t, _)| t);
+        let target = targets::raycast(&mut game.world, aim.eye, dir, reach);
+        if target.is_none()
+            && let Some((e, t, head)) = dead
+        {
+            let point = aim.eye + dir * t;
+            let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, damage, head, blow);
+            self.fx.burst(point, -dir, Surface::Flesh, if blow { 12 } else { 9 });
+            self.fx.mark(killed);
+            self.sound.play(Sfx::Confirm, if killed { 0.7 } else { 0.45 });
+            self.sound.play_at(Sfx::Flesh, 1.0, point, aim.eye, aim.right);
+            if blow && let Some(mut v) = game.player_view_mut() {
+                v.jolt(0.02);
+            }
+            return true;
+        }
+        if let Some((e, t, head)) = target {
             let point = aim.eye + dir * t;
             let Some((beaten, kind)) = game.world.get_mut::<Target>(e).map(|mut target| (target.hit(dir, point, damage, head), target.kind)) else { return false };
             let (surface, sfx, gain) = match kind {
@@ -150,6 +200,7 @@ impl Combat {
             Surface::Wood => (Sfx::HitWood, 0.8),
             Surface::Stone => (Sfx::HitStone, 0.8),
             Surface::Metal => (Sfx::Ding, 0.35),
+            Surface::Flesh => (Sfx::Flesh, 0.8),
         };
         self.sound.play_at(sfx, gain, hit.point, aim.eye, aim.right);
         if blow && let Some(mut v) = game.player_view_mut() {

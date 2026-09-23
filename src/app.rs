@@ -16,11 +16,12 @@ use crate::hud;
 use crate::menu::SideMenu;
 use crate::head;
 use crate::player::Controls;
-use crate::render::{Draw, Renderer};
+use crate::render::{Draw, FigureDraw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
 use crate::weapon::{Clip, Trigger};
 use crate::world::{Game, Look, Model, Placed};
+use crate::zombie::{self, figure::Figure};
 
 /// Seconds a fade to or from black takes.
 const FADE: f64 = 0.6;
@@ -140,10 +141,12 @@ impl DeadSignal {
                     vm.reset();
                 }
                 self.combat.reset();
+                zombie::clear(&mut self.game.world);
                 cx.request(ShellRequest::LockPointer(true));
             }
             Screen::Title => {
                 self.game.despawn_player();
+                zombie::clear(&mut self.game.world);
                 self.title_menu.reset();
             }
         }
@@ -219,7 +222,22 @@ impl DeadSignal {
         };
         let dt = self.game.clock().dt;
         self.combat.frame(&mut self.game, trigger, dt);
-        hud::draw(ui, self.combat.pistol.mag, self.combat.fx.marker);
+        self.combat.answer_the_dead(&mut self.game);
+        self.keep_one_shambling();
+        hud::draw(ui, self.combat.pistol.mag, self.combat.fx.marker, self.combat.hurt);
+    }
+
+    /// There is always one of the dead about: a new one comes from out of
+    /// sight when the last has sunk away.
+    fn keep_one_shambling(&mut self) {
+        if zombie::count(&mut self.game.world) > 0 {
+            return;
+        }
+        if let Some((body, view)) = self.game.player() {
+            let eye = body.pos + Vec3::new(0.0, 1.6, 0.0);
+            let forward = Vec3::new(-view.yaw.sin(), 0.0, -view.yaw.cos());
+            zombie::spawn_unseen(&mut self.game.world, eye, forward);
+        }
     }
 
     /// Where the camera is this frame.
@@ -324,7 +342,14 @@ impl AppHost for DeadSignal {
         }
         log_info!("world: {} solid triangles", self.game.solid_count());
         self.combat.init(&mut renderer);
-        match assets::load_rigged(&mut renderer, "arms") {
+        match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
+            Ok(model) => self.game.world.insert_resource(model),
+            Err(e) => log_error!("shambler: {e}"),
+        }
+        let started = std::time::Instant::now();
+        self.game.build_nav();
+        log_info!("nav: built in {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
+        match assets::load_viewmodel(&mut renderer, "arms") {
             Ok(rig) => self.viewmodel = Some(Viewmodel::new(rig)),
             Err(e) => log_error!("arms: {e}"),
         }
@@ -346,6 +371,13 @@ impl AppHost for DeadSignal {
             let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
             renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping));
             self.combat.draw(renderer);
+        }
+        if let Some(mesh) = self.game.world.get_resource::<zombie::figure::Model>().map(|m| m.mesh) {
+            for f in self.game.world.query::<&Figure>().iter(&self.game.world) {
+                if !f.joints.is_empty() {
+                    renderer.draw_figure(FigureDraw { mesh, model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3] });
+                }
+            }
         }
         renderer.render(cx, &self.camera, &style::AIR, time);
     }

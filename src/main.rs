@@ -19,6 +19,7 @@ mod testing;
 mod viewmodel;
 mod weapon;
 mod world;
+mod zombie;
 
 use lntrn_app::{AppConfig, run};
 use lntrn_ui::Shell;

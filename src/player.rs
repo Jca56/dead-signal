@@ -44,6 +44,19 @@ const SNAP_STEP: f64 = 0.025;
 /// The world ends this far from its middle, either way.
 pub const BOUNDS: f64 = 115.0;
 
+/// How fast a kind of body goes, m/s.
+#[derive(Clone, Copy, Debug)]
+pub struct Gait {
+    pub walk: f64,
+    pub sprint: f64,
+    pub crouch: f64,
+}
+
+/// The player's.
+pub const PLAYER_GAIT: Gait = Gait { walk: WALK, sprint: SPRINT, crouch: CROUCH };
+/// How fast a shove fades, per second.
+const PUSH_FADE: f64 = 7.0;
+
 /// The one step every fixed update takes, seconds.
 pub const STEP: f64 = 1.0 / 60.0;
 
@@ -81,11 +94,14 @@ pub struct Body {
     /// How far stairs have moved it up (or down) since the view last
     /// looked, metres: the view glides after.
     pub stepped: f64,
+    /// A shove (a blow knocking it back), m/s, fading: added to how it
+    /// moves on top of its steering.
+    pub push: Vec3,
 }
 
 impl Body {
     pub fn at(pos: Vec3) -> Self {
-        Self { pos, prev: pos, vel: Vec3::ZERO, grounded: true, airborne: 0.0, jump_wait: None, want_crouch: false, crouched: false, sprinting: false, landed: 0.0, stepped: 0.0 }
+        Self { pos, prev: pos, vel: Vec3::ZERO, grounded: true, airborne: 0.0, jump_wait: None, want_crouch: false, crouched: false, sprinting: false, landed: 0.0, stepped: 0.0, push: Vec3::ZERO }
     }
 
     pub fn speed_flat(&self) -> f64 {
@@ -183,7 +199,7 @@ fn step_up(solids: &Solids, cap: Capsule, start: Vec3, vel: Vec3, dt: f64) -> Op
 
 /// One fixed step of the body: steer, jump, fall, and move through the
 /// solids.
-pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &Solids, dt: f64) {
+pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &Solids, gait: &Gait, dt: f64) {
     body.prev = body.pos;
     if std::mem::take(&mut controls.crouch_toggle) {
         body.want_crouch = !body.want_crouch;
@@ -194,7 +210,7 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
     }
     body.crouched = body.want_crouch || (body.crouched && !solids.fits(capsule(false), body.pos));
     body.sprinting = controls.sprint && controls.walk.y > 0.0 && !body.crouched;
-    let speed = if body.crouched { CROUCH } else if body.sprinting { SPRINT } else { WALK };
+    let speed = if body.crouched { gait.crouch } else if body.sprinting { gait.sprint } else { gait.walk };
 
     // The keys, turned to face where the player looks, on the flat.
     let (s, c) = yaw.sin_cos();
@@ -241,7 +257,12 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
 
     let cap = capsule(body.crouched);
     let start = body.pos;
-    let (mut pos, mut contacts, mut vel) = slide(solids, cap, start, body.vel, dt);
+    let (mut pos, mut contacts, _) = slide(solids, cap, start, body.vel + body.push, dt);
+    // Its own motion and the shove each lose what went into what it touched.
+    let mut vel = body.vel;
+    clip(&mut vel, &contacts);
+    clip(&mut body.push, &contacts);
+    body.push *= (-PUSH_FADE * dt).exp();
 
     // Blocked while walking: perhaps it is a step. Tried at the speed
     // asked for, not what the wall left of it (which is next to nothing
@@ -293,7 +314,7 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
 
 fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, mut players: Query<(&mut Body, &View), With<Player>>) {
     for (mut body, view) in &mut players {
-        step_body(&mut body, view.yaw, &mut controls, &solid.0, STEP);
+        step_body(&mut body, view.yaw, &mut controls, &solid.0, &PLAYER_GAIT, STEP);
     }
 }
 

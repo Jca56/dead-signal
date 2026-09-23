@@ -11,6 +11,7 @@ use crate::collide::{Solids, Surface};
 use crate::head::{self, View};
 use crate::player::{self, Body, Controls, Player};
 use crate::targets::{self, Kind, Target};
+use crate::zombie;
 use crate::render::MeshId;
 
 /// Where a thing is.
@@ -50,6 +51,11 @@ pub struct Clock {
     /// Seconds since the last frame (capped, so a stall doesn't lurch).
     pub dt: f64,
 }
+
+/// How far between its last two fixed steps the simulation is (0–1), for
+/// drawing things that move in steps.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct Blend(pub f64);
 
 /// What can be stood on, in world space.
 #[derive(Resource, Clone, Debug, Default)]
@@ -114,12 +120,17 @@ impl Game {
         world.insert_resource(Ground::default());
         world.insert_resource(Solid::default());
         world.insert_resource(Controls::default());
+        world.insert_resource(Blend::default());
+        world.insert_resource(zombie::Nav::default());
+        world.insert_resource(zombie::Noises::default());
+        world.insert_resource(zombie::Horde::default());
         let mut frame = Schedule::default();
         let mut fixed = Schedule::default();
         frame.add_systems(blink);
         player::install(&mut fixed);
         head::install(&mut frame);
         targets::install(&mut frame);
+        zombie::install(&mut fixed, &mut frame);
         Self { world, frame, fixed, owed: 0.0, simulating: false }
     }
 
@@ -143,6 +154,13 @@ impl Game {
     /// The player's body and view, if one is about.
     pub fn player(&mut self) -> Option<(Body, View)> {
         self.world.query_filtered::<(&Body, &View), With<Player>>().iter(&self.world).next().map(|(b, v)| (*b, *v))
+    }
+
+    /// Shove the player (a blow landing).
+    pub fn push_player(&mut self, push: Vec3) {
+        if let Some(mut body) = self.world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut self.world).next() {
+            body.push += push;
+        }
     }
 
     /// The player's view, to turn it.
@@ -204,7 +222,15 @@ impl Game {
                 self.owed -= player::STEP;
             }
         }
+        let blend = self.alpha();
+        self.world.resource_mut::<Blend>().0 = blend;
         self.frame.run(&mut self.world);
+    }
+
+    /// Probe the loaded world for where the dead can walk.
+    pub fn build_nav(&mut self) {
+        let grid = zombie::nav::NavGrid::build(&self.world.resource::<Solid>().0, player::capsule(false));
+        self.world.resource_mut::<zombie::Nav>().0 = Some(grid);
     }
 
     pub fn clock(&self) -> Clock {

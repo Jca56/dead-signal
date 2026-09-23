@@ -5,8 +5,10 @@
 //! into the window's image; the UI draws on top of it afterwards. The
 //! viewmodel (the arms) goes between: see `skinned.rs`.
 
+mod figures;
 mod skinned;
 
+pub use figures::{FigureDraw, FigureMeshId};
 pub use skinned::{MAX_JOINTS, SkinnedDraw, SkinnedMeshId, SkinnedVertex};
 
 use lntrn_app::wgpu;
@@ -17,6 +19,7 @@ use lntrn_math::{Color, Mat4, Vec3};
 
 use crate::camera::Camera;
 
+use figures::Figures;
 use skinned::Skinned;
 
 const SAMPLES: u32 = 4;
@@ -128,6 +131,7 @@ pub struct Renderer {
     targets: Option<Targets>,
     skinned: Skinned,
     viewmodel: Option<SkinnedDraw>,
+    figures: Figures,
 }
 
 /// The viewmodel's vertical field of view: fixed, so the arms keep their
@@ -196,7 +200,8 @@ impl Renderer {
         let instance_cap = 64;
         let instances = Self::instance_buffer(gpu, instance_cap);
         let skinned = Skinned::new(gpu, format);
-        Self { format, sky, world, globals, bind, staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodel: None }
+        let figures = Figures::new(gpu, format, &layout);
+        Self { format, sky, world, globals, bind, staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodel: None, figures }
     }
 
     fn instance_buffer(gpu: &Gpu, cap: usize) -> wgpu::Buffer {
@@ -217,6 +222,16 @@ impl Renderer {
         self.skinned.add_mesh(vertices)
     }
 
+    /// Keep a skinned mesh for drawing out in the world (a figure).
+    pub fn add_figure_mesh(&mut self, vertices: &[SkinnedVertex]) -> FigureMeshId {
+        self.figures.add_mesh(vertices)
+    }
+
+    /// Draw a figure in the world this frame.
+    pub fn draw_figure(&mut self, d: FigureDraw) {
+        self.figures.draw(d);
+    }
+
     /// Draw this over the world this frame, in camera space.
     pub fn draw_viewmodel(&mut self, d: SkinnedDraw) {
         self.viewmodel = Some(d);
@@ -225,6 +240,7 @@ impl Renderer {
     /// Send every mesh added so far to the GPU.
     pub fn upload(&mut self, gpu: &Gpu) {
         self.skinned.upload(gpu);
+        self.figures.upload(gpu);
         self.vertices = Some(gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("vertices"), contents: slice_as_bytes(&self.staged), usage: wgpu::BufferUsages::VERTEX }));
     }
 
@@ -278,6 +294,7 @@ impl Renderer {
         let vm_proj = Mat4::perspective_infinite_reverse_z(VIEWMODEL_FOV.to_radians(), aspect, VIEWMODEL_NEAR);
         let viewmodel = self.viewmodel.take();
         self.skinned.prepare(gpu, viewmodel.as_ref(), vm_proj, (right, up, forward), air);
+        self.figures.prepare(gpu);
 
         let this: &'f Renderer = self;
         let backbuffer = cx.backbuffer;
@@ -309,6 +326,7 @@ impl Renderer {
                     pass.draw(range.first..range.first + range.count, *first..*first + *count);
                 }
             }
+            this.figures.draw_into(&mut pass);
             drop(pass);
             // The viewmodel, over the world with depth of its own, and the
             // whole picture resolved into the window's image.

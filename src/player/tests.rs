@@ -19,7 +19,7 @@ fn forward() -> Controls {
 
 fn run(body: &mut Body, controls: &mut Controls, solids: &Solids, steps: usize) {
     for _ in 0..steps {
-        step_body(body, 0.0, controls, solids, STEP);
+        step_body(body, 0.0, controls, solids, &PLAYER_GAIT, STEP);
     }
 }
 
@@ -65,7 +65,7 @@ fn a_jump_rises_its_height_and_lands() {
     let mut c = Controls { jump: true, ..Default::default() };
     let mut top: f64 = 0.0;
     for _ in 0..120 {
-        step_body(&mut body, 0.0, &mut c, &s, STEP);
+        step_body(&mut body, 0.0, &mut c, &s, &PLAYER_GAIT, STEP);
         top = top.max(body.pos.y);
     }
     assert!((top - JUMP_HEIGHT).abs() < 0.08, "peak {top}");
@@ -131,7 +131,7 @@ fn walks_down_stairs_without_leaving_them() {
     let mut body = Body::at(Vec3::new(0.0, 1.6, -5.0));
     let mut c = Controls { walk: Vec2::new(0.0, -1.0), ..Default::default() };
     for _ in 0..150 {
-        step_body(&mut body, 0.0, &mut c, &s, STEP);
+        step_body(&mut body, 0.0, &mut c, &s, &PLAYER_GAIT, STEP);
         assert!(body.airborne <= STEP + 1e-9, "left the stairs at z {}", body.pos.z);
     }
     assert!(body.pos.y.abs() < 0.01 && body.pos.z > 0.0, "down at {:?}", body.pos);
@@ -222,7 +222,7 @@ fn the_real_world_holds_you_up_and_the_ramp_leads_onto_the_pad() {
     run(&mut body, &mut Controls::default(), &s, 60);
     let mut c = forward();
     for _ in 0..90 {
-        step_body(&mut body, std::f64::consts::FRAC_PI_2, &mut c, &s, STEP);
+        step_body(&mut body, std::f64::consts::FRAC_PI_2, &mut c, &s, &PLAYER_GAIT, STEP);
     }
     assert!(body.grounded && (body.pos.y - 1.11).abs() < 0.05, "on the pad at {:?}", body.pos);
     assert!(body.pos.x < 10.0, "past its edge, x {}", body.pos.x);
@@ -239,9 +239,26 @@ fn climbs_the_building_stairs_without_shaking() {
     let mut c = forward();
     let mut highest = body.pos.y;
     for _ in 0..50 {
-        step_body(&mut body, std::f64::consts::PI, &mut c, &s, STEP);
+        step_body(&mut body, std::f64::consts::PI, &mut c, &s, &PLAYER_GAIT, STEP);
         assert!(body.pos.y > highest - 0.02, "dropped back from {highest} to {} at z {}", body.pos.y, body.pos.z);
         highest = highest.max(body.pos.y);
     }
     assert!((body.pos.y - 4.16).abs() < 0.03, "up at the roof's height, {}", body.pos.y);
+}
+
+#[test]
+fn a_shove_moves_you_and_fades() {
+    let s = floor();
+    let mut body = Body::at(Vec3::ZERO);
+    body.push = Vec3::new(0.0, 0.0, 5.0);
+    run(&mut body, &mut Controls::default(), &s, 60);
+    assert!(body.pos.z > 0.5 && body.pos.z < 1.2, "shoved {} m", body.pos.z);
+    assert!(body.push.length() < 0.1 && body.speed_flat() < 1e-9, "and it fades, leaving no walk of its own");
+    // Into a wall: stopped by it, no bounce back.
+    let mut s = floor();
+    s.add(&box_tris(Vec3::new(-2.0, 0.0, 0.5), Vec3::new(2.0, 3.0, 1.0)));
+    let mut body = Body::at(Vec3::ZERO);
+    body.push = Vec3::new(0.0, 0.0, 5.0);
+    run(&mut body, &mut Controls::default(), &s, 60);
+    assert!((body.pos.z - (0.5 - RADIUS)).abs() < 0.02, "against the wall at {}", body.pos.z);
 }

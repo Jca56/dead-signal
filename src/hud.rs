@@ -8,11 +8,15 @@ use lntrn_ui::Ui;
 use crate::fx::Marker;
 use crate::style;
 
-/// Draw the HUD. `mag` is the rounds in the gun.
-pub fn draw(ui: &mut Ui, mag: u32, marker: Option<Marker>) {
+/// Draw the HUD. `mag` is the rounds in the gun; `hurt` (0–1) reddens
+/// the edges of the screen after a blow.
+pub fn draw(ui: &mut Ui, mag: u32, marker: Option<Marker>, hurt: f64) {
     let s = ui.m.scale;
     let screen = ui.clip();
     let mid = screen.center();
+    if hurt > 0.0 {
+        vignette(ui, screen, hurt);
+    }
 
     // The dot, ringed dark so it shows against sky and ground alike.
     let dot = 5.0 * s;
@@ -41,4 +45,24 @@ pub fn draw(ui: &mut Ui, mag: u32, marker: Option<Marker>) {
     let small_h = f64::from(small.line_height());
     ui.text_at(&count, &big, Vec2::new(right - w_spare - w_count, base - big_h), screen.width(), colour);
     ui.text_at(spare, &small, Vec2::new(right - w_spare, base - small_h - 5.0 * s), screen.width(), style::DIM);
+}
+
+/// Red closing in from every edge, `amount` (0–1) strong: thin bands, each
+/// fainter going in.
+fn vignette(ui: &mut Ui, screen: Rect, amount: f64) {
+    let depth = screen.height().min(screen.width()) * 0.28;
+    let bands = 24;
+    for k in 0..bands {
+        let t = f64::from(k) / f64::from(bands);
+        let alpha = 0.55 * amount * (1.0 - t) * (1.0 - t);
+        let colour = Color::rgba(0.55, 0.02, 0.01, alpha);
+        let (a, b) = (depth * t, depth * (t + 1.0 / f64::from(bands)));
+        let (x0, x1, y0, y1) = (screen.min.x, screen.max.x, screen.min.y, screen.max.y);
+        // Top and bottom full width; the sides between them, so no corner
+        // is painted twice by one band.
+        ui.draw.rect(Rect::new(Vec2::new(x0 + a, y0 + a), Vec2::new(x1 - a, y0 + b)), colour);
+        ui.draw.rect(Rect::new(Vec2::new(x0 + a, y1 - b), Vec2::new(x1 - a, y1 - a)), colour);
+        ui.draw.rect(Rect::new(Vec2::new(x0 + a, y0 + b), Vec2::new(x0 + b, y1 - b)), colour);
+        ui.draw.rect(Rect::new(Vec2::new(x1 - b, y0 + b), Vec2::new(x1 - a, y1 - b)), colour);
+    }
 }

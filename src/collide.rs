@@ -37,6 +37,8 @@ pub enum Surface {
     Wood,
     Stone,
     Metal,
+    /// The dead.
+    Flesh,
 }
 
 #[derive(Clone, Copy, Debug)]

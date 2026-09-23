@@ -27,9 +27,16 @@ pub enum Sfx {
     Ding,
     /// The hitmarker's tick.
     Confirm,
+    /// The dead: a moan, a snarl on seeing you or striking, a bullet into
+    /// one, its last gurgle, its feet dragging.
+    Groan,
+    Snarl,
+    Flesh,
+    Gurgle,
+    Shuffle,
 }
 
-const ALL: [Sfx; 11] = [Sfx::Shot, Sfx::DryFire, Sfx::MagOut, Sfx::MagIn, Sfx::SlideRack, Sfx::Whoosh, Sfx::HitWood, Sfx::HitDirt, Sfx::HitStone, Sfx::Ding, Sfx::Confirm];
+const ALL: [Sfx; 16] = [Sfx::Shot, Sfx::DryFire, Sfx::MagOut, Sfx::MagIn, Sfx::SlideRack, Sfx::Whoosh, Sfx::HitWood, Sfx::HitDirt, Sfx::HitStone, Sfx::Ding, Sfx::Confirm, Sfx::Groan, Sfx::Snarl, Sfx::Flesh, Sfx::Gurgle, Sfx::Shuffle];
 
 struct Play {
     sfx: Sfx,
@@ -181,6 +188,27 @@ fn render(seconds: f32, peak: f32, mut f: impl FnMut(f32, &mut Noise) -> f32) ->
     out
 }
 
+/// A buzzy pulse at `freq` Hz: a throat, before its mouth shapes it.
+fn pulse(t: f32, freq: f32) -> f32 {
+    let phase = (t * freq).fract();
+    if phase < 0.3 { 1.0 } else { -0.43 }
+}
+
+/// A dead voice: a buzz sliding from `from` to `to` Hz, wobbling, breathy by
+/// `rasp`, through two mouth shapes, swelled by `shape(t)`.
+fn voice(seconds: f32, peak: f32, from: f32, to: f32, rasp: f32, shape: impl Fn(f32) -> f32) -> Vec<f32> {
+    let (mut a, mut b) = (Svf::default(), Svf::default());
+    let mut phase = 0.0f32;
+    let dt = 1.0 / RATE as f32;
+    render(seconds, peak, move |t, n| {
+        let freq = from + (to - from) * (t / seconds) + 4.0 * sine(t, 5.5);
+        phase = (phase + freq * dt).fract();
+        let buzz = if phase < 0.3 { 1.0 } else { -0.43 };
+        let x = buzz + n.next() * rasp;
+        (a.run(x, 520.0, 0.3).1 + b.run(x, 1150.0, 0.35).1 * 0.6) * shape(t)
+    })
+}
+
 fn sine(t: f32, freq: f32) -> f32 {
     (std::f32::consts::TAU * freq * t).sin()
 }
@@ -260,6 +288,27 @@ fn synth(sfx: Sfx) -> Vec<f32> {
             })
         }
         Sfx::Confirm => render(0.05, 0.3, |t, _| sine(t, 1500.0) * env(t, 0.001, 0.012)),
+        Sfx::Groan => voice(1.4, 0.7, 88.0, 72.0, 0.35, |t| (std::f32::consts::PI * (t / 1.4).min(1.0)).sin().powf(0.7)),
+        Sfx::Snarl => voice(0.6, 0.85, 130.0, 170.0, 0.8, |t| env(t, 0.03, 0.3)),
+        Sfx::Flesh => {
+            let mut f = Svf::default();
+            render(0.16, 0.8, |t, n| sine(t, 85.0) * env(t, 0.001, 0.05) + f.run(n.next(), 650.0, 0.6).1 * env(t, 0.0005, 0.03) * 0.9)
+        }
+        Sfx::Gurgle => {
+            let mut f = Svf::default();
+            let mut g = Svf::default();
+            render(1.1, 0.7, |t, n| {
+                // Bubbles: a low voice, chopped and wet.
+                let chop = (0.5 + 0.5 * sine(t, 9.0 + 5.0 * t)).powi(3);
+                let wet = f.run(n.next(), 420.0 + 260.0 * sine(t, 3.3), 0.25).1;
+                let throat = g.run(pulse(t, 70.0 - 18.0 * t), 500.0, 0.5).1;
+                (wet * 0.8 + throat * 0.6) * chop * env(t, 0.02, 0.5)
+            })
+        }
+        Sfx::Shuffle => {
+            let mut f = Svf::default();
+            render(0.14, 0.4, |t, n| f.run(n.next(), 900.0, 1.2).1 * (std::f32::consts::PI * (t / 0.14)).sin())
+        }
     }
 }
 
