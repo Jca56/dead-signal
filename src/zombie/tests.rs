@@ -369,3 +369,29 @@ fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
 }
 
 
+
+#[test]
+fn a_round_goes_on_past_the_ones_already_hit() {
+    use bevy_ecs::prelude::*;
+    use super::figure::{Figure, Model};
+    let mut world = World::new();
+    let gltf = lntrn_model::Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb")).expect("shambler.glb");
+    world.insert_resource(Model::new(crate::assets::Rigged { mesh: crate::render::FigureMeshId::placeholder(), gltf, skin: 0 }).expect("the model"));
+    world.insert_resource(crate::world::Blend::default());
+    world.spawn((Body::at(Vec3::new(0.0, 0.0, 10.0)), player::Player));
+    // Three in a line down the range, 3 m apart.
+    for (k, z) in [-5.0, -8.0, -11.0].into_iter().enumerate() {
+        world.spawn((Zombie::new(0.0, k as u32 + 1), Body::at(Vec3::new(0.0, 0.0, z)), Figure::default(), super::Beat::new(0)));
+    }
+    let mut schedule = Schedule::default();
+    schedule.add_systems(super::pose);
+    schedule.run(&mut world);
+    let (from, dir) = (Vec3::new(0.0, 1.2, 0.0), Vec3::new(0.0, 0.0, -1.0));
+    let (a, ta, _) = super::raycast(&mut world, from, dir, 50.0).expect("the first");
+    let (b, tb, _) = super::raycast_past(&mut world, from, dir, 50.0, &[a]).expect("the second");
+    let (c, tc, _) = super::raycast_past(&mut world, from, dir, 50.0, &[a, b]).expect("the third");
+    assert!(ta < tb && tb < tc && (tb - ta - 3.0).abs() < 0.6 && (tc - tb - 3.0).abs() < 0.6, "{ta:.2} {tb:.2} {tc:.2}");
+    assert!(a != b && b != c && a != c);
+    assert!(super::raycast_past(&mut world, from, dir, 50.0, &[a, b, c]).is_none(), "none past the last");
+    assert!(super::raycast_past(&mut world, from, dir, tb + 1.0, &[a, b]).is_none(), "a wall before the third stops it");
+}

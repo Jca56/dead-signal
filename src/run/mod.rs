@@ -286,6 +286,7 @@ impl Run {
                 weapon: combat.hands.spec().name,
                 rounds: combat.hands.spec().ammo.map(|kind| (combat.hands.mag, self.bag.count(kind))),
                 aim: combat.hands.aim(),
+                scope: combat.hands.scoped(),
                 marker: combat.fx.marker,
                 hurt: combat.hurt,
                 hp: v.hp,

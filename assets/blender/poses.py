@@ -95,10 +95,12 @@ class Rig:
         want = frame_to(wrist, fwd.cross(back).normalized(), fwd, back)
         return want @ self.left_rest.inverted() @ self.hand_l
 
-    def key(self, frame, gun, left):
-        """Both hands for one frame: the right carrying the gun at `gun`,
-        the left at (wrist, fwd, back)."""
-        for side, m in (("R", self.right_for(gun)), ("L", self.left_for(*left)), ("gun", gun @ self.gun_rest.inverted() @ self.gun_bone)):
+    def key(self, frame, gun, left, right=None):
+        """Both hands for one frame, the gun at `gun`: the right carrying it
+        (or, given `right`, gripping there as if it were a gun's grip: a
+        bolt's handle, say), the left at (wrist, fwd, back)."""
+        hand = self.right_for(gun if right is None else right)
+        for side, m in (("R", hand), ("L", self.left_for(*left)), ("gun", gun @ self.gun_rest.inverted() @ self.gun_bone)):
             e = self.targets[side]
             e.matrix_world = m
             e.keyframe_insert("location", frame=frame)

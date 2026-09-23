@@ -322,8 +322,17 @@ pub fn alive(world: &mut World) -> usize {
 
 /// The nearest Shambler along a ray within `max`: which, how far, the head.
 pub fn raycast(world: &mut World, from: Vec3, dir: Vec3, max: f64) -> Option<(Entity, f64, bool)> {
+    raycast_past(world, from, dir, max, &[])
+}
+
+/// The nearest Shambler along a ray within `max`, but for those `past`
+/// (the ones a round has already gone through).
+pub fn raycast_past(world: &mut World, from: Vec3, dir: Vec3, max: f64, past: &[Entity]) -> Option<(Entity, f64, bool)> {
     let mut best = None;
     for (e, f) in world.query::<(Entity, &Figure)>().iter(world) {
+        if past.contains(&e) {
+            continue;
+        }
         if let Some((t, head)) = f.ray(from, dir, max)
             && best.is_none_or(|(_, b, _)| t < b)
         {

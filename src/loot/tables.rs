@@ -20,14 +20,16 @@ pub enum Source {
     Shelf,
     /// A store's till counter.
     Register,
-    /// At a farm or a hunter's cabin: long guns, shells.
+    /// In a farmhouse's den: long guns, shells; in a hunter's cabin, the
+    /// hunter's own, a rifle likelier than not.
     GunCabinet,
+    HunterCabinet,
     /// On one of the dead, sometimes.
     Corpse,
 }
 
 /// Every container there is (not the dead).
-pub const CONTAINERS: [Source; 11] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet];
+pub const CONTAINERS: [Source; 12] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet, Source::HunterCabinet];
 
 /// One line of a table: what, how likely against the rest, how many.
 type Line = (Kind, u32, (u32, u32));
@@ -83,6 +85,8 @@ const CAGE: &[Line] = &[
     (Kind::GoldBar, 6, (1, 1)),
     (Kind::Shotgun, 5, (1, 1)),
     (Kind::Shells, 14, (8, 16)),
+    (Kind::Rifle, 4, (1, 1)),
+    (Kind::RifleRounds, 10, (6, 12)),
 ];
 
 const FRIDGE: &[Line] = &[
@@ -152,13 +156,24 @@ const CORPSE: &[Line] = &[
     (Kind::Shells, 10, (2, 5)),
 ];
 
-// A farm's or a cabin's: the long gun that was kept there, likely as not.
+// A farmhouse's: the long gun that was kept there, likely as not.
 const GUN_CABINET: &[Line] = &[
     (Kind::Shotgun, 30, (1, 1)),
     (Kind::Shells, 40, (5, 12)),
     (Kind::Rounds, 20, (10, 20)),
     (Kind::Pistol, 10, (1, 1)),
     (Kind::Cash, 8, (1, 2)),
+    (Kind::Rifle, 4, (1, 1)),
+    (Kind::RifleRounds, 8, (4, 10)),
+];
+
+// The hunter's: their rifle, and what it takes.
+const HUNTER_CABINET: &[Line] = &[
+    (Kind::Rifle, 40, (1, 1)),
+    (Kind::RifleRounds, 45, (6, 14)),
+    (Kind::Shells, 15, (5, 10)),
+    (Kind::Shotgun, 8, (1, 1)),
+    (Kind::Cash, 6, (1, 3)),
 ];
 
 /// How one of the dead carries something at all.
@@ -178,6 +193,7 @@ impl Source {
             Source::Shelf => SHELF,
             Source::Register => REGISTER,
             Source::GunCabinet => GUN_CABINET,
+            Source::HunterCabinet => HUNTER_CABINET,
             Source::Corpse => CORPSE,
         }
     }
@@ -201,7 +217,7 @@ impl Source {
             Source::Wardrobe => (1, 2),
             Source::Shelf => (1, 3),
             Source::Register => (1, 1),
-            Source::GunCabinet => (2, 3),
+            Source::GunCabinet | Source::HunterCabinet => (2, 3),
             Source::Corpse => (1, 1),
         }
     }
@@ -212,14 +228,14 @@ impl Source {
             Source::Crate => (4, 3),
             Source::Locker => (3, 4),
             Source::Car => (6, 3),
-            Source::Cage => (4, 4),
+            Source::Cage => (5, 4),
             Source::Fridge => (3, 4),
             Source::Cabinet => (4, 2),
             Source::Desk => (4, 2),
             Source::Wardrobe => (4, 4),
             Source::Shelf => (5, 3),
             Source::Register => (3, 2),
-            Source::GunCabinet => (5, 3),
+            Source::GunCabinet | Source::HunterCabinet => (5, 3),
             Source::Corpse => (2, 2),
         }
     }
@@ -237,6 +253,7 @@ impl Source {
             Source::Shelf => "STORE SHELF",
             Source::Register => "CASH REGISTER",
             Source::GunCabinet => "GUN CABINET",
+            Source::HunterCabinet => "HUNTER'S GUN CABINET",
             Source::Corpse => "REMAINS",
         }
     }
@@ -254,7 +271,7 @@ impl Source {
             Source::Wardrobe => 2.0,
             Source::Shelf => 2.0,
             Source::Register => 1.5,
-            Source::GunCabinet => 2.0,
+            Source::GunCabinet | Source::HunterCabinet => 2.0,
             Source::Corpse => 0.0,
         }
     }

@@ -261,7 +261,8 @@ fn farms_and_cabins_are_built_on_the_level_with_a_gun_cabinet() {
             // A farmhouse's den and a cabin's have their gun cabinet in.
             if b.plan.kind != Plan::Barn {
                 let inside = building::furnish::furnish(b, &mut Dice(b.seed.rotate_left(9) | 1));
-                assert!(inside.containers.iter().any(|(s, _)| *s == Source::GunCabinet), "seed {seed}: no gun cabinet in the {:?}", b.plan.kind);
+                let want = if b.plan.kind == Plan::Cabin { Source::HunterCabinet } else { Source::GunCabinet };
+                assert!(inside.containers.iter().any(|(s, _)| *s == want), "seed {seed}: no {want:?} in the {:?}", b.plan.kind);
             }
         }
         // And none left out in the open.

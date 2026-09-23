@@ -134,6 +134,35 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 slide + click + sine(t, 260.0) * env(t, 0.002, 0.03) * 0.4
             })
         }
+        Sfx::RifleShot => {
+            // A sharp, high crack, a hard thump, and a long echo off the
+            // hills that rolls back twice.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(1.6, 1.0, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 5200.0, 0.5).2 * env(t, 0.0003, 0.006);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 180.0, 50.0, 0.03)).sin() * env(t, 0.001, 0.08);
+                let echo = |at: f32| env((t - at).max(0.0), 0.02, 0.25) * f32::from(t > at);
+                let roll = tail.run(x, 520.0, 1.0).0 * (env(t, 0.004, 0.2) + 0.5 * echo(0.45) + 0.25 * echo(0.9));
+                (crack * 1.2 + thump * 1.1 + roll * 2.8).tanh()
+            })
+        }
+        Sfx::Bolt => {
+            // Up, back, forward, down: four clicks and a slide either way.
+            let (mut slide, mut click) = (Svf::default(), Svf::default());
+            render(0.45, 0.65, |t, n| {
+                let x = n.next();
+                let mut out = 0.0;
+                for (at, low) in [(0.0, 300.0), (0.1, 220.0), (0.24, 200.0), (0.33, 260.0)] {
+                    let s = t - at;
+                    if s > 0.0 {
+                        out += click.run(x, 2800.0, 0.3).1 * env(s, 0.0003, 0.008) + sine(s, low) * env(s, 0.001, 0.02) * 0.4;
+                    }
+                }
+                let sliding = (t > 0.1 && t < 0.2) || (t > 0.24 && t < 0.3);
+                out + slide.run(x, 1400.0, 0.7).1 * 0.25 * f32::from(sliding)
+            })
+        }
         Sfx::DryFire => {
             let mut f = Svf::default();
             render(0.06, 0.45, |t, n| f.run(n.next(), 4000.0, 0.3).1 * env(t, 0.0003, 0.004) + sine(t, 2300.0) * env(t, 0.0005, 0.008) * 0.4)

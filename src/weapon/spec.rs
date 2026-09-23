@@ -14,10 +14,11 @@ pub enum Weapon {
     Fists,
     Pistol,
     Shotgun,
+    Rifle,
 }
 
 impl Weapon {
-    pub const ALL: [Weapon; 3] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun];
+    pub const ALL: [Weapon; 4] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle];
 }
 
 /// How far off true a round may fly, degrees: standing still, moving,
@@ -71,6 +72,10 @@ pub struct Shot {
     /// close enough to hurt in full sends it stumbling.
     pub shove: f64,
     pub stumble: bool,
+    /// Going on through one of the dead into the next behind it: the
+    /// share of its damage each next one takes (none: it stops in the
+    /// first).
+    pub pierce: &'static [f64],
     /// Its spread from the hip, and down the sights.
     pub hip: Spread,
     pub aimed: Spread,
@@ -78,6 +83,8 @@ pub struct Shot {
     /// in down them (its field of view, a share of the usual).
     pub aim_time: f64,
     pub zoom: f64,
+    /// Aimed through a scope: the view all lens, the gun gone from it.
+    pub scope: bool,
     /// The quickest it fires again, seconds (none: as fast as the trigger
     /// is pulled), and how long the Fire clip runs.
     pub gap: f64,
@@ -94,10 +101,11 @@ pub struct Shot {
 pub enum Reload {
     /// The magazine out and a full one in: how long, and what happens when.
     Magazine { time: f64, marks: &'static [(f64, Act)] },
-    /// A round at a time: getting ready; each round (in at `insert_at`,
-    /// over and over while there's room and rounds); and done, with what
-    /// happens then. The trigger stops it to fire what's in.
-    Rounds { start: f64, each: f64, insert_at: f64, end: f64, end_marks: &'static [(f64, Act)] },
+    /// A round at a time: getting ready, and what happens then; each round
+    /// (in at `insert_at`, over and over while there's room and rounds);
+    /// and done, with what happens then. The trigger stops it to fire
+    /// what's in.
+    Rounds { start: f64, start_marks: &'static [(f64, Act)], each: f64, insert_at: f64, end: f64, end_marks: &'static [(f64, Act)] },
 }
 
 /// A blow with it (the quick bash, or a melee weapon's swing).
@@ -160,10 +168,12 @@ const PISTOL: Spec = Spec {
         heard: crate::zombie::brain::HEARING,
         shove: 0.6,
         stumble: false,
+        pierce: &[],
         hip: Spread { still: 1.5, moving: 2.2, air: 4.0 },
         aimed: Spread { still: 0.0, moving: 0.5, air: 3.0 },
         aim_time: 0.18,
         zoom: 0.8,
+        scope: false,
         gap: 0.0,
         time: 0.2,
         kick: 1.5,
@@ -192,10 +202,12 @@ const SHOTGUN: Spec = Spec {
         heard: 130.0,
         shove: 1.3,
         stumble: true,
+        pierce: &[],
         hip: Spread { still: 5.0, moving: 6.0, air: 8.0 },
         aimed: Spread { still: 3.5, moving: 4.5, air: 7.0 },
         aim_time: 0.25,
         zoom: 0.85,
+        scope: false,
         // The pump is racked before it fires again.
         gap: 0.8,
         time: 0.8,
@@ -203,11 +215,47 @@ const SHOTGUN: Spec = Spec {
         kick_side: 2.0,
         marks: &[(10.0 / 30.0, Act::Pump)],
     }),
-    reload: Some(Reload::Rounds { start: 0.4, each: 0.55, insert_at: 10.0 / 30.0, end: 0.5, end_marks: &[(9.0 / 30.0, Act::Pump)] }),
+    reload: Some(Reload::Rounds { start: 0.4, start_marks: &[], each: 0.55, insert_at: 10.0 / 30.0, end: 0.5, end_marks: &[(9.0 / 30.0, Act::Pump)] }),
     // The shove with the gun's side lands on frame 8.
     bash: Bash { time: 0.6, swing_at: 0.1, strike_at: 8.0 / 30.0, damage: 55.0, reach: 1.9 },
     draw: 0.45,
     holster: 0.35,
+};
+
+const RIFLE: Spec = Spec {
+    name: "HUNTING RIFLE",
+    slot: Some(Slot::Primary),
+    model: "rifle",
+    mag: 5,
+    ammo: Some(Kind::RifleRounds),
+    shot: Some(Shot {
+        // One to anywhere drops one of the dead; the round goes on through
+        // two more, weaker.
+        damage: 160.0,
+        pellets: 1,
+        falloff: None,
+        range: 400.0,
+        sound: Sfx::RifleShot,
+        heard: 160.0,
+        shove: 3.0,
+        stumble: true,
+        pierce: &[0.7, 0.4],
+        hip: Spread { still: 3.0, moving: 5.0, air: 8.0 },
+        aimed: Spread { still: 0.0, moving: 1.5, air: 5.0 },
+        aim_time: 0.35,
+        zoom: 0.25,
+        scope: true,
+        // The bolt is worked before it fires again.
+        gap: 1.1,
+        time: 1.1,
+        kick: 6.0,
+        kick_side: 1.5,
+        marks: &[(14.0 / 30.0, Act::Bolt)],
+    }),
+    reload: Some(Reload::Rounds { start: 0.5, start_marks: &[(6.0 / 30.0, Act::Bolt)], each: 0.6, insert_at: 10.0 / 30.0, end: 0.55, end_marks: &[(9.0 / 30.0, Act::Bolt)] }),
+    bash: Bash { time: 0.6, swing_at: 0.1, strike_at: 8.0 / 30.0, damage: 55.0, reach: 1.9 },
+    draw: 0.5,
+    holster: 0.4,
 };
 
 impl Weapon {
@@ -216,6 +264,7 @@ impl Weapon {
             Weapon::Fists => &FISTS,
             Weapon::Pistol => &PISTOL,
             Weapon::Shotgun => &SHOTGUN,
+            Weapon::Rifle => &RIFLE,
         }
     }
 }

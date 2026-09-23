@@ -15,6 +15,9 @@ pub use spec::{Falloff, Reload, Spec, Weapon};
 
 use crate::loot::bag::Slot;
 
+/// How far up the sights are before a scope's view comes in.
+const SCOPE_FROM: f64 = 0.8;
+
 /// Which clip shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Clip {
@@ -62,8 +65,10 @@ pub enum Act {
     MagOut,
     MagIn,
     SlideRack,
-    /// A pump racked back and home; a round pushed into a tube.
+    /// A pump racked back and home; a bolt worked; a round (a shell)
+    /// pushed in.
     Pump,
+    Bolt,
     ShellIn,
     Swing,
     Strike,
@@ -116,6 +121,12 @@ impl Hands {
     /// How far the sights are up, 0–1, eased in and out.
     pub fn aim(&self) -> f64 {
         self.aim * self.aim * (3.0 - 2.0 * self.aim)
+    }
+
+    /// How far into the scope's view, 0–1 (none but for a scoped gun, the
+    /// last of the way up).
+    pub fn scoped(&self) -> f64 {
+        if self.spec().shot.is_some_and(|s| s.scope) { ((self.aim() - SCOPE_FROM) / (1.0 - SCOPE_FROM)).clamp(0.0, 1.0) } else { 0.0 }
     }
 
     /// The clip showing and how far into it.
@@ -219,7 +230,12 @@ impl Hands {
                     self.start(Clip::Idle);
                 }
             }
-            (Clip::ReloadStart, Some(Reload::Rounds { start, .. })) if self.t >= start => self.start(Clip::ReloadShell),
+            (Clip::ReloadStart, Some(Reload::Rounds { start, start_marks, .. })) => {
+                acts.extend(marks(start_marks));
+                if self.t >= start {
+                    self.start(Clip::ReloadShell);
+                }
+            }
             (Clip::ReloadShell, Some(Reload::Rounds { each, insert_at, .. })) => {
                 if crossed(insert_at) && room(self) {
                     self.mag += 1;

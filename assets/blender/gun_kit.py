@@ -1,6 +1,6 @@
-"""What every gun in the hands is built from (`pistol.py`, `shotgun.py`):
-its frame in a right hand, boxes in that frame weighted to a bone, and the
-muzzle flash. A gun's frame: x right, y down the barrel, z up, its origin
+"""What every gun in the hands is built from (`pistol.py`, `shotgun.py`,
+`rifle.py`): its frame in a right hand, boxes in that frame weighted to a
+bone, cylinders (rounds, shells) weighted to one, and the muzzle flash. A gun's frame: x right, y down the barrel, z up, its origin
 where the grip sits in the palm.
 """
 
@@ -65,3 +65,16 @@ def flash(b, to_rig, bone, muzzle, size=1.0):
             f = b.bm.faces.new(verts)
             for loop in f.loops:
                 loop[b.col] = (*FLASH, 0.5)
+
+
+def cylinder(b, centre, axis, radius, length, colour, bone):
+    """A cylinder of eight sides along `axis` about `centre` (rig space),
+    weighted whole to `bone`."""
+    m = Matrix.Translation(centre) @ axis.to_track_quat("Z", "Y").to_matrix().to_4x4()
+    made = bmesh.ops.create_cone(b.bm, cap_ends=True, segments=8, radius1=radius, radius2=radius, depth=length, matrix=m)
+    group = b.group(bone)
+    for v in made["verts"]:
+        v[b.deform][group] = 1.0
+    for f in {f for v in made["verts"] for f in v.link_faces}:
+        for loop in f.loops:
+            loop[b.col] = (*colour, 1.0)

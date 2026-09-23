@@ -289,3 +289,43 @@ fn pellets_hit_in_full_up_close_and_fade_with_distance() {
     let shot = Weapon::Shotgun.spec().shot.unwrap();
     assert!(shot.damage * f64::from(shot.pellets) >= crate::zombie::brain::HP);
 }
+
+#[test]
+fn the_rifle_works_its_bolt_after_a_shot_and_to_load() {
+    let mut h = Hands { spare: 10, ..Hands::default() };
+    h.take_up(Some(Slot::Primary), Weapon::Rifle, 5);
+    idle(&mut h);
+    assert_eq!(h.update(FIRE, DT), vec![Act::Shoot]);
+    let acts = run(&mut h, FIRE, 60);
+    assert_eq!(acts, vec![Act::Bolt], "the bolt worked, no second shot inside a second");
+    // Emptied a little, a reload opens the bolt, loads, closes it.
+    h.mag = 3;
+    idle(&mut h);
+    let acts = run(&mut h, RELOAD, 400);
+    assert_eq!(acts.first(), Some(&Act::Bolt), "{acts:?}");
+    assert_eq!(acts.iter().filter(|a| **a == Act::ShellIn).count(), 2);
+    assert_eq!(acts.last(), Some(&Act::Bolt));
+    assert_eq!((h.mag, h.spare), (5, 8));
+}
+
+#[test]
+fn only_a_scoped_gun_goes_to_its_scope_and_only_at_the_last() {
+    let mut r = Hands { spare: 10, ..Hands::default() };
+    r.take_up(Some(Slot::Primary), Weapon::Rifle, 5);
+    idle(&mut r);
+    let mut seen_half = false;
+    for _ in 0..60 {
+        r.update(AIM, DT);
+        if r.aim() > 0.5 && r.aim() < 0.75 {
+            seen_half = true;
+            assert_eq!(r.scoped(), 0.0, "not yet, halfway up");
+        }
+    }
+    assert!(seen_half);
+    assert_eq!(r.scoped(), 1.0, "all the way in");
+    let mut p = pistol(10);
+    for _ in 0..60 {
+        p.update(AIM, DT);
+    }
+    assert_eq!((p.aim(), p.scoped()), (1.0, 0.0));
+}

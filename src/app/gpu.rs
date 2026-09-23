@@ -19,6 +19,9 @@ use crate::weapon::Weapon;
 use crate::world::{Bounds, Look, Model, Placed};
 use crate::zombie::{self, figure::Figure};
 
+/// How far into a scope's view before the gun is no longer drawn.
+const SCOPE_HIDES: f64 = 0.35;
+
 impl AppHost for DeadSignal {
     fn init_gpu(&mut self, gpu: &Gpu, format: wgpu::TextureFormat, images: &mut Images) {
         let mut renderer = Renderer::new(gpu, format);
@@ -73,7 +76,9 @@ impl AppHost for DeadSignal {
         if self.screen == Screen::Run
             && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
         {
+            // (Looking through a scope, the gun's out of the way.)
             if self.run.ending.is_none()
+                && self.combat.hands.scoped() < SCOPE_HIDES
                 && let Some(draw) = vm.draw(&view, &self.combat.hands, time, self.run.lowered())
             {
                 renderer.draw_viewmodel(draw);

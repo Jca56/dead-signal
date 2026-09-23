@@ -91,7 +91,7 @@ impl Thing {
                 Source::Shelf => (1.8, 0.6, true),
                 Source::Register => (2.06, 0.86, false),
                 Source::Locker => (0.6, 0.55, true),
-                Source::GunCabinet => (0.84, 0.5, true),
+                Source::GunCabinet | Source::HunterCabinet => (0.84, 0.5, true),
                 _ => (1.0, 0.7, false),
             },
         }
@@ -122,7 +122,7 @@ impl Rect {
 
 /// What goes in a room of each use: what must, then what might (and how
 /// likely).
-fn program(use_: Use, room: &Room) -> Vec<(Thing, f64)> {
+fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
     use Furn::*;
     let f = |x: Furn, p: f64| (Thing::Furn(x), p);
     let b = |s: Source, p: f64| (Thing::Box(s), p);
@@ -136,7 +136,7 @@ fn program(use_: Use, room: &Room) -> Vec<(Thing, f64)> {
         Use::Shop => vec![b(Source::Register, 1.0)],
         Use::Hall => Vec::new(),
         // The gun cabinet first: it has the pick of the walls.
-        Use::Den => vec![b(Source::GunCabinet, 1.0), f(WoodStove, 0.9), f(Armchair, 0.8), f(Table, 0.6), f(Bookcase, 0.5), b(Source::Cabinet, 0.5), f(Sofa, 0.35)],
+        Use::Den => vec![b(if kind == Kind::Cabin { Source::HunterCabinet } else { Source::GunCabinet }, 1.0), f(WoodStove, 0.9), f(Armchair, 0.8), f(Table, 0.6), f(Bookcase, 0.5), b(Source::Cabinet, 0.5), f(Sofa, 0.35)],
         Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::Locker, 0.6), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
     }
 }
@@ -204,7 +204,7 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
                 x += 3;
             }
         }
-        for (thing, chance) in program(room.use_, room) {
+        for (thing, chance) in program(room.use_, room, b.plan.kind) {
             if dice.unit() > chance {
                 continue;
             }
@@ -212,7 +212,7 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
             // Against a wall, facing into the room: a few tries. The gun
             // cabinet (a den's reason to be looked in) gets more, and at the
             // last may stand across a window.
-            let tries = if thing == Thing::Box(Source::GunCabinet) { 64 } else { 24 };
+            let tries = if matches!(thing, Thing::Box(Source::GunCabinet | Source::HunterCabinet)) { 64 } else { 24 };
             for k in 0..tries {
                 let tall = tall && k < 40;
                 let side = dice.next() % 4;

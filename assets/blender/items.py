@@ -2,7 +2,8 @@
 ITEM_Ammo), food and water (ITEM_Beans, ITEM_Water), valuables (ITEM_Pills,
 ITEM_Cash, ITEM_Watch, ITEM_Ring, ITEM_Chain, ITEM_Radio, ITEM_Battery,
 ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key), the weapons
-(ITEM_Pistol, ITEM_Shotgun) and shotgun shells (ITEM_Shells). Each its own object
+(ITEM_Pistol, ITEM_Shotgun, ITEM_Rifle) and their rounds (ITEM_Shells,
+ITEM_RifleRounds). Each its own object
 sitting on its origin, for the game to set down wherever it likes and to
 draw its icon from (seen from the front, +Y, a little above: an item's
 long side runs along X, a tall one stands up Z).
@@ -314,6 +315,50 @@ def shells():
     p.finish()
 
 
+SCOPE_BLACK = (0.09, 0.09, 0.10)
+LENS = (0.22, 0.42, 0.52)
+COPPER = (0.66, 0.36, 0.20)
+
+
+def rifle():
+    """A scoped bolt-action rifle lying on its side, muzzle along +X, the
+    scope away from the eye (up, in the gun's frame, is -Y here)."""
+    p = Part("ITEM_Rifle")
+    z = 0.024
+    # (Each box by its middle and its size.) The stock, the wrist, the
+    # receiver, the forestock, the barrel.
+    p.box((-0.40, 0.03, z), (0.36, 0.08, 0.044), WALNUT, turn=0.1)
+    p.box((-0.585, 0.045, z), (0.02, 0.11, 0.046), BLACK, turn=0.1)
+    p.box((-0.15, 0.01, z), (0.14, 0.05, 0.04), WALNUT, turn=0.18)
+    p.box((0.02, 0.0, z), (0.22, 0.05, 0.042), BLUED)
+    p.box((0.32, 0.012, z), (0.36, 0.045, 0.044), WALNUT)
+    p.box((0.62, -0.012, z), (0.62, 0.022, 0.024), BLUED)
+    # The bolt's handle, out and down.
+    p.box((-0.03, 0.04, z + 0.01), (0.014, 0.06, 0.012), SILVER)
+    # The scope on its rings, its lens at the front.
+    for x in (-0.05, 0.08):
+        p.box((x, -0.04, z), (0.02, 0.03, 0.03), BLACK)
+    p.box((0.02, -0.07, z), (0.34, 0.032, 0.034), SCOPE_BLACK)
+    p.box((0.19, -0.07, z), (0.06, 0.046, 0.046), SCOPE_BLACK)
+    p.box((0.222, -0.07, z), (0.004, 0.038, 0.038), LENS)
+    p.finish()
+
+
+def rifle_rounds():
+    """A small box, lid off, rounds standing in two rows: brass, copper
+    tips."""
+    p = Part("ITEM_RifleRounds")
+    w, d, h = 0.14, 0.07, 0.06
+    p.box((0, 0, h / 2), (w, d, h), CARTON_DARK)
+    p.box((0, 0, h * 0.5), (w + 0.004, d + 0.004, 0.022), LABEL)
+    for row in (-0.016, 0.016):
+        for i in range(5):
+            x = -0.052 + i * 0.026
+            p.box((x, row, h + 0.02), (0.012, 0.012, 0.04), BRASS)
+            p.box((x, row, h + 0.046), (0.008, 0.008, 0.014), COPPER)
+    p.finish()
+
+
 def gold_bar():
     p = Part("ITEM_GoldBar")
     m = Matrix.Translation((0, 0, 0.03)) @ Matrix.Diagonal((0.1, 0.045, 0.03, 1.0))
@@ -345,6 +390,8 @@ def main():
     pistol()
     shotgun()
     shells()
+    rifle()
+    rifle_rounds()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"items: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")
 

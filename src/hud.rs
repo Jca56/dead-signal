@@ -17,8 +17,10 @@ pub struct Hud<'a> {
     /// What's in hand, and its rounds (loaded, spare) if it's a gun.
     pub weapon: &'a str,
     pub rounds: Option<(u32, u32)>,
-    /// How far down the sights, 0–1 (the dot gives way to them).
+    /// How far down the sights, 0–1 (the dot gives way to them), and how
+    /// far into a scope's view.
     pub aim: f64,
+    pub scope: f64,
     pub marker: Option<Marker>,
     /// A blow's red at the edges, 0–1.
     pub hurt: f64,
@@ -50,6 +52,9 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     let mid = screen.center();
     let low = h.hp < LOW_HP;
     let pulse = 0.5 + 0.5 * (h.time * 5.5).sin();
+    if h.scope > 0.0 {
+        scope(ui, screen, h.scope);
+    }
     let red = if low { h.hurt.max(0.3 + 0.25 * pulse) } else { h.hurt };
     if red > 0.0 {
         vignette(ui, screen, red);
@@ -149,6 +154,44 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
         ui.text_at(&line, &kit, Vec2::new(right - lw, y), screen.width(), line_col);
         ui.text_at(key, &kit, Vec2::new(right - lw - kw - 15.0 * s, y), screen.width(), key_col);
         y -= kit_h + 8.0 * s;
+    }
+}
+
+/// The view through a scope, `amount` (0–1) of the way in: a round lens,
+/// black all round it, its rim, and a duplex crosshair (thick posts in
+/// from the rim, thin lines across the middle).
+fn scope(ui: &mut Ui, screen: Rect, amount: f64) {
+    let s = ui.m.scale;
+    let centre = screen.center();
+    let r = screen.height().min(screen.width()) * 0.46;
+    let black = Color::rgba(0.0, 0.0, 0.0, amount.min(1.0));
+    // Black round the lens: a band at a time, either side of it.
+    let band = 3.0 * s;
+    let mut y = screen.min.y;
+    while y < screen.max.y {
+        let next = (y + band).min(screen.max.y);
+        let dy = (y + next) * 0.5 - centre.y;
+        if dy.abs() >= r {
+            ui.draw.rect(Rect::new(Vec2::new(screen.min.x, y), Vec2::new(screen.max.x, next)), black);
+        } else {
+            let half = (r * r - dy * dy).sqrt();
+            ui.draw.rect(Rect::new(Vec2::new(screen.min.x, y), Vec2::new(centre.x - half + 1.0, next)), black);
+            ui.draw.rect(Rect::new(Vec2::new(centre.x + half - 1.0, y), Vec2::new(screen.max.x, next)), black);
+        }
+        y = next;
+    }
+    // The rim, a dark ring just inside.
+    let rim: Vec<Vec2> = (0..=96).map(|k| {
+        let a = std::f64::consts::TAU * f64::from(k) / 96.0;
+        centre + Vec2::new(a.cos(), a.sin()) * (r - 6.0 * s)
+    }).collect();
+    ui.draw.polyline(&rim, 14.0 * s, Color::rgba(0.0, 0.0, 0.0, 0.6 * amount), false);
+    // The crosshair.
+    let ink = Color::rgba(0.02, 0.02, 0.02, amount);
+    let inner = r * 0.22;
+    for d in [Vec2::new(1.0, 0.0), Vec2::new(-1.0, 0.0), Vec2::new(0.0, 1.0), Vec2::new(0.0, -1.0)] {
+        ui.draw.line(centre + d * inner, centre + d * r, 9.0 * s, ink);
+        ui.draw.line(centre, centre + d * inner, 2.5 * s, ink);
     }
 }
 

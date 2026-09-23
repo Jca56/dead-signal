@@ -64,9 +64,11 @@ pub enum Kind {
     Pistol,
     Shotgun,
     Shells,
+    Rifle,
+    RifleRounds,
 }
 
-pub const ALL: [Kind; 18] = [
+pub const ALL: [Kind; 20] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -85,6 +87,8 @@ pub const ALL: [Kind; 18] = [
     Kind::Pistol,
     Kind::Shotgun,
     Kind::Shells,
+    Kind::Rifle,
+    Kind::RifleRounds,
 ];
 
 impl Kind {
@@ -110,6 +114,8 @@ impl Kind {
             Kind::Pistol => "pistol",
             Kind::Shotgun => "shotgun",
             Kind::Shells => "shells_12ga",
+            Kind::Rifle => "hunting_rifle",
+            Kind::RifleRounds => "rounds_308",
         }
     }
 
@@ -122,6 +128,7 @@ impl Kind {
         match self {
             Kind::Pistol => Some(Weapon::Pistol),
             Kind::Shotgun => Some(Weapon::Shotgun),
+            Kind::Rifle => Some(Weapon::Rifle),
             _ => None,
         }
     }
@@ -164,6 +171,8 @@ impl Kind {
             Kind::Pistol => d("PISTOL", (2, 1), 1, Uncommon, 150, "ITEM_Pistol"),
             Kind::Shotgun => d("SHOTGUN", (4, 1), 1, Rare, 320, "ITEM_Shotgun"),
             Kind::Shells => d("12GA SHELLS", (1, 1), 20, Common, 4, "ITEM_Shells"),
+            Kind::Rifle => d("HUNTING RIFLE", (5, 1), 1, Epic, 480, "ITEM_Rifle"),
+            Kind::RifleRounds => d(".308 ROUNDS", (1, 1), 20, Uncommon, 8, "ITEM_RifleRounds"),
         }
     }
 }
@@ -291,6 +300,7 @@ mod tests {
                 (Source::Shelf, "shelf"),
                 (Source::Register, "register"),
                 (Source::GunCabinet, "gun cabinet"),
+                (Source::HunterCabinet, "hunter's cabinet"),
                 (Source::Corpse, "zombies"),
             ]
                 .iter()

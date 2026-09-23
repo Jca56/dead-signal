@@ -25,12 +25,11 @@ reach it: the arms were made for a pistol's guard):
 
 import math
 
-import bmesh
 import bpy
-from mathutils import Matrix, Vector
+from mathutils import Vector
 
 import poses
-from gun_kit import box, flash, frame_matrix, gun_frame
+from gun_kit import box, cylinder, flash, frame_matrix, gun_frame
 
 WALNUT = (0.40, 0.23, 0.12)
 WALNUT_DARK = (0.28, 0.16, 0.08)
@@ -56,19 +55,6 @@ AIM_DISTANCE = 0.14
 # The shoulders, rolled forward to reach the forend (camera space).
 LEFT_SHOULDER = Vector((0.06, 0.13, 0.02))
 RIGHT_SHOULDER = Vector((0.0, 0.05, 0.0))
-
-
-def cylinder(b, centre, axis, radius, length, colour, bone):
-    """A cylinder of eight sides along `axis` about `centre` (rig space),
-    weighted whole to `bone`."""
-    m = Matrix.Translation(centre) @ axis.to_track_quat("Z", "Y").to_matrix().to_4x4()
-    made = bmesh.ops.create_cone(b.bm, cap_ends=True, segments=8, radius1=radius, radius2=radius, depth=length, matrix=m)
-    group = b.group(bone)
-    for v in made["verts"]:
-        v[b.deform][group] = 1.0
-    for f in {f for v in made["verts"] for f in v.link_faces}:
-        for loop in f.loops:
-            loop[b.col] = (*colour, 1.0)
 
 
 def build(b, wrist, fwd, back, across, hand, left=None):
