@@ -37,11 +37,33 @@ pub struct View {
     pub stair: f64,
     /// 0–1: how much of the sprint's wider view is on.
     pub sprint_amount: f64,
+    /// Recoil: how far a shot has kicked the aim off where the player
+    /// holds it (yaw, pitch, radians); it settles back.
+    pub kick: (f64, f64),
+    /// A shake of the head (a blow landing), metres, and its clock.
+    pub shake: f64,
+    shake_t: f64,
 }
 
 impl View {
     pub fn facing(yaw: f64) -> Self {
-        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, stair: 0.0, sprint_amount: 0.0 }
+        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, stair: 0.0, sprint_amount: 0.0, kick: (0.0, 0.0), shake: 0.0, shake_t: 0.0 }
+    }
+
+    /// Where the eye actually points: the held aim plus the recoil.
+    pub fn aim(&self) -> (f64, f64) {
+        (self.yaw + self.kick.0, (self.pitch + self.kick.1).clamp(-PITCH_LIMIT, PITCH_LIMIT))
+    }
+
+    /// Kick the aim up by `pitch` and aside by `yaw`, degrees.
+    pub fn recoil(&mut self, pitch: f64, yaw: f64) {
+        self.kick.0 += yaw.to_radians();
+        self.kick.1 += pitch.to_radians();
+    }
+
+    /// Shake the head by up to `metres`.
+    pub fn jolt(&mut self, metres: f64) {
+        self.shake = self.shake.max(metres);
     }
 
     /// Turn by raw mouse counts.
@@ -84,6 +106,12 @@ pub fn settle_view(view: &mut View, body: &mut Body, dt: f64) {
 
     let sprint = if body.sprinting && speed > WALK { 1.0 } else { 0.0 };
     view.sprint_amount += (sprint - view.sprint_amount) * (1.0 - (-8.0 * dt).exp());
+
+    // Recoil settles back within a quarter second; a shake dies faster.
+    let settle = (-9.0 * dt).exp();
+    view.kick = (view.kick.0 * settle, view.kick.1 * settle);
+    view.shake *= (-14.0 * dt).exp();
+    view.shake_t += dt;
 }
 
 /// Where the eye is: on the body (between its last two steps by `alpha`),
@@ -94,7 +122,9 @@ pub fn eye_position(view: &View, body: &Body, alpha: f64) -> Vec3 {
     let bob_x = view.bob_phase.cos() * 0.025 * view.bob_amount;
     let (s, c) = view.yaw.sin_cos();
     let right = Vec3::new(c, 0.0, -s);
-    feet + Vec3::new(0.0, view.eye + bob_y + view.dip + view.stair, 0.0) + right * bob_x
+    let t = view.shake_t;
+    let shake = Vec3::new((t * 53.0).sin(), (t * 47.0).sin(), (t * 41.0).sin()) * view.shake;
+    feet + Vec3::new(0.0, view.eye + bob_y + view.dip + view.stair, 0.0) + right * bob_x + shake
 }
 
 fn settle_views(clock: Res<Clock>, mut players: Query<(&mut View, &mut Body), With<Player>>) {
@@ -128,6 +158,19 @@ mod tests {
         }
         assert!(low < -0.05 && low > -0.2, "dipped {low}");
         assert!(view.dip.abs() < 0.005, "back at rest, {}", view.dip);
+    }
+
+    #[test]
+    fn recoil_kicks_up_and_settles() {
+        let mut view = View::facing(0.0);
+        let mut body = Body::at(Vec3::ZERO);
+        view.recoil(1.5, 0.3);
+        assert!((view.aim().1 - 1.5f64.to_radians()).abs() < 1e-12);
+        for _ in 0..30 {
+            settle_view(&mut view, &mut body, DT);
+        }
+        assert!(view.aim().1.abs() < 0.02f64.to_radians(), "settled at {}", view.aim().1.to_degrees());
+        assert_eq!(view.pitch, 0.0, "the held aim never moved");
     }
 
     #[test]

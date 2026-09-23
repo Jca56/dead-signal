@@ -7,9 +7,10 @@ use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Vec3};
 
 use crate::assets::Prop;
-use crate::collide::Solids;
+use crate::collide::{Solids, Surface};
 use crate::head::{self, View};
 use crate::player::{self, Body, Controls, Player};
+use crate::targets::{self, Kind, Target};
 use crate::render::MeshId;
 
 /// Where a thing is.
@@ -64,6 +65,27 @@ impl Ground {
     }
 }
 
+/// What a scene object is made of, by its name.
+fn surface_of(name: &str) -> Surface {
+    match name {
+        "Ground" => Surface::Dirt,
+        "COL_Wood" | "SOLID_Ramps" | "SOLID_Crates" | "SOLID_DummyStands" => Surface::Wood,
+        "COL_Metal" | "SOLID_Gap" | "SOLID_RangeFrames" => Surface::Metal,
+        _ => Surface::Stone,
+    }
+}
+
+/// Which kind of target a scene object is, by its name.
+fn target_kind(name: &str) -> Option<Kind> {
+    if name.starts_with("TARGET_Dummy") {
+        Some(Kind::Dummy)
+    } else if name.starts_with("TARGET_Plate") {
+        Some(Kind::Plate)
+    } else {
+        None
+    }
+}
+
 /// How dim a blinking light is between flashes.
 const BLINK_OFF: f32 = 0.04;
 
@@ -97,6 +119,7 @@ impl Game {
         frame.add_systems(blink);
         player::install(&mut fixed);
         head::install(&mut frame);
+        targets::install(&mut frame);
         Self { world, frame, fixed, owed: 0.0, simulating: false }
     }
 
@@ -144,13 +167,16 @@ impl Game {
         for p in props {
             let name = p.name.as_str();
             if name == "Ground" || name.starts_with("SOLID_") || name.starts_with("COL_") {
-                self.world.resource_mut::<Solid>().0.add(&p.triangles);
+                self.world.resource_mut::<Solid>().0.add_as(&p.triangles, surface_of(name));
             }
             if name == "Ground" {
                 self.world.resource_mut::<Ground>().0.extend(p.triangles.iter().copied());
             }
             let Some(mesh) = p.mesh else { continue };
             let mut e = self.world.spawn((Placed(p.model), Model(mesh), Look::default()));
+            if let Some(kind) = target_kind(name) {
+                e.insert(Target::new(kind, p.model));
+            }
             if name == "Beacon" {
                 // A failing light: two quick flashes, then a long dark.
                 e.insert((Blink { period: 3.2, lit: vec![(0.0, 0.18), (0.42, 0.55)] }, Look { emissive: 1.0, fog: 0.35 }));

@@ -50,6 +50,11 @@ fn vs(v: VertexIn) -> VertexOut {
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
+    // Alpha under one marks a light of its own (the muzzle flash): drawn
+    // at full strength, no shading.
+    if in.color.a < 0.75 {
+        return vec4<f32>(in.color.rgb * 1.6, 1.0);
+    }
     let n = normalize(in.normal);
     let hemi = mix(vm.ambient_ground.rgb, vm.ambient_sky.rgb, n.y * 0.5 + 0.5);
     let sun = vm.sun_color.rgb * max(dot(n, vm.sun_dir.xyz), 0.0);

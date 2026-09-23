@@ -43,6 +43,8 @@ struct Instance {
     model: [[f32; 4]; 4],
     /// x: emissive strength, y: how much fog it takes.
     look: [f32; 4],
+    /// Multiplies the mesh's colours.
+    tint: [f32; 4],
 }
 // SAFETY: plain `f32`s.
 unsafe impl Pod for Instance {}
@@ -64,6 +66,8 @@ pub struct Draw {
     pub model: Mat4,
     pub emissive: f32,
     pub fog: f32,
+    /// Linear RGB multiplied into the mesh's colours; white leaves them.
+    pub tint: [f32; 3],
 }
 
 /// The world's light and air.
@@ -167,7 +171,7 @@ impl Renderer {
         });
 
         let vertex_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x3];
-        let instance_attrs = wgpu::vertex_attr_array![4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4];
+        let instance_attrs = wgpu::vertex_attr_array![4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4];
         let world = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("world"),
             layout: Some(&pipeline_layout),
@@ -227,7 +231,7 @@ impl Renderer {
     /// Queue one thing for this frame.
     pub fn draw(&mut self, d: Draw) {
         let m = d.model.to_gpu();
-        self.frame.push((d.mesh, Instance { model: m, look: [d.emissive, d.fog, 0.0, 0.0] }));
+        self.frame.push((d.mesh, Instance { model: m, look: [d.emissive, d.fog, 0.0, 0.0], tint: [d.tint[0], d.tint[1], d.tint[2], 1.0] }));
     }
 
     /// Draw the queued things from `camera` into the window, before the UI.

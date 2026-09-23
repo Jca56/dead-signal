@@ -23,10 +23,15 @@ PAD_X = 0.0
 PAD_Y = -38.0
 PAD_HALF = 10.0
 # Where no tree or rock may stand: the pad, its access ramp to the east,
-# and a margin. Everything here is behind the title camera.
-CLEAR = (-13.0, 19.0, -52.0, -25.0)
+# the shooting lane running on east from it, and a margin. Everything here
+# is behind the title camera.
+CLEAR = [(-13.0, 19.0, -52.0, -25.0), (19.0, 66.0, -37.0, -26.0)]
+# The lane: shot along +X from the pad's east edge at y = LANE_Y, with
+# steel plates LANE_PLATES metres out.
+LANE_Y = PAD_Y + 6.0
+LANE_FROM = PAD_X + PAD_HALF
+LANE_PLATES = (10.0, 25.0, 50.0)
 
 
 def in_clearing(x, y):
-    x0, x1, y0, y1 = CLEAR
-    return x0 <= x <= x1 and y0 <= y <= y1
+    return any(x0 <= x <= x1 and y0 <= y <= y1 for x0, x1, y0, y1 in CLEAR)

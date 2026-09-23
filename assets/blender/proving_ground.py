@@ -27,7 +27,7 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from terrain import PAD_HALF, PAD_X, PAD_Y, height  # noqa: E402
+from terrain import LANE_FROM, LANE_PLATES, LANE_Y, PAD_HALF, PAD_X, PAD_Y, height  # noqa: E402
 
 OUT = os.path.join(HERE, "..", "models", "proving_ground.glb")
 
@@ -42,6 +42,10 @@ CRATE = (0.47, 0.37, 0.24)
 WALL = (0.45, 0.39, 0.34)
 ROOF = (0.24, 0.23, 0.22)
 RUST = (0.40, 0.23, 0.15)
+BURLAP = (0.55, 0.47, 0.33)
+POST = (0.33, 0.25, 0.17)
+STEEL = (0.52, 0.52, 0.50)
+FRAME = (0.20, 0.20, 0.21)
 
 # The pad's top: level with the highest ground under it, so no hill pokes up
 # through it.
@@ -61,12 +65,16 @@ def jitter(c, amount=0.05):
 
 
 class Part:
-    """One named object, closed solids only, a colour per face."""
+    """One named object, closed solids only, a colour per face. A `local`
+    part is built about its own origin and set down at `at`, turned `yaw`
+    degrees: something the game moves (a target that tips or swings)."""
 
-    def __init__(self, name):
+    def __init__(self, name, at=None, yaw=0.0):
         self.name = name
         self.bm = bmesh.new()
         self.col = self.bm.loops.layers.color.new("Col")
+        self.at = at
+        self.yaw = yaw
 
     def paint(self, faces, colour):
         for f in faces:
@@ -75,8 +83,10 @@ class Part:
                 loop[self.col] = (*c, 1.0)
 
     def block(self, lo, hi, colour):
-        """A box between pad-local corners `lo` and `hi`."""
-        a, b = world(*lo), world(*hi)
+        """A box between corners `lo` and `hi`: pad-local, or the part's
+        own for a local part."""
+        place = (lambda x, y, z: Vector((x, y, z))) if self.at is not None else world
+        a, b = place(*lo), place(*hi)
         centre = (a + b) / 2
         size = b - a
         m = Matrix.Translation(centre) @ Matrix.Diagonal((size.x / 2, size.y / 2, size.z / 2, 1.0))
@@ -111,6 +121,9 @@ class Part:
         attrs.render_color_index = attrs.find("Col")
         mesh.materials.append(material)
         obj = bpy.data.objects.new(self.name, mesh)
+        if self.at is not None:
+            obj.location = self.at
+            obj.rotation_euler = (0.0, 0.0, math.radians(self.yaw))
         bpy.context.scene.collection.objects.link(obj)
 
 
@@ -205,6 +218,57 @@ def building(p):
         p.block((x1, y1 - (k + 1) * 0.29, 0.0), (x1 + 1.2, y1 - k * 0.29, (k + 1) * rise), STEP)
 
 
+# ---- targets -------------------------------------------------------------------
+#
+# The game hit-tests these by the same numbers (src/targets.rs): keep them
+# in step.
+
+DUMMIES = ((6.0, -6.0, 0.0), (7.6, -8.6, 15.0), (9.0, -6.2, -10.0))
+
+
+def dummy(material, n, x, y, yaw):
+    """A training dummy standing on its base: a post, a burlap torso
+    with a crossbar for arms, a head. It tips over about its foot."""
+    d = Part(f"TARGET_Dummy_{n}", at=world(x, y, 0.06), yaw=yaw)
+    d.block((-0.04, -0.04, 0.0), (0.04, 0.04, 1.0), POST)
+    d.block((-0.21, -0.13, 0.925), (0.21, 0.13, 1.475), BURLAP)
+    d.block((-0.40, -0.035, 1.285), (0.40, 0.035, 1.355), POST)
+    d.block((-0.11, -0.11, 1.50), (0.11, 0.11, 1.74), BURLAP)
+    d.finish(material)
+
+
+def plate(material, n, distance):
+    """A steel plate hung from a hinge on a frame, facing back down the
+    lane. It swings about its hinge."""
+    x = LANE_FROM + distance
+    ground = height(x, LANE_Y)
+    hinge = Vector((x, LANE_Y, ground + 1.85))
+    p = Part(f"TARGET_Plate_{n}", at=hinge)
+    p.block((-0.01, -0.25, -0.55), (0.01, 0.25, -0.05), STEEL)
+    for side in (-0.18, 0.18):
+        p.block((-0.006, side - 0.006, -0.05), (0.006, side + 0.006, 0.0), FRAME)
+    p.finish(material)
+    return x, ground
+
+
+def range_frames(part, spots):
+    """The frames the plates hang from: two posts and a bar each."""
+    for x, ground in spots:
+        for y in (-0.45, 0.45):
+            a = Vector((x - 0.04, LANE_Y + y - 0.04, ground - 0.3))
+            b = Vector((x + 0.04, LANE_Y + y + 0.04, ground + 1.95))
+            block_world(part, a, b, FRAME)
+        block_world(part, Vector((x - 0.03, LANE_Y - 0.49, ground + 1.87)), Vector((x + 0.03, LANE_Y + 0.49, ground + 1.93)), FRAME)
+
+
+def block_world(part, a, b, colour):
+    centre = (a + b) / 2
+    size = b - a
+    m = Matrix.Translation(centre) @ Matrix.Diagonal((size.x / 2, size.y / 2, size.z / 2, 1.0))
+    made = bmesh.ops.create_cube(part.bm, size=2.0, matrix=m)
+    part.paint(sorted({f for v in made["verts"] for f in v.link_faces}, key=lambda f: f.calc_center_median().to_tuple()), colour)
+
+
 def main():
     material = flat_material()
     ground = Part("SOLID_Pad")
@@ -216,6 +280,15 @@ def main():
         part = Part(name)
         build(part)
         part.finish(material)
+    stands = Part("SOLID_DummyStands")
+    for n, (x, y, yaw) in enumerate(DUMMIES, 1):
+        stands.block((x - 0.25, y - 0.25, 0.0), (x + 0.25, y + 0.25, 0.06), POST)
+        dummy(material, n, x, y, yaw)
+    stands.finish(material)
+    spots = [plate(material, n, d) for n, d in enumerate(LANE_PLATES, 1)]
+    frames = Part("SOLID_RangeFrames")
+    range_frames(frames, spots)
+    frames.finish(material)
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"proving_ground: top {TOP:.2f} m, bottom {BOTTOM:.2f} m, access ramp {slope:.1f} deg -> {os.path.abspath(OUT)}")
 

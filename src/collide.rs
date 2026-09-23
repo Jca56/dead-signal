@@ -29,12 +29,34 @@ const SKIN: f64 = 0.001;
 /// How far off a floor still counts as standing on it.
 const TOUCH: f64 = 0.01;
 
+/// What a solid is made of: what a bullet kicks up, what it sounds like.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Surface {
+    #[default]
+    Dirt,
+    Wood,
+    Stone,
+    Metal,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Tri {
     a: Vec3,
     b: Vec3,
     c: Vec3,
     normal: Vec3,
+    surface: Surface,
+}
+
+/// Where a ray met a solid.
+#[derive(Clone, Copy, Debug)]
+pub struct RayHit {
+    /// How far along the ray, metres.
+    pub t: f64,
+    pub point: Vec3,
+    /// The surface's normal, turned to face where the ray came from.
+    pub normal: Vec3,
+    pub surface: Surface,
 }
 
 /// An upright capsule standing at `feet`.
@@ -102,14 +124,21 @@ impl Solids {
     }
 
     /// Make these triangles solid.
+    /// Make these triangles solid (stone, for want of saying).
+    #[cfg(test)]
     pub fn add(&mut self, tris: &[[Vec3; 3]]) {
+        self.add_as(tris, Surface::Stone);
+    }
+
+    /// Make these triangles solid, made of `surface`.
+    pub fn add_as(&mut self, tris: &[[Vec3; 3]], surface: Surface) {
         for &[a, b, c] in tris {
             let n = (b - a).cross(c - a);
             if n.length() < 1e-12 {
                 continue; // a sliver
             }
             let i = self.tris.len() as u32;
-            self.tris.push(Tri { a, b, c, normal: n.normalize() });
+            self.tris.push(Tri { a, b, c, normal: n.normalize(), surface });
             let (x0, x1) = (a.x.min(b.x).min(c.x), a.x.max(b.x).max(c.x));
             let (z0, z1) = (a.z.min(b.z).min(c.z), a.z.max(b.z).max(c.z));
             for gx in cell_of(x0)..=cell_of(x1) {
@@ -122,6 +151,55 @@ impl Solids {
 
     pub fn len(&self) -> usize {
         self.tris.len()
+    }
+
+    /// The first solid along the ray from `from` in unit direction `dir`,
+    /// within `max` metres. Walks the grid cell by cell along the ground
+    /// plan and stops at the first cell that holds a hit.
+    pub fn raycast(&self, from: Vec3, dir: Vec3, max: f64) -> Option<RayHit> {
+        let mut seen = std::collections::HashSet::new();
+        let mut best: Option<RayHit> = None;
+        let (mut gx, mut gz) = (cell_of(from.x), cell_of(from.z));
+        let step = |d: f64| if d > 0.0 { 1 } else { -1 };
+        let next = |p: f64, g: i32, d: f64| {
+            if d.abs() < 1e-12 {
+                f64::INFINITY
+            } else {
+                let edge = if d > 0.0 { (g + 1) as f64 * CELL } else { g as f64 * CELL };
+                (edge - p) / d
+            }
+        };
+        let (mut tx, mut tz) = (next(from.x, gx, dir.x), next(from.z, gz, dir.z));
+        let (dtx, dtz) = (if dir.x.abs() < 1e-12 { f64::INFINITY } else { CELL / dir.x.abs() }, if dir.z.abs() < 1e-12 { f64::INFINITY } else { CELL / dir.z.abs() });
+        loop {
+            if let Some(list) = self.cells.get(&(gx, gz)) {
+                for &i in list {
+                    if !seen.insert(i) {
+                        continue;
+                    }
+                    let tri = &self.tris[i as usize];
+                    if let Some(t) = ray_triangle(from, dir, tri)
+                        && t <= max
+                        && best.is_none_or(|b| t < b.t)
+                    {
+                        let normal = if tri.normal.dot(dir) < 0.0 { tri.normal } else { -tri.normal };
+                        best = Some(RayHit { t, point: from + dir * t, normal, surface: tri.surface });
+                    }
+                }
+            }
+            // Leaving this cell: a hit before its far side is the answer.
+            let exit = tx.min(tz);
+            if best.is_some_and(|b| b.t <= exit) || exit > max {
+                return best;
+            }
+            if tx < tz {
+                gx += step(dir.x);
+                tx += dtx;
+            } else {
+                gz += step(dir.z);
+                tz += dtz;
+            }
+        }
     }
 
     /// The triangles whose cells a box over the ground plan touches.
@@ -213,6 +291,31 @@ impl Solids {
             (s - t).length() >= r - 0.005
         })
     }
+}
+
+/// How far along a ray (unit `dir`) it meets triangle `t`, from either
+/// side (Möller–Trumbore).
+fn ray_triangle(from: Vec3, dir: Vec3, t: &Tri) -> Option<f64> {
+    let e1 = t.b - t.a;
+    let e2 = t.c - t.a;
+    let p = dir.cross(e2);
+    let det = e1.dot(p);
+    if det.abs() < 1e-12 {
+        return None;
+    }
+    let inv = 1.0 / det;
+    let s = from - t.a;
+    let u = s.dot(p) * inv;
+    if !(0.0..=1.0).contains(&u) {
+        return None;
+    }
+    let q = s.cross(e1);
+    let v = dir.dot(q) * inv;
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+    let dist = e2.dot(q) * inv;
+    (dist > 1e-6).then_some(dist)
 }
 
 /// The point of triangle `t` closest to `p`.
@@ -342,75 +445,4 @@ pub fn box_tris(min: Vec3, max: Vec3) -> Vec<[Vec3; 3]> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const BODY: Capsule = Capsule { radius: 0.35, height: 1.8 };
-
-    fn floor() -> Solids {
-        let mut s = Solids::new();
-        s.add(&box_tris(Vec3::new(-50.0, -1.0, -50.0), Vec3::new(50.0, 0.0, 50.0)));
-        s
-    }
-
-    #[test]
-    fn standing_on_a_floor_is_pushed_up_onto_it() {
-        let s = floor();
-        let mut feet = Vec3::new(1.0, -0.2, 2.0);
-        let c = s.resolve(BODY, &mut feet);
-        assert!(c.floor.is_some() && !c.wall);
-        assert!((feet.y - SKIN).abs() < 0.005, "at {}", feet.y);
-        assert!(feet.x == 1.0 && feet.z == 2.0, "straight up, not sideways");
-        assert!(s.fits(BODY, feet));
-        // Resting there, the floor is still underfoot and nothing moves.
-        let rest = feet;
-        assert!(s.resolve(BODY, &mut feet).floor.is_some());
-        assert_eq!(feet, rest);
-    }
-
-    #[test]
-    fn a_wall_pushes_out_sideways_and_says_so() {
-        let mut s = floor();
-        s.add(&box_tris(Vec3::new(2.0, 0.0, -5.0), Vec3::new(3.0, 3.0, 5.0)));
-        let mut feet = Vec3::new(1.8, 0.0, 0.0);
-        let c = s.resolve(BODY, &mut feet);
-        assert!(c.wall);
-        assert!((feet.x - (2.0 - 0.35)).abs() < 0.01, "against the wall at {}", feet.x);
-        assert!(feet.y.abs() < 0.01, "not lifted");
-    }
-
-    #[test]
-    fn a_steep_slope_never_lifts() {
-        // A 60° face: walking into it pushes back, not up it.
-        let mut s = Solids::new();
-        let (a, b, c) = (Vec3::new(0.0, 0.0, -5.0), Vec3::new(0.0, 0.0, 5.0), Vec3::new(-2.0, 2.0 * 3f64.sqrt(), 0.0));
-        s.add(&[[a, b, c]]);
-        let mut feet = Vec3::new(-0.3, 0.2, 0.0);
-        let before = feet.y;
-        let c = s.resolve(BODY, &mut feet);
-        assert!(c.wall && c.floor.is_none());
-        assert_eq!(feet.y, before);
-    }
-
-    #[test]
-    fn a_ceiling_pushes_down() {
-        let mut s = floor();
-        s.add(&box_tris(Vec3::new(-2.0, 1.3, -2.0), Vec3::new(2.0, 1.6, 2.0)));
-        assert!(!s.fits(BODY, Vec3::ZERO), "no room to stand");
-        assert!(s.fits(Capsule { radius: 0.35, height: 1.2 }, Vec3::ZERO), "room to crouch");
-    }
-
-    #[test]
-    fn closest_points_agree_with_brute_force() {
-        let t = Tri { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(2.0, 0.0, 0.0), c: Vec3::new(0.0, 0.0, 2.0), normal: Vec3::Y };
-        // Straight above the middle, off past a corner, and crossing.
-        for (p, q, want) in [
-            (Vec3::new(0.5, 1.0, 0.5), Vec3::new(0.5, 3.0, 0.5), 1.0),
-            (Vec3::new(3.0, 0.5, 3.0), Vec3::new(4.0, 0.5, 4.0), (2.0f64 * 2.0 + 2.0 * 2.0 + 0.25).sqrt()),
-            (Vec3::new(0.5, -1.0, 0.5), Vec3::new(0.5, 1.0, 0.5), 0.0),
-        ] {
-            let (a, b) = closest_segment_triangle(p, q, &t);
-            assert!(((a - b).length() - want).abs() < 1e-6, "{p:?}-{q:?}: {} not {want}", (a - b).length());
-        }
-    }
-}
+mod tests;

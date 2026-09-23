@@ -11,12 +11,15 @@ use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
 use crate::assets;
 use crate::camera::Camera;
+use crate::combat::Combat;
+use crate::hud;
 use crate::menu::SideMenu;
 use crate::head;
 use crate::player::Controls;
 use crate::render::{Draw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
+use crate::weapon::{Clip, Trigger};
 use crate::world::{Game, Look, Model, Placed};
 
 /// Seconds a fade to or from black takes.
@@ -64,6 +67,7 @@ pub struct DeadSignal {
     renderer: Option<Renderer>,
     /// The arms, once loaded.
     viewmodel: Option<Viewmodel>,
+    combat: Combat,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
@@ -85,6 +89,7 @@ impl DeadSignal {
             game: Game::new(),
             renderer: None,
             viewmodel: None,
+            combat: Combat::new(),
             screen: Screen::Title,
             title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
@@ -134,6 +139,7 @@ impl DeadSignal {
                 if let Some(vm) = &mut self.viewmodel {
                     vm.reset();
                 }
+                self.combat.reset();
                 cx.request(ShellRequest::LockPointer(true));
             }
             Screen::Title => {
@@ -193,7 +199,7 @@ impl DeadSignal {
         let held = |ui: &Ui, keys: &[char], other: Key| ui.state.keys_down.iter().any(|k| *k == other || matches!(k, Key::Char(c) if keys.iter().any(|w| c.eq_ignore_ascii_case(w))));
         let axis = |neg: bool, pos: bool| f64::from(i8::from(pos) - i8::from(neg));
         let walk = Vec2::new(axis(held(ui, &['a'], Key::ArrowLeft), held(ui, &['d'], Key::ArrowRight)), axis(held(ui, &['s'], Key::ArrowDown), held(ui, &['w'], Key::ArrowUp)));
-        let sprint = ui.state.keys_down.contains(&Key::Shift);
+        let sprint = ui.state.keys_down.contains(&Key::Shift) && self.combat.sprint_allowed();
         let jump = ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Space | Key::Char(' '))).is_some();
         let crouch = ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char('c' | 'C'))).is_some();
         let mut controls = self.game.controls_mut();
@@ -202,6 +208,18 @@ impl DeadSignal {
         // Presses wait for the next fixed step to use them.
         controls.jump |= jump;
         controls.crouch_toggle ^= crouch;
+
+        // The pistol: left button fires, R reloads, V or the middle button
+        // strikes. Only with the pointer held (a click that takes the lock
+        // back is not a shot).
+        let trigger = Trigger {
+            fire: locked && ui.state.pressed,
+            reload: ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char('r' | 'R'))).is_some(),
+            melee: ui.state.middle_pressed || ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char('v' | 'V'))).is_some(),
+        };
+        let dt = self.game.clock().dt;
+        self.combat.frame(&mut self.game, trigger, dt);
+        hud::draw(ui, self.combat.pistol.mag, self.combat.fx.marker);
     }
 
     /// Where the camera is this frame.
@@ -222,8 +240,7 @@ impl DeadSignal {
                 let alpha = self.game.alpha();
                 if let Some((body, view)) = self.game.player() {
                     self.camera.position = head::eye_position(&view, &body, alpha);
-                    self.camera.yaw = view.yaw;
-                    self.camera.pitch = view.pitch;
+                    (self.camera.yaw, self.camera.pitch) = view.aim();
                     self.camera.fov_y = view.fov_y();
                 }
             }
@@ -306,6 +323,7 @@ impl AppHost for DeadSignal {
             }
         }
         log_info!("world: {} solid triangles", self.game.solid_count());
+        self.combat.init(&mut renderer);
         match assets::load_rigged(&mut renderer, "arms") {
             Ok(rig) => self.viewmodel = Some(Viewmodel::new(rig)),
             Err(e) => log_error!("arms: {e}"),
@@ -318,13 +336,16 @@ impl AppHost for DeadSignal {
         let Some(renderer) = self.renderer.as_mut() else { return };
         let mut things = self.game.world.query::<(&Model, &Placed, &Look)>();
         for (model, placed, look) in things.iter(&self.game.world) {
-            renderer.draw(Draw { mesh: model.0, model: placed.0, emissive: look.emissive, fog: look.fog });
+            renderer.draw(Draw { mesh: model.0, model: placed.0, emissive: look.emissive, fog: look.fog, tint: [1.0; 3] });
         }
         let time = self.game.clock().time;
         if self.screen == Screen::Run
             && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
         {
-            renderer.draw_viewmodel(vm.draw(&view, time));
+            let (clip, t) = self.combat.pistol.clip();
+            let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
+            renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping));
+            self.combat.draw(renderer);
         }
         renderer.render(cx, &self.camera, &style::AIR, time);
     }

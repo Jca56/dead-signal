@@ -18,11 +18,16 @@ move as one). All under "root".
 import math
 import os
 
+import sys
+
 import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import pistol  # noqa: E402
+import poses  # noqa: E402
 OUT = os.path.join(HERE, "..", "models", "arms.glb")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -261,7 +266,7 @@ def arm(b, side, suffix):
     bones[up] = (shoulder, elbow, "root")
     bones[fore] = (elbow, wrist, up)
     bones[hand] = (wrist, knuckles, fore)
-    return bones
+    return bones, (wrist, fwd, back, across)
 
 
 # ---- armature, mesh, animation -----------------------------------------------------
@@ -269,8 +274,12 @@ def arm(b, side, suffix):
 def build():
     b = Builder()
     bones = {}
-    bones.update(arm(b, 1.0, ".R"))
-    bones.update(arm(b, -1.0, ".L"))
+    right_bones, (wrist, fwd, back, across) = arm(b, 1.0, ".R")
+    bones.update(right_bones)
+    left_bones, (l_wrist, l_fwd, l_back, _) = arm(b, -1.0, ".L")
+    bones.update(left_bones)
+    gun_bones, gun_rest = pistol.build(b, wrist, fwd, back, across, "hand.R")
+    bones.update(gun_bones)
 
     # Every ring runs round its axis the same way whichever side it is on,
     # so every face already winds outward.
@@ -320,7 +329,7 @@ def build():
     obj.parent = rig
     mod = obj.modifiers.new("Rig", "ARMATURE")
     mod.object = rig
-    return rig
+    return rig, gun_rest, (l_wrist, l_fwd, l_back)
 
 
 def idle(rig):
@@ -336,6 +345,9 @@ def idle(rig):
         pb.rotation_mode = "QUATERNION"
     keys = [(1, 0.0), (46, 1.0), (91, 0.0)]
     for frame, t in keys:
+        # Bare-handed: the gun is not there.
+        pose["gun"].scale = (0, 0, 0)
+        pose["gun"].keyframe_insert("scale", frame=frame)
         for suffix, s in ((".R", 1.0), (".L", -1.0)):
             pb = pose[f"upper_arm{suffix}"]
             pb.rotation_quaternion = Matrix.Rotation(math.radians(-1.6 * t), 4, "X").to_quaternion()
@@ -348,13 +360,25 @@ def idle(rig):
                 pb.rotation_quaternion = Matrix.Rotation(math.radians(4.0 * t), 4, "X").to_quaternion()
                 pb.keyframe_insert("rotation_quaternion", frame=frame)
     bpy.ops.object.mode_set(mode="OBJECT")
-    bpy.context.scene.frame_start = 1
-    bpy.context.scene.frame_end = 91
+    rig.animation_data.action = None
+    return action
+
+
+def stash(rig, actions):
+    """Put every action on an NLA track of its own: what the exporter
+    writes, one glTF animation each."""
+    for action in actions:
+        track = rig.animation_data.nla_tracks.new()
+        track.name = action.name
+        track.strips.new(action.name, int(action.frame_range[0]), action)
 
 
 def main():
-    rig = build()
-    idle(rig)
+    rig, gun_rest, left_rest = build()
+    guard = idle(rig)
+    names = poses.build(rig, gun_rest, left_rest)
+    stash(rig, [guard] + [bpy.data.actions[n] for n in names])
+    rig.animation_data.action = None
     bpy.ops.export_scene.gltf(
         filepath=os.path.abspath(OUT),
         export_format="GLB",
@@ -362,6 +386,7 @@ def main():
         export_apply=False,
         export_animations=True,
         export_animation_mode="ACTIONS",
+        export_anim_slide_to_zero=True,
         export_skins=True,
         export_vertex_color="ACTIVE",
         export_normals=True,

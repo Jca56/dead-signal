@@ -183,7 +183,8 @@ def add_box(bm, layer, matrix, size, colour):
     sx, sy, sz = (s / 2 for s in size)
     corners = [Vector((x, y, z)) for z in (-sz, sz) for y in (-sy, sy) for x in (-sx, sx)]
     v = [bm.verts.new(matrix @ c) for c in corners]
-    quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    # Each face's corners anticlockwise seen from outside, so it faces out.
+    quads = [(0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4), (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5)]
     for q in quads:
         f = bm.faces.new([v[i] for i in q])
         c = jitter(colour, 0.08)
@@ -386,8 +387,12 @@ def poles(flat):
 # the visible scene was made from.
 
 def solids(flat):
+    """Two objects: COL_Wood (trees, poles, the shack and its crate) and
+    COL_Metal (the tower and the drum), so a bullet knows what it hit."""
     bm = bmesh.new()
     layer = colour_layer(bm)
+    metal = bmesh.new()
+    metal_layer = colour_layer(metal)
     grey = (0.5, 0.5, 0.5)
     # Pines: a metre-wide column through the trunk and lower branches.
     for base, s in PINE_SPOTS:
@@ -400,7 +405,7 @@ def solids(flat):
     turn = Matrix.Rotation(math.radians(18), 4, "Z")
     at = Matrix.Translation(SHACK) @ turn
     add_box(bm, layer, at @ Matrix.Translation((0, 0, 1.5)), (4.4, 3.4, 3.2), grey)
-    add_cone(bm, layer, at @ Vector((-1.5, -2.3, 0)), 0.45, 0.45, 0.95, 8, grey)
+    add_cone(metal, metal_layer, at @ Vector((-1.5, -2.3, 0)), 0.45, 0.45, 0.95, 8, grey)
     add_box(bm, layer, at @ Matrix.Translation((2.6, -1.4, 0.4)) @ Matrix.Rotation(0.4, 4, "Z"), (0.9, 0.9, 0.8), grey)
     # The tower's legs, and the X braces of its lowest panels: room to walk
     # in under the braces and stand inside it.
@@ -409,10 +414,11 @@ def solids(flat):
     rings = [[TOWER + Vector((cx * half(z), cy * half(z), z)) for cx, cy in corners] for z in (0.0, TOWER_HEIGHT / 10, TOWER_HEIGHT * 0.3)]
     for c in range(4):
         n = (c + 1) % 4
-        beam(bm, layer, rings[0][c], rings[2][c], 0.4, grey)
-        beam(bm, layer, rings[0][c], rings[1][n], 0.18, grey)
-        beam(bm, layer, rings[0][n], rings[1][c], 0.18, grey)
-    return new_object("COL_Solids", bm, flat)
+        beam(metal, metal_layer, rings[0][c], rings[2][c], 0.4, grey)
+        beam(metal, metal_layer, rings[0][c], rings[1][n], 0.18, grey)
+        beam(metal, metal_layer, rings[0][n], rings[1][c], 0.18, grey)
+    new_object("COL_Metal", metal, flat)
+    return new_object("COL_Wood", bm, flat)
 
 
 def main():

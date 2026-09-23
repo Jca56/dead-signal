@@ -4,12 +4,20 @@ mod app;
 mod assets;
 mod camera;
 mod collide;
+mod combat;
+mod fx;
 mod head;
+mod hud;
 mod menu;
 mod player;
 mod render;
+mod sound;
 mod style;
+mod targets;
+#[cfg(test)]
+mod testing;
 mod viewmodel;
+mod weapon;
 mod world;
 
 use lntrn_app::{AppConfig, run};

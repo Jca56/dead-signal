@@ -67,6 +67,8 @@ struct VertexIn {
     @location(6) m2: vec4<f32>,
     @location(7) m3: vec4<f32>,
     @location(8) look: vec4<f32>,
+    // rgb: multiplies the mesh's colours (chips take what they hit's).
+    @location(9) tint: vec4<f32>,
 };
 
 struct VertexOut {
@@ -87,7 +89,7 @@ fn world_vs(v: VertexIn) -> VertexOut {
     out.world = world.xyz;
     // Uniform scale only, so the model matrix turns normals true.
     out.normal = normalize((model * vec4<f32>(v.normal, 0.0)).xyz);
-    out.color = v.color;
+    out.color = vec4<f32>(v.color.rgb * v.tint.rgb, v.color.a);
     out.emissive = v.emissive * v.look.x;
     out.fog_amount = v.look.y;
     return out;
