@@ -16,7 +16,8 @@ use crate::exits::hud::SIGNAL_GREEN;
 use crate::loot::Stack;
 use crate::loot::bag::Bag;
 use crate::menu::SideMenu;
-use crate::stats::Stats;
+use crate::profile::xp::Earned;
+use crate::stats::{Group, Stats};
 use crate::style;
 
 /// When each part starts, seconds after the end.
@@ -55,6 +56,9 @@ pub struct Ending {
     /// What was carried at the end, and what it was worth.
     loot: Vec<Stack>,
     value: u32,
+    /// What the run earned, and the XP there was before it.
+    earned: Earned,
+    xp_before: u32,
     menu: SideMenu<After>,
 }
 
@@ -64,13 +68,13 @@ fn ease(t: f64) -> f64 {
 }
 
 impl Ending {
-    pub fn new(outcome: Outcome, stats: Stats, bag: &Bag) -> Self {
+    pub fn new(outcome: Outcome, stats: Stats, bag: &Bag, earned: Earned, xp_before: u32) -> Self {
         let menu = match outcome {
             Outcome::Died(_) => SideMenu::new("YOU DIED", &[("TRY AGAIN", After::Again), ("TITLE", After::Title)]),
             Outcome::Extracted(_) => SideMenu::new("EXTRACTED", &[("RUN AGAIN", After::Again), ("TITLE", After::Title)]),
         };
         let loot = bag.pack.items.iter().chain(&bag.pockets.items).map(|i| i.stack).collect();
-        Self { t: 0.0, outcome, stats, loot, value: bag.value(), menu }
+        Self { t: 0.0, outcome, stats, loot, value: bag.value(), earned, xp_before, menu }
     }
 
     pub fn update(&mut self, dt: f64) {
@@ -148,6 +152,10 @@ impl Ending {
         let chosen = self.menu.draw(ui, active && shown >= 1.0);
         self.numbers(ui, screen, shown);
         self.carried(ui, screen, shown, icons);
+        // The level, filling with what was earned (if it was kept).
+        let filled = ease((self.t - STATS_AT - 0.6) / 1.8);
+        let at = Vec2::new(screen.min.x + 120.0 * s, screen.min.y + screen.height() * 0.09);
+        crate::levelbar::draw(ui, at, 620.0 * s, self.xp_before, self.earned.banked(), filled, shown);
         chosen
     }
 
@@ -163,7 +171,11 @@ impl Ending {
         let gap = 70.0 * s;
         let left = screen.max.x - 2.0 * col_w - gap - 90.0 * s;
         let top = screen.min.y + screen.height() * 0.16;
-        let groups = self.stats.groups();
+        let mut groups = self.stats.groups();
+        // What it earned, last; struck off if it was lost.
+        let mut lines: Vec<(&'static str, String)> = self.earned.lines.iter().map(|(l, n)| (*l, format!("+{n}"))).collect();
+        lines.push(("Total", if self.earned.kept { format!("+{}", self.earned.total()) } else { "LOST".into() }));
+        groups.push(Group { title: if self.earned.kept { "XP" } else { "XP · LOST" }, lines });
         // SURVIVAL, SHOOTING and LOOT on the left; the rest on the right.
         for (column, range) in [(0usize, 0..3usize), (1, 3..groups.len())] {
             let x = left + column as f64 * (col_w + gap);
@@ -231,7 +243,7 @@ mod tests {
 
     #[test]
     fn the_eye_falls_rolls_and_the_numbers_come_last() {
-        let mut d = Ending::new(Outcome::Died(-1.0), Stats::default(), &Bag::default());
+        let mut d = Ending::new(Outcome::Died(-1.0), Stats::default(), &Bag::with_rounds(), Earned::default(), 0);
         let mut cam = Camera::new(Vec3::new(0.0, 1.7, 0.0));
         d.fall(&mut cam);
         assert!((cam.position.y - 1.7).abs() < 1e-9 && cam.roll == 0.0, "nothing yet at 0");
@@ -253,8 +265,8 @@ mod tests {
 
     #[test]
     fn getting_out_keeps_the_eye_up_and_counts_what_was_carried() {
-        let bag = Bag::default();
-        let mut e = Ending::new(Outcome::Extracted(Way::Radio), Stats::default(), &bag);
+        let bag = Bag::with_rounds();
+        let mut e = Ending::new(Outcome::Extracted(Way::Radio), Stats::default(), &bag, Earned::default(), 0);
         for _ in 0..90 {
             e.update(1.0 / 60.0);
         }

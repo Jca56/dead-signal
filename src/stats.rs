@@ -12,6 +12,8 @@ pub struct Stats {
     pub reloads: u32,
     pub rounds_found: u32,
     pub gun_kills: u32,
+    /// Kills by a shot to the head.
+    pub headshot_kills: u32,
     pub melee_kills: u32,
     pub longest_kill: f64,
     pub damage_dealt: f64,
@@ -24,6 +26,8 @@ pub struct Stats {
     pub dummies_downed: u32,
     pub plates_rung: u32,
     pub containers_searched: u32,
+    /// Of those, supply cages.
+    pub cages_opened: u32,
     pub items_looted: u32,
     /// What was carried at the end.
     pub loot_value: u32,
@@ -54,9 +58,10 @@ impl Stats {
         self.gun_kills + self.melee_kills
     }
 
-    /// The screen's groups, in reading order.
+    /// The screen's groups, in reading order (PRACTICE only if there was
+    /// any).
     pub fn groups(&self) -> Vec<Group> {
-        vec![
+        let mut groups = vec![
             Group {
                 title: "SURVIVAL",
                 lines: vec![("Time survived", clock(self.seconds)), ("Distance walked", metres(self.walked)), ("Distance sprinted", metres(self.sprinted)), ("Jumps", self.jumps.to_string())],
@@ -102,7 +107,11 @@ impl Stats {
                 ],
             },
             Group { title: "PRACTICE", lines: vec![("Dummies knocked down", self.dummies_downed.to_string()), ("Plates rung", self.plates_rung.to_string())] },
-        ]
+        ];
+        if self.dummies_downed + self.plates_rung == 0 {
+            groups.pop();
+        }
+        groups
     }
 }
 

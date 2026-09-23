@@ -79,6 +79,34 @@ pub const ALL: [Kind; 15] = [
     Kind::GoldBar,
 ];
 
+impl Kind {
+    /// Its name in a save file: never to change, whatever it's called on
+    /// screen.
+    pub fn key(self) -> &'static str {
+        match self {
+            Kind::Rounds => "rounds_9mm",
+            Kind::Bandage => "bandage",
+            Kind::Medkit => "medkit",
+            Kind::Beans => "canned_beans",
+            Kind::Water => "water",
+            Kind::Pills => "antibiotics",
+            Kind::Cash => "cash",
+            Kind::Watch => "watch",
+            Kind::Radio => "radio",
+            Kind::Battery => "car_battery",
+            Kind::Fuel => "fuel_can",
+            Kind::Ring => "gold_ring",
+            Kind::Chain => "gold_chain",
+            Kind::Key => "cage_key",
+            Kind::GoldBar => "gold_bar",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Kind> {
+        ALL.into_iter().find(|k| k.key() == key)
+    }
+}
+
 /// What a kind of thing is like.
 pub struct Def {
     pub name: &'static str,

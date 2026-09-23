@@ -374,6 +374,7 @@ dependencies = [
  "lntrn-app",
  "lntrn-audio",
  "lntrn-core",
+ "lntrn-data",
  "lntrn-image",
  "lntrn-math",
  "lntrn-model",

@@ -207,6 +207,7 @@ impl Combat {
             }
             if killed {
                 if blow { stats.melee_kills += 1 } else { stats.gun_kills += 1 }
+                stats.headshot_kills += u32::from(head && !blow);
                 stats.longest_kill = stats.longest_kill.max(t);
                 self.drop_something(game, e);
             }

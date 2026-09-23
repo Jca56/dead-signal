@@ -52,6 +52,10 @@ pub struct Run {
     dice: Dice,
     /// Finding and working the ways out.
     out: out::Out,
+    /// The XP there was before this run, and how it ended once it has
+    /// (for the profile to settle, once).
+    xp_before: u32,
+    result: Option<(bool, u32)>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -62,8 +66,10 @@ struct Open {
 impl Run {
     /// A fresh run: whole, nothing counted, things lying in their spots and
     /// in their containers, the first of the dead already out there.
-    pub fn start(&mut self, game: &mut Game) {
+    pub fn start(&mut self, game: &mut Game, loadout: Bag, xp_before: u32) {
         *self = Self::default();
+        self.bag = loadout;
+        self.xp_before = xp_before;
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
         crate::items::scatter(&mut game.world, seed);
         crate::containers::fill(&mut game.world, seed.rotate_left(13));
@@ -78,6 +84,19 @@ impl Run {
     fn watching(game: &mut Game) -> Option<(Vec3, Vec3)> {
         let (body, view) = game.player()?;
         Some((body.pos + Vec3::new(0.0, 1.6, 0.0), Vec3::new(-view.yaw.sin(), 0.0, -view.yaw.cos())))
+    }
+
+    /// How the run ended, once (got out or not, the XP banked), and what
+    /// was carried then.
+    pub fn take_result(&mut self) -> Option<(bool, Bag, u32)> {
+        let (got_out, xp) = self.result.take()?;
+        Some((got_out, self.bag.clone(), xp))
+    }
+
+    /// Walked out on (back to the title): as good as dead, but for the
+    /// pockets. What was carried.
+    pub fn abandon(&mut self) -> Bag {
+        std::mem::take(&mut self.bag)
     }
 
     /// How far the gun is lowered (patching up, or rummaging), 0–1.
@@ -230,7 +249,9 @@ impl Run {
             Outcome::Extracted(Way::Radio) => combat.play(Sfx::Rotor, 1.0),
             _ => {}
         }
-        self.ending = Some(Ending::new(outcome, self.stats.clone(), &self.bag));
+        let earned = crate::profile::xp::earned(&self.stats, outcome);
+        self.result = Some((matches!(outcome, Outcome::Extracted(_)), earned.banked()));
+        self.ending = Some(Ending::new(outcome, self.stats.clone(), &self.bag, earned, self.xp_before));
         *game.controls_mut() = Default::default();
     }
 

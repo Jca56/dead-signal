@@ -1,7 +1,10 @@
 //! The game as a Lantern app: one full-window view, no title bar, drawn
-//! every frame. Screens (the title, a run) take turns in it, with a fade
-//! through black between them. In a run the pointer is locked for mouse
-//! look; Esc (or leaving the window) pauses and lets it go.
+//! every frame. Screens (the title, the hideout, a run) take turns in it,
+//! with a fade through black between them. In a run the pointer is locked
+//! for mouse look; Esc (or leaving the window) pauses and lets it go.
+//! What's loaded at the start beyond the scenes is in `load.rs`. The
+//! player's profile is saved as a run starts (as if lost), and again as it
+//! ends.
 
 use lntrn_app::lntrn_render::{Gpu, Images};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -9,10 +12,14 @@ use lntrn_core::{log_error, log_info};
 use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
+mod load;
+
 use std::time::Instant;
 
 use crate::assets;
 use crate::perf::{Perf, Phase};
+use crate::hideout::{Hideout, Leave};
+use crate::profile::{Profile, save};
 use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::ending::After;
@@ -25,10 +32,7 @@ use crate::render::{Draw, FigureDraw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
 use crate::weapon::Clip;
-use crate::world::{Game, Look, Model, Placed, Solid};
-use crate::loot::tables::Source;
-use crate::exits::{self, Way};
-use crate::{containers, icons, loot};
+use crate::world::{Game, Look, Model, Placed};
 use crate::zombie::{self, figure::Figure};
 
 /// Seconds a fade to or from black takes.
@@ -49,12 +53,14 @@ const START_LOOK: Vec3 = Vec3::new(12.0, 0.0, -46.0);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Screen {
     Title,
+    Hideout,
     Run,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TitleItem {
     Play,
+    Hideout,
     Quit,
 }
 
@@ -80,6 +86,11 @@ pub struct DeadSignal {
     run: Run,
     /// Every kind of thing's picture, for the inventory.
     icons: Icons,
+    /// The player between runs (and whether a run has their loadout now,
+    /// to be settled when it ends).
+    profile: Profile,
+    in_run: bool,
+    hideout: Hideout,
     perf: Perf,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
@@ -105,9 +116,12 @@ impl DeadSignal {
             combat: Combat::new(),
             run: Run::default(),
             icons: Icons::default(),
+            profile: save::load(),
+            in_run: false,
+            hideout: Hideout::default(),
             perf: Perf::default(),
             screen: Screen::Title,
-            title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("QUIT", TitleItem::Quit)]),
+            title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("HIDEOUT", TitleItem::Hideout), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
             paused: false,
             was_locked: false,
@@ -157,10 +171,21 @@ impl DeadSignal {
                 }
                 self.combat.reset();
                 zombie::clear(&mut self.game.world);
-                self.run.start(&mut self.game);
+                // The loadout goes in with the player. On disk it's already
+                // as good as lost (all but the pockets) till they're out:
+                // quitting mid-run is no way round dying.
+                self.settle_run();
+                let loadout = self.profile.take_loadout();
+                let mut committed = self.profile.clone();
+                committed.loadout.pockets = loadout.pockets.clone();
+                save::store(&committed);
+                self.run.start(&mut self.game, loadout, self.profile.xp);
+                self.in_run = true;
                 cx.request(ShellRequest::LockPointer(true));
             }
+            Screen::Hideout => {}
             Screen::Title => {
+                self.settle_run();
                 self.game.despawn_player();
                 zombie::clear(&mut self.game.world);
                 crate::items::clear(&mut self.game.world);
@@ -168,6 +193,21 @@ impl DeadSignal {
                 crate::exits::hide(&mut self.game.world);
                 self.title_menu.reset();
             }
+        }
+    }
+
+    /// A run that's over (or walked out on) settles into the profile, and
+    /// the profile is saved. Walked out on counts as dead.
+    fn settle_run(&mut self) {
+        if let Some((got_out, bag, xp)) = self.run.take_result() {
+            self.profile.settle(got_out, bag, xp);
+            self.in_run = false;
+            save::store(&self.profile);
+        } else if self.in_run {
+            let bag = self.run.abandon();
+            self.profile.settle(false, bag, 0);
+            self.in_run = false;
+            save::store(&self.profile);
         }
     }
 
@@ -222,12 +262,16 @@ impl DeadSignal {
             return;
         }
         self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons);
+        // The run just ended: it's settled (and saved) at once.
+        if self.run.ending.is_some() {
+            self.settle_run();
+        }
     }
 
     /// Where the camera is this frame.
     fn place_camera(&mut self, time: f64) {
         match self.screen {
-            Screen::Title => {
+            Screen::Title | Screen::Hideout => {
                 // A slow drift, never quite still.
                 let drift = Vec3::new((time * 0.05).sin() * 4.0, (time * 0.07).sin() * 0.5, (time * 0.04).cos() * 2.5);
                 let mut eye = TITLE_EYE + drift;
@@ -297,7 +341,19 @@ impl Host for DeadSignal {
         match self.screen {
             Screen::Title => match self.title_menu.draw(ui, active) {
                 Some(TitleItem::Play) => self.fade_to(Then::Show(Screen::Run)),
+                Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
+                None => {}
+            },
+            Screen::Hideout => match self.hideout.frame(ui, &mut self.profile, &self.icons, active) {
+                Some(Leave::Back) => {
+                    save::store(&self.profile);
+                    self.show(Screen::Title, cx);
+                }
+                Some(Leave::Play) => {
+                    save::store(&self.profile);
+                    self.fade_to(Then::Show(Screen::Run));
+                }
                 None => {}
             },
             Screen::Run => {
@@ -341,68 +397,7 @@ impl AppHost for DeadSignal {
         }
         log_info!("world: {} solid triangles", self.game.solid_count());
         self.combat.init(&mut renderer);
-        match assets::load(&mut renderer, "containers") {
-            Ok(props) => {
-                let mut shapes = std::collections::HashMap::new();
-                let mut meshes = std::collections::HashMap::new();
-                for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
-                    let name = containers::model_name(source);
-                    let open = format!("{name}_Open");
-                    let find = |n: &str| props.iter().find(|p| p.name == n);
-                    if let Some(hull) = find(&format!("{name}_Hull")) {
-                        shapes.insert(source, hull.triangles.clone());
-                    }
-                    if let (Some(shut), Some(open)) = (find(name).and_then(|p| p.mesh), find(&open).and_then(|o| o.mesh)) {
-                        meshes.insert(source, (shut, open));
-                    }
-                }
-                let placed = containers::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
-                containers::spawn(&mut self.game.world, placed, &meshes);
-            }
-            Err(e) => log_error!("containers: {e}"),
-        }
-        match assets::load(&mut renderer, "exits") {
-            Ok(props) => {
-                let find = |n: &str| props.iter().find(|p| p.name == n);
-                let tris = |n: &str| find(n).map(|p| p.triangles.clone()).unwrap_or_default();
-                let mesh = |n: &str| find(n).and_then(|p| p.mesh);
-                let mut shapes = exits::Shapes { meshes: Default::default(), hulls: Default::default(), barricade: tris("EXIT_Gate_Barricade_Hull") };
-                for way in [Way::Radio, Way::Road, Way::Truck] {
-                    let (normal, alt) = way.models();
-                    shapes.hulls.insert(way, tris(&format!("{normal}_Hull")));
-                    if let (Some(a), Some(b)) = (mesh(normal), mesh(alt)) {
-                        shapes.meshes.insert(way, (a, b));
-                    }
-                }
-                let mut placed = exits::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
-                let ground = self.game.ground();
-                placed.ring_zones(|centre, radius| renderer.add_mesh(&exits::ring(ground, centre, radius)));
-                self.game.world.insert_resource(placed);
-            }
-            Err(e) => log_error!("exits: {e}"),
-        }
-        match assets::load(&mut renderer, "items") {
-            Ok(props) => {
-                let started = std::time::Instant::now();
-                let mut meshes = crate::items::Meshes::default();
-                for kind in loot::ALL {
-                    let def = kind.def();
-                    let Some(p) = props.iter().find(|p| p.name == def.model) else {
-                        log_error!("items: no {}", def.model);
-                        continue;
-                    };
-                    if let Some(mesh) = p.mesh {
-                        meshes.0.insert(kind, mesh);
-                    }
-                    let picture = icons::draw(&p.vertices, def.size);
-                    let turned = icons::turned(&picture);
-                    self.icons.0.insert(kind, (images.add(gpu, &picture), images.add(gpu, &turned)));
-                }
-                self.game.world.insert_resource(meshes);
-                log_info!("icons: drawn in {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
-            }
-            Err(e) => log_error!("items: {e}"),
-        }
+        self.load_things(&mut renderer, gpu, images);
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
             Ok(model) => self.game.world.insert_resource(model),
             Err(e) => log_error!("shambler: {e}"),

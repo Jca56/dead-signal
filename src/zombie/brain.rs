@@ -69,7 +69,7 @@ const WALK_CLIP: f64 = 0.8;
 pub const HP: f64 = 150.0;
 /// A shot to the head does this many times a body shot's damage (blows do
 /// the same wherever they land).
-pub const HEADSHOT: f64 = 6.0;
+pub const HEADSHOT: f64 = 3.0;
 /// Its pace, m/s (a walk, and the lunge): most shamble, but one in
 /// `FAST_SHARE` walks fast.
 const SLOW: (f64, f64, f64) = (1.6, 2.0, 3.8);

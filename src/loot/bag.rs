@@ -7,7 +7,8 @@ use super::{Kind, Stack};
 
 pub const PACK: (u8, u8) = (6, 4);
 pub const POCKETS: (u8, u8) = (2, 2);
-/// What a run starts with: a couple of magazines' worth, in a pocket.
+/// A couple of magazines' worth, for trying things with (tests).
+#[cfg(test)]
 pub const START_ROUNDS: u32 = 24;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -18,13 +19,24 @@ pub struct Bag {
 
 impl Default for Bag {
     fn default() -> Self {
-        let mut bag = Self { pack: Grid::new(PACK.0, PACK.1), pockets: Grid::new(POCKETS.0, POCKETS.1) };
-        bag.pockets.place(Stack::new(Kind::Rounds, START_ROUNDS));
-        bag
+        Self::empty()
     }
 }
 
 impl Bag {
+    /// Nothing in it at all.
+    pub fn empty() -> Self {
+        Self { pack: Grid::new(PACK.0, PACK.1), pockets: Grid::new(POCKETS.0, POCKETS.1) }
+    }
+
+    /// A couple of magazines' worth in a pocket (for tests).
+    #[cfg(test)]
+    pub fn with_rounds() -> Self {
+        let mut bag = Self::empty();
+        bag.pockets.place(Stack::new(Kind::Rounds, START_ROUNDS));
+        bag
+    }
+
     /// Put `stack` away: topping up what's already carried, then in the
     /// pack, then the pockets. What didn't fit.
     pub fn add(&mut self, stack: Stack) -> Stack {
@@ -59,8 +71,8 @@ mod tests {
     }
 
     #[test]
-    fn a_run_starts_with_rounds_in_a_pocket_and_room_in_the_pack() {
-        let bag = Bag::default();
+    fn rounds_in_a_pocket_leave_room_in_the_pack() {
+        let bag = Bag::with_rounds();
         assert_eq!(bag.count(Kind::Rounds), START_ROUNDS);
         assert_eq!(bag.pockets.items.len(), 1);
         assert!(bag.pack.items.is_empty());
@@ -68,7 +80,7 @@ mod tests {
 
     #[test]
     fn it_fills_the_pack_then_the_pockets_then_says_no() {
-        let mut bag = Bag::default();
+        let mut bag = Bag::with_rounds();
         // Six batteries fill the 6×4 pack; then a 2×2 pocket takes one more.
         for _ in 0..6 {
             assert_eq!(bag.add(Stack::one(Kind::Battery)).count, 0);
@@ -77,7 +89,7 @@ mod tests {
         bag.remove(Kind::Rounds, START_ROUNDS);
         assert!(room_for(&bag, Stack::one(Kind::Battery)));
         // Rounds top up the pocket's stack before taking a new place.
-        let mut bag = Bag::default();
+        let mut bag = Bag::with_rounds();
         bag.add(Stack::new(Kind::Rounds, 6));
         assert_eq!(bag.pockets.items[0].stack.count, 30);
         assert!(bag.pack.items.is_empty());

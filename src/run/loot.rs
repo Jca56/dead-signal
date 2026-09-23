@@ -194,6 +194,7 @@ impl Run {
         }
         containers::open_up(&mut game.world, e);
         self.stats.containers_searched += 1;
+        self.stats.cages_opened += u32::from(source == crate::loot::tables::Source::Cage);
         self.open_bag(cx, Some(e));
     }
 

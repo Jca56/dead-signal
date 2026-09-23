@@ -225,7 +225,7 @@ fn it_walks_round_a_wall_to_where_it_saw_you() {
 }
 
 #[test]
-fn six_to_the_body_one_to_the_head_or_three_blows() {
+fn six_to_the_body_two_to_the_head_or_three_blows() {
     let from = Vec3::ZERO;
     let mut z = Zombie::new(0.0, 1);
     for _ in 0..5 {
@@ -233,7 +233,8 @@ fn six_to_the_body_one_to_the_head_or_three_blows() {
     }
     assert!(z.hurt(25.0, false, false, from) && z.dead(), "six body shots");
     let mut z = Zombie::new(0.0, 1);
-    assert!(z.hurt(25.0, true, false, from), "one to the head");
+    assert!(!z.hurt(25.0, true, false, from), "one to the head isn't enough");
+    assert!(z.hurt(25.0, true, false, from), "two to the head");
     // Blows: the same to the head as anywhere, and each sends it reeling.
     let mut z = Zombie::new(0.0, 1);
     assert!(!z.hurt(50.0, true, true, from));
