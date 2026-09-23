@@ -249,11 +249,11 @@ fn six_to_the_body_two_to_the_head_or_three_blows() {
     let mut z = Zombie::new(0.0, 1);
     assert!(!z.hurt(25.0, true, false, from), "one to the head isn't enough");
     assert!(z.hurt(25.0, true, false, from), "two to the head");
-    // Blows: the same to the head as anywhere, and each sends it reeling.
+    // Blows: half again to the head, and each sends it reeling.
     let mut z = Zombie::new(0.0, 1);
     assert!(!z.hurt(50.0, true, true, from));
     assert!(matches!(z.state, State::Stagger { .. }) && z.clip().0 == Clip::Stumble, "a blow sends it stumbling");
-    assert_eq!(z.hp, HP - 50.0);
+    assert_eq!(z.hp, HP - 75.0);
     assert!(!z.hurt(50.0, false, true, from));
     assert!(z.hurt(50.0, false, true, from), "three blows");
 }
@@ -394,4 +394,24 @@ fn a_round_goes_on_past_the_ones_already_hit() {
     assert!(a != b && b != c && a != c);
     assert!(super::raycast_past(&mut world, from, dir, 50.0, &[a, b, c]).is_none(), "none past the last");
     assert!(super::raycast_past(&mut world, from, dir, tb + 1.0, &[a, b]).is_none(), "a wall before the third stops it");
+}
+
+#[test]
+fn a_takedown_kills_only_one_that_never_saw_it_coming() {
+    use bevy_ecs::prelude::*;
+    let knife = |state: State| {
+        let mut world = World::new();
+        world.insert_resource(super::Horde::default());
+        let mut z = Zombie::new(0.0, 5);
+        z.state = state;
+        let e = world.spawn((z, Body::at(Vec3::ZERO))).id();
+        let hit = super::Impact { damage: 45.0, head: false, blow: true, shove: 3.0, stumble: true, takedown: true };
+        super::hurt(&mut world, e, Vec3::new(0.0, 0.0, -1.0), Vec3::new(0.0, 1.6, 2.0), hit)
+    };
+    assert!(knife(State::Wander { goal: None, rest: 1.0 }), "wandering: dead");
+    assert!(knife(State::Investigate { at: Vec3::ZERO, looked: 0.0 }), "gone to look at a noise: dead");
+    assert!(!knife(State::Hunt), "coming for you: just a cut");
+    // And a blow to the head, half again.
+    assert_eq!(super::brain::dealt(80.0, true, true), 120.0);
+    assert_eq!(super::brain::dealt(80.0, false, true), 80.0);
 }

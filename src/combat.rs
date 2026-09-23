@@ -57,6 +57,8 @@ struct Hit {
     stumble: bool,
     /// The share of its damage each of the dead behind the first takes.
     pierce: &'static [f64],
+    /// Kills one that never saw it coming.
+    takedown: bool,
 }
 
 /// What a pellet or a blow met: anything at all, one of the dead or a
@@ -68,12 +70,15 @@ struct Met {
     head: bool,
 }
 
-/// What's been heard of a shot's pellets landing so far: one tick for
-/// hitting something (any kill ticks again), one thud, however many land.
+/// What's been heard of a shot's pellets (or a swing's rays) landing so
+/// far: one tick for hitting something (any kill ticks again), one thud,
+/// however many land; and which of the dead have been struck (none is
+/// struck twice).
 #[derive(Default)]
 struct Heard {
     confirmed: bool,
     thudded: bool,
+    struck: Vec<bevy_ecs::entity::Entity>,
 }
 
 impl Heard {
@@ -180,7 +185,8 @@ impl Combat {
     }
 
     /// One frame of a run: the hands, what they do, and what flies.
-    pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64, stats: &mut Stats) {
+    /// How much stamina its swings took.
+    pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64, stats: &mut Stats) -> f64 {
         self.fx.update(dt);
         self.sprint_block -= dt;
         self.hurt = (self.hurt - dt * 1.6).max(0.0);
@@ -193,10 +199,11 @@ impl Combat {
             v.ads_zoom = spec.shot.map_or(1.0, |s| s.zoom);
         }
         if acts.is_empty() {
-            return;
+            return 0.0;
         }
-        let Some((body, view)) = game.player() else { return };
+        let Some((body, view)) = game.player() else { return 0.0 };
         let aim = aim(&view, &body, game.alpha());
+        let mut spent = 0.0;
         for act in acts {
             match act {
                 Act::Shoot => {
@@ -218,7 +225,7 @@ impl Combat {
                         spread.still
                     };
                     // Every pellet its own way; a hit counted once a shot.
-                    let hit = Hit { reach: shot.range, damage: shot.damage, blow: false, falloff: shot.falloff, shove: shot.shove, stumble: shot.stumble, pierce: shot.pierce };
+                    let hit = Hit { reach: shot.range, damage: shot.damage, blow: false, falloff: shot.falloff, shove: shot.shove, stumble: shot.stumble, pierce: shot.pierce, takedown: false };
                     let mut heard = Heard::default();
                     let mut met = Met::default();
                     for _ in 0..shot.pellets {
@@ -248,20 +255,35 @@ impl Combat {
                     stats.reloads += u32::from(self.hands.clip().0 == Clip::ReloadEnd);
                     self.sound.play(Sfx::Bolt, 0.8);
                 }
-                Act::Swing => self.sound.play(Sfx::Whoosh, 0.7),
+                Act::Swing => {
+                    spent += spec.bash.stamina;
+                    self.sound.play(Sfx::Whoosh, 0.7);
+                }
                 Act::Strike => {
-                    // A fan of three: straight on, and a little either side.
-                    let hit = Hit { reach: spec.bash.reach, damage: spec.bash.damage * self.melee, blow: true, falloff: None, shove: zombie::blow_shove(self.melee), stumble: true, pierce: &[] };
-                    for turn in [0.0f64, -8.0, 8.0] {
-                        let t = turn.to_radians();
+                    let b = spec.bash;
+                    let hit = Hit { reach: b.reach, damage: b.damage * self.melee, blow: true, falloff: None, shove: zombie::blow_shove(self.melee * b.shove), stumble: true, pierce: &[], takedown: b.takedown };
+                    // Rays across its arc, the middle first, then out either
+                    // side: the first thing met stops a lone blow; one that
+                    // cleaves goes on through the arc to strike as many of
+                    // the dead as it can.
+                    let rays: &[f64] = if b.cleave > 1 { &[0.0, -1.0 / 3.0, 1.0 / 3.0, -2.0 / 3.0, 2.0 / 3.0, -1.0, 1.0] } else { &[0.0, -1.0, 1.0] };
+                    let mut heard = Heard::default();
+                    for share in rays {
+                        let t = (share * b.arc * 0.5).to_radians();
                         let dir = (aim.dir * t.cos() + aim.right * t.sin()).normalize();
-                        if self.strike(game, &aim, dir, &hit, &mut Heard::default(), stats).something {
+                        let met = self.strike(game, &aim, dir, &hit, &mut heard, stats);
+                        if (b.cleave <= 1 && met.something) || heard.struck.len() >= b.cleave as usize {
                             break;
                         }
+                    }
+                    // A heavy blade biting is heard a little way off.
+                    if b.heard > 0.0 && !heard.struck.is_empty() {
+                        zombie::noise(&mut game.world, aim.eye, b.heard);
                     }
                 }
             }
         }
+        spent
     }
 
     /// `aim`'s direction thrown up to `degrees` off true.
@@ -280,7 +302,7 @@ impl Combat {
     fn strike(&mut self, game: &mut Game, aim: &Aim, dir: Vec3, hit: &Hit, heard: &mut Heard, stats: &mut Stats) -> Met {
         let wall = game.world.resource::<Solid>().0.raycast(aim.eye, dir, hit.reach);
         let reach = wall.map_or(hit.reach, |h| h.t);
-        let dead = zombie::raycast(&mut game.world, aim.eye, dir, reach);
+        let dead = zombie::raycast_past(&mut game.world, aim.eye, dir, reach, &heard.struck);
         let reach = dead.map_or(reach, |(_, t, _)| t);
         let target = targets::raycast(&mut game.world, aim.eye, dir, reach);
         let punch = |t: f64| hit.damage * hit.falloff.map_or(1.0, |f| f.at(t));
@@ -289,12 +311,12 @@ impl Combat {
         {
             // Through one and on into the next, weaker, as far as the
             // round goes (to the wall, if there is one).
-            let (mut next, mut past, mut shares, mut share) = (Some(first), Vec::new(), hit.pierce.iter(), 1.0);
+            let (mut next, mut shares, mut share) = (Some(first), hit.pierce.iter(), 1.0);
             while let Some((e, t, head)) = next {
                 let point = aim.eye + dir * t;
                 // Close enough to hurt in full, a blast staggers.
                 let close = hit.falloff.is_none_or(|f| t <= f.near);
-                let impact = zombie::Impact { damage: punch(t) * share, head, blow: hit.blow, shove: hit.shove, stumble: hit.stumble && close };
+                let impact = zombie::Impact { damage: punch(t) * share, head, blow: hit.blow, shove: hit.shove, stumble: hit.stumble && close, takedown: hit.takedown };
                 let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, impact);
                 stats.damage_dealt += zombie::brain::dealt(impact.damage, head, hit.blow);
                 if killed {
@@ -318,10 +340,10 @@ impl Combat {
                 {
                     v.jolt(0.02);
                 }
-                past.push(e);
+                heard.struck.push(e);
                 let Some(&s) = shares.next() else { break };
                 share = s;
-                next = zombie::raycast_past(&mut game.world, aim.eye, dir, wall.map_or(hit.reach, |h| h.t), &past);
+                next = zombie::raycast_past(&mut game.world, aim.eye, dir, wall.map_or(hit.reach, |h| h.t), &heard.struck);
             }
             return Met { something: true, target: true, head: first.2 };
         }

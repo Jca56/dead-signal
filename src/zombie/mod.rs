@@ -321,6 +321,7 @@ pub fn alive(world: &mut World) -> usize {
 }
 
 /// The nearest Shambler along a ray within `max`: which, how far, the head.
+#[cfg(test)]
 pub fn raycast(world: &mut World, from: Vec3, dir: Vec3, max: f64) -> Option<(Entity, f64, bool)> {
     raycast_past(world, from, dir, max, &[])
 }
@@ -343,8 +344,9 @@ pub fn raycast_past(world: &mut World, from: Vec3, dir: Vec3, max: f64, past: &[
 }
 
 /// A hit on one of the dead: how much, whether to the head, whether a
-/// blow (not a shot), how hard it shoves, m/s, and whether it sends it
-/// stumbling (a blow always does).
+/// blow (not a shot), how hard it shoves, m/s, whether it sends it
+/// stumbling (a blow always does), and whether it kills outright one that
+/// hasn't noticed the player.
 #[derive(Clone, Copy, Debug)]
 pub struct Impact {
     pub damage: f64,
@@ -352,6 +354,8 @@ pub struct Impact {
     pub blow: bool,
     pub shove: f64,
     pub stumble: bool,
+    /// A killing blow to one that never saw it coming.
+    pub takedown: bool,
 }
 
 /// A blow's shove, m/s, `times` the usual.
@@ -363,7 +367,8 @@ pub fn blow_shove(times: f64) -> f64 {
 /// died.
 pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) -> bool {
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
-    let killed = z.hurt(hit.damage, hit.head, hit.blow, from);
+    let damage = if hit.takedown && z.unaware() { brain::HP * 10.0 } else { hit.damage };
+    let killed = z.hurt(damage, hit.head, hit.blow, from);
     if hit.stumble && !killed {
         z.stumble();
     }

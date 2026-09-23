@@ -70,6 +70,7 @@ pub const HP: f64 = 150.0;
 /// A shot to the head does this many times a body shot's damage (blows do
 /// the same wherever they land).
 pub const HEADSHOT: f64 = 3.0;
+pub const BLOW_HEADSHOT: f64 = 1.5;
 /// Its pace, m/s (a walk, and the lunge): most shamble, but one in
 /// `FAST_SHARE` walks fast.
 const SLOW: (f64, f64, f64) = (1.6, 2.0, 3.8);
@@ -215,6 +216,12 @@ impl Zombie {
             self.state = State::Hunt;
         }
         false
+    }
+
+    /// Whether it has no idea the player's there: wandering, or gone to
+    /// look at a noise.
+    pub fn unaware(&self) -> bool {
+        matches!(self.state, State::Wander { .. } | State::Investigate { .. })
     }
 
     /// Sent stumbling back (a blast at close range), if it's alive.
@@ -454,10 +461,14 @@ impl Zombie {
     }
 }
 
-/// What a hit takes off: a shot to the head many times over; a blow the
-/// same wherever it lands.
+/// What a hit takes off: a shot to the head many times over, a blow to
+/// it half again.
 pub fn dealt(damage: f64, head: bool, blow: bool) -> f64 {
-    damage * if head && !blow { HEADSHOT } else { 1.0 }
+    damage * match (head, blow) {
+        (true, false) => HEADSHOT,
+        (true, true) => BLOW_HEADSHOT,
+        _ => 1.0,
+    }
 }
 
 /// How far along the way from `a` to `b` the point `p` is, flat: 0 at `a`,

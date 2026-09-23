@@ -50,6 +50,9 @@ fn every_viewmodel_rests_as_modelled_with_its_clips() {
         for (clip, time) in clips {
             assert!((length(&g, clip) - time).abs() < 0.05, "{} {clip} lasts {}", spec.name, length(&g, clip));
         }
+        if spec.bash.combo {
+            assert!((length(&g, "Bash2") - spec.bash.time).abs() < 0.05, "{} backhand lasts {}", spec.name, length(&g, "Bash2"));
+        }
         if spec.shot.is_some() {
             assert!(length(&g, "Aim") > 0.0 && length(&g, "AimFire") > 0.0, "{} has sights", spec.name);
         }
@@ -309,4 +312,48 @@ fn a_round_is_only_in_hand_to_load_it() {
     let round = bone_at(&g, "ReloadShell", 0.3, "round").translation();
     let gun = bone_at(&g, "ReloadShell", 0.3, "gun").translation();
     assert!((round - gun).length() < 0.3, "the round {:.3} m off the gun", (round - gun).length());
+}
+
+
+/// A blade's edge: the palest steel.
+fn edge(c: [f32; 4]) -> bool {
+    c[0] > 0.55 && c[1] > 0.55 && c[2] > 0.5
+}
+
+#[test]
+fn every_blade_lands_ahead_in_view() {
+    for weapon in [Weapon::Knife, Weapon::Machete, Weapon::Axe] {
+        let g = viewmodel(weapon);
+        let strike = weapon.spec().bash.strike_at;
+        let hit = painted(&g, "Bash", strike, "gun", edge);
+        let (x, y) = on_screen(hit).unwrap_or_else(|| panic!("{weapon:?}: the edge behind the eye"));
+        assert!(x.abs() < 0.8 && y.abs() < 0.9, "{weapon:?}: the edge lands at {x:.2}, {y:.2}");
+        let rest = painted(&g, "Idle", 0.0, "gun", edge);
+        assert!(-hit.z > -rest.z, "{weapon:?}: the blow doesn't reach out ({:.2} vs {:.2} m ahead)", -hit.z, -rest.z);
+        // At rest the right hand on its handle, and a one-handed blade out
+        // at the right (the axe is held across the body, its head at the
+        // left).
+        if weapon != Weapon::Axe {
+            assert!(rest.x > 0.0, "{weapon:?}: held at the left");
+        }
+        let hand = bone_at(&g, "Idle", 1.0, "hand.R").translation();
+        assert!((hand - bone_at(&g, "Idle", 1.0, "gun").translation()).length() < 0.12, "{weapon:?}: the hand off the handle");
+    }
+}
+
+#[test]
+fn the_machete_sweeps_across_and_back_and_the_axe_comes_down() {
+    let g = viewmodel(Weapon::Machete);
+    let x = |anim: &str, f: f64| painted(&g, anim, f / 30.0, "gun", edge).x;
+    assert!(x("Bash", 4.0) > x("Bash", 7.0) + 0.15, "the forehand goes right to left: {:.2} to {:.2}", x("Bash", 4.0), x("Bash", 7.0));
+    assert!(x("Bash2", 7.0) > x("Bash2", 4.0) + 0.15, "the backhand left to right: {:.2} to {:.2}", x("Bash2", 4.0), x("Bash2", 7.0));
+    let g = viewmodel(Weapon::Axe);
+    let head = |f: f64| painted(&g, "Bash", f / 30.0, "gun", edge);
+    assert!(head(9.0).y > head(14.0).y + 0.2, "the chop comes down: {:.2} to {:.2}", head(9.0).y, head(14.0).y);
+    // Both hands on it, the left low on the haft, all the while.
+    let left = |t: f64| bone_at(&g, "Bash", t, "gun").inverse().unwrap().transform_point(bone_at(&g, "Bash", t, "hand.L").translation());
+    for t in [0.0, 0.3, 0.47, 0.9] {
+        assert!((left(t) - left(0.0)).length() < 0.02, "at {t}: the left hand slid {:.3} m on the haft", (left(t) - left(0.0)).length());
+    }
+    assert!((bone_at(&g, "Idle", 0.0, "hand.L").translation() - bone_at(&g, "Idle", 0.0, "gun").translation()).length() > 0.2, "the hands a haft apart");
 }

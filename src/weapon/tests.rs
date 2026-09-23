@@ -329,3 +329,59 @@ fn only_a_scoped_gun_goes_to_its_scope_and_only_at_the_last() {
     }
     assert_eq!((p.aim(), p.scoped()), (1.0, 0.0));
 }
+
+/// A swing's clip, from the first frame of the press.
+fn swing_clip(h: &mut Hands) -> Clip {
+    h.update(FIRE, DT);
+    h.clip().0
+}
+
+/// Frames till a swing under way is over.
+fn swing_frames(h: &mut Hands) -> u32 {
+    let mut n = 0;
+    while h.clip().0 != Clip::Idle {
+        h.update(Trigger::default(), DT);
+        n += 1;
+    }
+    n
+}
+
+#[test]
+fn the_machete_comes_back_the_other_way_quicker_and_the_knife_doesnt() {
+    let mut m = Hands::default();
+    m.take_up(Some(Slot::Melee), Weapon::Machete, 0);
+    idle(&mut m);
+    assert_eq!(swing_clip(&mut m), Clip::Bash);
+    let first = swing_frames(&mut m);
+    assert_eq!(swing_clip(&mut m), Clip::Bash2, "straight after: the backhand");
+    let second = swing_frames(&mut m);
+    assert_eq!(swing_clip(&mut m), Clip::Bash, "and forehand again");
+    swing_frames(&mut m);
+    assert!(second < first, "the chain quickens: {second} vs {first} frames");
+    // A pause breaks the chain.
+    for _ in 0..60 {
+        m.update(Trigger::default(), DT);
+    }
+    assert_eq!(swing_clip(&mut m), Clip::Bash);
+    // No combo in a knife.
+    let mut k = Hands::default();
+    k.take_up(Some(Slot::Melee), Weapon::Knife, 0);
+    idle(&mut k);
+    for _ in 0..3 {
+        assert_eq!(swing_clip(&mut k), Clip::Bash);
+        swing_frames(&mut k);
+    }
+}
+
+#[test]
+fn winded_the_swing_is_slower() {
+    let time = |speed: f64| {
+        let mut h = Hands { swing_speed: speed, ..Hands::default() };
+        h.take_up(Some(Slot::Melee), Weapon::Axe, 0);
+        idle(&mut h);
+        h.update(FIRE, DT);
+        swing_frames(&mut h)
+    };
+    let (fresh, winded) = (time(1.0), time(0.75));
+    assert!(f64::from(winded) > f64::from(fresh) * 1.25, "{winded} vs {fresh} frames");
+}

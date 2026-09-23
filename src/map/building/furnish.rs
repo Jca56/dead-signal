@@ -90,7 +90,7 @@ impl Thing {
                 Source::Wardrobe => (1.24, 0.6, true),
                 Source::Shelf => (1.8, 0.6, true),
                 Source::Register => (2.06, 0.86, false),
-                Source::Locker => (0.6, 0.55, true),
+                Source::Locker | Source::ToolLocker => (0.6, 0.55, true),
                 Source::GunCabinet | Source::HunterCabinet => (0.84, 0.5, true),
                 _ => (1.0, 0.7, false),
             },
@@ -137,7 +137,7 @@ fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
         Use::Hall => Vec::new(),
         // The gun cabinet first: it has the pick of the walls.
         Use::Den => vec![b(if kind == Kind::Cabin { Source::HunterCabinet } else { Source::GunCabinet }, 1.0), f(WoodStove, 0.9), f(Armchair, 0.8), f(Table, 0.6), f(Bookcase, 0.5), b(Source::Cabinet, 0.5), f(Sofa, 0.35)],
-        Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::Locker, 0.6), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
+        Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::ToolLocker, 1.0), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
     }
 }
 

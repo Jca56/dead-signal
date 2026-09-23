@@ -113,6 +113,19 @@ impl Vitals {
     }
 
     /// Whether a sprint may start or go on.
+    /// Spend `cost` stamina (a swing): run dry, winded; and it waits a
+    /// moment before it comes back, as after a sprint.
+    pub fn spend(&mut self, cost: f64) {
+        if cost <= 0.0 {
+            return;
+        }
+        self.stamina = (self.stamina - cost).max(0.0);
+        self.since_sprint = 0.0;
+        if self.stamina == 0.0 {
+            self.winded = true;
+        }
+    }
+
     pub fn can_sprint(&self) -> bool {
         !self.winded && self.stamina > 0.0
     }

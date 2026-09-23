@@ -15,10 +15,13 @@ pub enum Weapon {
     Pistol,
     Shotgun,
     Rifle,
+    Knife,
+    Machete,
+    Axe,
 }
 
 impl Weapon {
-    pub const ALL: [Weapon; 4] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle];
+    pub const ALL: [Weapon; 7] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Knife, Weapon::Machete, Weapon::Axe];
 }
 
 /// How far off true a round may fly, degrees: standing still, moving,
@@ -116,9 +119,27 @@ pub struct Bash {
     pub swing_at: f64,
     pub strike_at: f64,
     pub damage: f64,
-    /// How far it reaches, metres.
+    /// How far it reaches, metres, and across how wide an arc, degrees.
     pub reach: f64,
+    pub arc: f64,
+    /// How much stamina a swing takes, and how hard it shoves one of the
+    /// dead (a multiple of a blow's usual).
+    pub stamina: f64,
+    pub shove: f64,
+    /// How many of the dead one swing can hit (more than one: it cleaves
+    /// through its arc).
+    pub cleave: u32,
+    /// Kills one that hasn't noticed the player outright.
+    pub takedown: bool,
+    /// How far off the dead hear it land, metres (none: not at all).
+    pub heard: f64,
+    /// Swung again soon after, it comes back the other way (the "Bash2"
+    /// clip), a little quicker each time in a chain.
+    pub combo: bool,
 }
+
+/// A blow as a gun's (or bare hands') is: a quick shove of a thing.
+const BLOW: Bash = Bash { time: 0.5, swing_at: 0.05, strike_at: 8.0 / 30.0, damage: 50.0, reach: 1.8, arc: 16.0, stamina: 8.0, shove: 1.0, cleave: 1, takedown: false, heard: 0.0, combo: false };
 
 #[derive(Clone, Copy, Debug)]
 pub struct Spec {
@@ -148,7 +169,7 @@ const FISTS: Spec = Spec {
     shot: None,
     reload: None,
     // The jab lands on frame 6 of 30 a second.
-    bash: Bash { time: 0.5, swing_at: 0.08, strike_at: 6.0 / 30.0, damage: 20.0, reach: 1.6 },
+    bash: Bash { swing_at: 0.08, strike_at: 6.0 / 30.0, damage: 20.0, reach: 1.6, stamina: 5.0, shove: 0.7, ..BLOW },
     draw: 0.25,
     holster: 0.2,
 };
@@ -182,7 +203,7 @@ const PISTOL: Spec = Spec {
     }),
     reload: Some(Reload::Magazine { time: 1.4, marks: &[(0.2, Act::MagOut), (0.95, Act::MagIn), (1.12, Act::SlideRack)] }),
     // The pistol-whip lands on frame 9 of 30 a second.
-    bash: Bash { time: 0.5, swing_at: 0.05, strike_at: 8.0 / 30.0, damage: 50.0, reach: 1.8 },
+    bash: BLOW,
     draw: 0.35,
     holster: 0.25,
 };
@@ -217,7 +238,7 @@ const SHOTGUN: Spec = Spec {
     }),
     reload: Some(Reload::Rounds { start: 0.4, start_marks: &[], each: 0.55, insert_at: 10.0 / 30.0, end: 0.5, end_marks: &[(9.0 / 30.0, Act::Pump)] }),
     // The shove with the gun's side lands on frame 8.
-    bash: Bash { time: 0.6, swing_at: 0.1, strike_at: 8.0 / 30.0, damage: 55.0, reach: 1.9 },
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
     draw: 0.45,
     holster: 0.35,
 };
@@ -253,10 +274,22 @@ const RIFLE: Spec = Spec {
         marks: &[(14.0 / 30.0, Act::Bolt)],
     }),
     reload: Some(Reload::Rounds { start: 0.5, start_marks: &[(6.0 / 30.0, Act::Bolt)], each: 0.6, insert_at: 10.0 / 30.0, end: 0.55, end_marks: &[(9.0 / 30.0, Act::Bolt)] }),
-    bash: Bash { time: 0.6, swing_at: 0.1, strike_at: 8.0 / 30.0, damage: 55.0, reach: 1.9 },
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
     draw: 0.5,
     holster: 0.4,
 };
+
+/// A melee weapon: no rounds, its swing everything.
+const fn melee(name: &'static str, model: &'static str, bash: Bash, draw: f64) -> Spec {
+    Spec { name, slot: Some(Slot::Melee), model, mag: 0, ammo: None, shot: None, reload: None, bash, draw, holster: draw * 0.8 }
+}
+
+// Quick, short, weak; silent, and deadly to one that never saw it coming.
+const KNIFE: Spec = melee("TACTICAL KNIFE", "knife", Bash { time: 0.35, swing_at: 0.04, strike_at: 4.0 / 30.0, damage: 45.0, reach: 1.5, arc: 12.0, stamina: 6.0, shove: 0.5, cleave: 1, takedown: true, heard: 0.0, combo: false }, 0.25);
+// Two to put one down; swung again soon, it comes back the other way.
+const MACHETE: Spec = melee("MACHETE", "machete", Bash { time: 0.55, swing_at: 0.08, strike_at: 7.0 / 30.0, damage: 80.0, reach: 1.9, arc: 24.0, stamina: 12.0, shove: 1.0, cleave: 1, takedown: false, heard: 5.0, combo: true }, 0.35);
+// Slow, heavy: one to put one down, through all it meets in its arc.
+const AXE: Spec = melee("FIRE AXE", "axe", Bash { time: 0.95, swing_at: 0.3, strike_at: 14.0 / 30.0, damage: 160.0, reach: 2.1, arc: 60.0, stamina: 25.0, shove: 1.8, cleave: 3, takedown: false, heard: 9.0, combo: false }, 0.5);
 
 impl Weapon {
     pub fn spec(self) -> &'static Spec {
@@ -265,6 +298,9 @@ impl Weapon {
             Weapon::Pistol => &PISTOL,
             Weapon::Shotgun => &SHOTGUN,
             Weapon::Rifle => &RIFLE,
+            Weapon::Knife => &KNIFE,
+            Weapon::Machete => &MACHETE,
+            Weapon::Axe => &AXE,
         }
     }
 }

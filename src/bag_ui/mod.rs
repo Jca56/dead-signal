@@ -106,14 +106,24 @@ enum Landing {
     Put(i32, i32),
     /// Onto the stack at `index` of its own kind, `room` more fitting.
     Merge(usize, u32),
+    /// Rounds into the gun at `index`, `room` more fitting in it.
+    Load(usize, u32),
     /// Nowhere: in the way of something, or a stack already full.
     Blocked,
 }
 
 /// Where `held` goes in `grid` with its top-left at `(x, y)` and the
-/// pointer over cell `(cx, cy)`: laid down if it fits, onto a stack of its
-/// kind under the pointer with room left, or not at all.
+/// pointer over cell `(cx, cy)`: into a gun under the pointer that takes
+/// it, with room; laid down if it fits; onto a stack of its kind under the
+/// pointer with room left; or not at all.
 fn landing(grid: &Grid, held: Item, (x, y): (i32, i32), (cx, cy): (i32, i32)) -> Landing {
+    let under = (cx >= 0 && cy >= 0).then(|| grid.at(cx as u8, cy as u8)).flatten();
+    if let Some(i) = under {
+        let room = grid.items[i].stack.room_for(held.stack);
+        if room > 0 {
+            return Landing::Load(i, room);
+        }
+    }
     if grid.fits(held.stack.kind, x, y, held.turned, None) {
         return Landing::Put(x, y);
     }
@@ -139,6 +149,11 @@ fn release(shelves: &mut Shelves, h: Held, which: Which, at: (i32, i32), over: (
         Landing::Merge(i, room) => {
             let n = room.min(h.item.stack.count);
             grid.items[i].stack.count += n;
+            n
+        }
+        Landing::Load(i, room) => {
+            let n = room.min(h.item.stack.count);
+            grid.items[i].stack.loaded += n;
             n
         }
         Landing::Blocked => 0,

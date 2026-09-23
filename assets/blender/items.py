@@ -2,8 +2,8 @@
 ITEM_Ammo), food and water (ITEM_Beans, ITEM_Water), valuables (ITEM_Pills,
 ITEM_Cash, ITEM_Watch, ITEM_Ring, ITEM_Chain, ITEM_Radio, ITEM_Battery,
 ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key), the weapons
-(ITEM_Pistol, ITEM_Shotgun, ITEM_Rifle) and their rounds (ITEM_Shells,
-ITEM_RifleRounds). Each its own object
+(ITEM_Pistol, ITEM_Shotgun, ITEM_Rifle, ITEM_Knife, ITEM_Machete, ITEM_Axe)
+and the guns' rounds (ITEM_Shells, ITEM_RifleRounds). Each its own object
 sitting on its origin, for the game to set down wherever it likes and to
 draw its icon from (seen from the front, +Y, a little above: an item's
 long side runs along X, a tall one stands up Z).
@@ -359,6 +359,44 @@ def rifle_rounds():
     p.finish()
 
 
+STEEL_BLADE = (0.55, 0.56, 0.55)
+EDGE = (0.82, 0.82, 0.80)
+AXE_RED = (0.62, 0.10, 0.08)
+
+
+def knife():
+    """A tactical knife lying flat, point along +X."""
+    p = Part("ITEM_Knife")
+    z = 0.012
+    p.box((-0.08, 0.0, z), (0.11, 0.028, 0.022), BLACK)
+    p.box((-0.02, 0.0, z), (0.012, 0.06, 0.02), BLACK)
+    p.box((0.075, -0.002, z - 0.004), (0.15, 0.026, 0.006), STEEL_BLADE)
+    p.box((0.07, 0.011, z - 0.004), (0.13, 0.006, 0.007), EDGE)
+    p.finish()
+
+
+def machete():
+    """A machete lying flat, its blade along +X, the edge to the front."""
+    p = Part("ITEM_Machete")
+    z = 0.012
+    p.box((-0.24, 0.0, z), (0.13, 0.034, 0.026), WALNUT)
+    p.box((0.1, 0.0, z - 0.006), (0.46, 0.05, 0.006), STEEL_BLADE)
+    p.box((0.1, 0.027, z - 0.006), (0.44, 0.008, 0.007), EDGE)
+    p.finish()
+
+
+def axe():
+    """A fire axe lying flat, the haft along X, the head at +X, its blade
+    to the front."""
+    p = Part("ITEM_Axe")
+    z = 0.02
+    p.box((-0.05, 0.0, z), (0.72, 0.045, 0.035), WALNUT)
+    p.box((0.34, 0.02, z), (0.1, 0.22, 0.03), AXE_RED)
+    p.box((0.34, 0.14, z), (0.14, 0.03, 0.02), STEEL_BLADE)
+    p.box((0.34, -0.1, z), (0.03, 0.08, 0.02), AXE_RED)
+    p.finish()
+
+
 def gold_bar():
     p = Part("ITEM_GoldBar")
     m = Matrix.Translation((0, 0, 0.03)) @ Matrix.Diagonal((0.1, 0.045, 0.03, 1.0))
@@ -392,6 +430,9 @@ def main():
     shells()
     rifle()
     rifle_rounds()
+    knife()
+    machete()
+    axe()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"items: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")
 

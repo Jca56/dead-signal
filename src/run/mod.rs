@@ -35,6 +35,8 @@ const HEARTBEAT: f64 = 1.1;
 /// a share.
 const RUMMAGING_PACE: f64 = 0.5;
 const AIMING_PACE: f64 = 0.6;
+/// How fast a swing goes winded, as a share.
+const WINDED_SWING: f64 = 0.75;
 
 #[derive(Default)]
 pub struct Run {
@@ -185,11 +187,15 @@ impl Run {
         // down.
         let aim = locked && ui.state.right_down && !wants_sprint;
         let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: pressed(ui, &['r']), melee: striking, aim } };
+        self.pull_rounds(combat);
         // Reloading draws on the rounds carried, of the kind the gun takes.
         let ammo = combat.hands.spec().ammo;
         combat.hands.spare = ammo.map_or(0, |kind| self.bag.count(kind));
         let spare = combat.hands.spare;
-        combat.frame(game, trigger, dt, &mut self.stats);
+        // Swings spend stamina; winded, they come slower.
+        combat.hands.swing_speed = if self.vitals.winded { WINDED_SWING } else { 1.0 };
+        let spent = combat.frame(game, trigger, dt, &mut self.stats);
+        self.vitals.spend(spent);
         if let Some(kind) = ammo {
             self.bag.remove(kind, spare - combat.hands.spare);
         }

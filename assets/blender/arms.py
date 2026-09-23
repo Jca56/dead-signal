@@ -9,7 +9,7 @@ Writes one viewmodel a weapon, assets/models/viewmodel_<weapon>.glb: the
 arms and that weapon as one skinned mesh on one armature, and the
 weapon's clips (every one has Idle and Bash; a gun has Fire and Reload
 too). Each weapon is a module (`fists.py`, `pistol.py`, `shotgun.py`,
-`rifle.py`)
+`rifle.py`, `knife.py`, `machete.py`, `axe.py`)
 that adds its parts and bones to the arms (`build`, none for bare fists)
 and makes its clips (`animate`). Built in camera space: the eye at the origin,
 looking down Blender's +Y (the exporter makes that glTF's -Z), +Z up, +X
@@ -32,7 +32,10 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import axe  # noqa: E402
 import fists  # noqa: E402
+import knife  # noqa: E402
+import machete  # noqa: E402
 import pistol  # noqa: E402
 import rifle  # noqa: E402
 import shotgun  # noqa: E402
@@ -40,7 +43,7 @@ from kit import Builder, banded, norm, rotate  # noqa: E402
 MODELS = os.path.join(HERE, "..", "models")
 
 # Every weapon's viewmodel: its name in the file's, and its module.
-WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle)]
+WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("knife", knife), ("machete", machete), ("axe", axe)]
 
 # Colours (sRGB, as in the title scene).
 SLEEVE = (0.30, 0.29, 0.20)

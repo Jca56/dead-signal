@@ -1,8 +1,9 @@
 //! What's in hand, from the run's side: 1, 2 and 3 (or the wheel) to
 //! switch between what's carried in the slots, bare fists when there's
 //! nothing, and the hands kept in step with the bag: a gun's rounds go
-//! back into it, a weapon thrown out of its slot is let go of, one picked
-//! up into empty hands is taken up.
+//! back into it (and rounds loaded into it in the bag come into the
+//! hands), a weapon thrown out of its slot is let go of, one picked up
+//! into empty hands is taken up.
 
 use lntrn_ui::{Key, Ui};
 
@@ -81,6 +82,14 @@ impl Run {
         let at = now.and_then(|s| armed.iter().position(|&a| a == s)).map_or(if by > 0 { -1 } else { 0 }, |i| i as i32);
         let n = armed.len() as i32;
         Some(armed[(at + by).rem_euclid(n) as usize])
+    }
+
+    /// The gun in hand has the rounds its slot says (rounds dropped onto
+    /// it in the bag load it).
+    pub(super) fn pull_rounds(&self, combat: &mut Combat) {
+        if let Some(stack) = combat.hands.held.and_then(|slot| self.bag.slot(slot)) {
+            combat.hands.mag = stack.loaded.min(combat.hands.spec().mag);
+        }
     }
 
     /// The gun's rounds, kept in it in the bag (so they go where it goes).

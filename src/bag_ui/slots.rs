@@ -1,7 +1,8 @@
 //! The weapon slots on the bag screen: a column of three boxes, each with
 //! its key and name, holding what's carried to hand there. A weapon is
 //! dropped on its own slot (swapping with what's in it, which goes where
-//! the new one came from); anything else, or on the wrong slot, goes back.
+//! the new one came from); rounds on a gun that takes them load it;
+//! anything else, or on the wrong slot, goes back.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -62,16 +63,28 @@ pub fn draw(ui: &mut Ui, icons: &Icons, slot: Slot, stack: Option<Stack>, r: Rec
     }
 }
 
-/// Whether `stack` goes in `slot` (swapping with what's there).
-pub fn takes(stack: Stack, slot: Slot) -> bool {
-    Slot::of(stack.kind) == Some(slot)
+/// Whether `stack` goes in `slot` (swapping with what's there, `now`), or
+/// loads what's there.
+pub fn takes(stack: Stack, slot: Slot, now: Option<Stack>) -> bool {
+    Slot::of(stack.kind) == Some(slot) || now.is_some_and(|gun| gun.room_for(stack) > 0)
 }
 
 /// Let go of `h` over `slot`: in it, what was there going where `h` came
 /// from; or, if it doesn't go there (or what was there has nowhere to go),
 /// back where it was. How many landed.
 pub fn release(shelves: &mut Shelves, h: Held, slot: Slot) -> u32 {
-    if !takes(h.item.stack, slot) {
+    // Rounds for the gun in it: loaded, as many as there's room for.
+    if let Some(gun) = shelves.bag.slot_mut(slot)
+        && gun.room_for(h.item.stack) > 0
+    {
+        let n = gun.room_for(h.item.stack).min(h.item.stack.count);
+        gun.loaded += n;
+        if n < h.item.stack.count {
+            put_back(shelves, Held { item: Item { stack: h.item.stack.with_count(h.item.stack.count - n), ..h.item }, ..h });
+        }
+        return n;
+    }
+    if !takes(h.item.stack, slot, None) {
         put_back(shelves, h);
         return 0;
     }

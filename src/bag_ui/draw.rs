@@ -70,7 +70,7 @@ impl BagUi {
                 // Where it would land, green (fresh, or onto a stack with
                 // room) or red, then the thing itself.
                 if let Some(&(Which::Slot(slot), r)) = places.iter().find(|(_, r)| r.contains(p)) {
-                    let ok = slots::takes(h.item.stack, slot);
+                    let ok = slots::takes(h.item.stack, slot, shelves.bag.slot(slot));
                     ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
                 } else if let Some(&(which, r)) = places.iter().find(|(_, r)| r.contains(p))
                     && let Some(g) = shelves.grid(which)
@@ -78,7 +78,7 @@ impl BagUi {
                     let (x, y) = corner_cell(r, p - h.grab, cell);
                     let (spot, ok) = match landing(g, h.item, (x, y), cell_under(r, p, cell)) {
                         Landing::Put(x, y) => (footprint(r, x, y, h.item.shape(), cell), true),
-                        Landing::Merge(i, _) => (footprint(r, i32::from(g.items[i].x), i32::from(g.items[i].y), g.items[i].shape(), cell), true),
+                        Landing::Merge(i, _) | Landing::Load(i, _) => (footprint(r, i32::from(g.items[i].x), i32::from(g.items[i].y), g.items[i].shape(), cell), true),
                         Landing::Blocked => (footprint(r, x, y, h.item.shape(), cell), false),
                     };
                     ui.draw.rect(spot, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });

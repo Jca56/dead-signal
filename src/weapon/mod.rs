@@ -17,6 +17,11 @@ use crate::loot::bag::Slot;
 
 /// How far up the sights are before a scope's view comes in.
 const SCOPE_FROM: f64 = 0.8;
+/// A combo: how soon after a swing ends the next carries on the chain,
+/// seconds; how much quicker each swing in it; the longest it gets.
+const COMBO_WINDOW: f64 = 0.45;
+const COMBO_QUICKER: f64 = 0.12;
+const COMBO_MOST: u32 = 3;
 
 /// Which clip shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,7 +34,10 @@ pub enum Clip {
     ReloadStart,
     ReloadShell,
     ReloadEnd,
+    /// A blow; and swung again soon after (a melee weapon's combo), back
+    /// the other way.
     Bash,
+    Bash2,
     /// Coming up into view, going down out of it, and gone (waiting to be
     /// told what to take up next).
     Draw,
@@ -49,6 +57,7 @@ impl Clip {
             Clip::ReloadShell => "ReloadShell",
             Clip::ReloadEnd => "ReloadEnd",
             Clip::Bash => "Bash",
+            Clip::Bash2 => "Bash2",
         }
     }
 
@@ -105,11 +114,19 @@ pub struct Hands {
     aim: f64,
     /// The trigger cut a reload short: fire as soon as it's done.
     fire_after: bool,
+    /// How fast a swing goes, a multiple of the usual (slower winded).
+    pub swing_speed: f64,
+    /// A combo: how many swings in the chain so far, and how long since
+    /// the last one ended.
+    chain: u32,
+    since_swing: f64,
+    /// The swing under way comes back the other way.
+    backhand: bool,
 }
 
 impl Default for Hands {
     fn default() -> Self {
-        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false }
+        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false, swing_speed: 1.0, chain: 0, since_swing: f64::INFINITY, backhand: false }
     }
 }
 
@@ -160,6 +177,20 @@ impl Hands {
         self.t = 0.0;
     }
 
+    /// Swing: back the other way, a little quicker, if it's a combo and
+    /// the last swing ended only just now.
+    fn swing(&mut self) {
+        let again = self.spec().bash.combo && self.since_swing < COMBO_WINDOW;
+        self.chain = if again { (self.chain + 1).min(COMBO_MOST) } else { 0 };
+        self.backhand = again && !self.backhand;
+        self.start(if self.backhand { Clip::Bash2 } else { Clip::Bash });
+    }
+
+    /// How fast the swing under way goes.
+    fn swing_rate(&self) -> f64 {
+        self.swing_speed * (1.0 + COMBO_QUICKER * f64::from(self.chain))
+    }
+
     fn start_reload(&mut self) {
         match self.spec().reload {
             Some(Reload::Magazine { .. }) => self.start(Clip::Reload),
@@ -173,7 +204,7 @@ impl Hands {
     /// going.
     pub fn put_away(&mut self, to: Option<Slot>) -> bool {
         match self.clip {
-            Clip::Bash => false,
+            Clip::Bash | Clip::Bash2 => false,
             Clip::Holster | Clip::Stowed => {
                 self.next = Some(to);
                 true
@@ -214,8 +245,14 @@ impl Hands {
         let mut acts = Vec::new();
         let spec = self.spec();
         let before = self.t;
-        // A reload runs quicker in quick hands (the animation with it).
-        self.t += if self.clip.reloading() { dt * self.reload_speed } else { dt };
+        // A reload runs quicker in quick hands (the animation with it); a
+        // swing slower winded, quicker in a combo.
+        self.t += match self.clip {
+            c if c.reloading() => dt * self.reload_speed,
+            Clip::Bash | Clip::Bash2 => dt * self.swing_rate(),
+            _ => dt,
+        };
+        self.since_swing += dt;
         self.gap = (self.gap - dt).max(0.0);
         let crossed = |at: f64| before < at && self.t >= at;
         let marks = |marks: &[(f64, Act)]| marks.iter().filter(|(at, _)| crossed(*at)).map(|(_, act)| *act).collect::<Vec<Act>>();
@@ -252,13 +289,14 @@ impl Hands {
                     self.start(Clip::Idle);
                 }
             }
-            (Clip::Bash, _) => {
+            (Clip::Bash | Clip::Bash2, _) => {
                 for (at, act) in [(spec.bash.swing_at, Act::Swing), (spec.bash.strike_at, Act::Strike)] {
                     if crossed(at) {
                         acts.push(act);
                     }
                 }
                 if self.t >= spec.bash.time {
+                    self.since_swing = 0.0;
                     self.start(Clip::Idle);
                 }
             }
@@ -289,13 +327,13 @@ impl Hands {
         }
         let fire = input.fire || std::mem::take(&mut self.fire_after);
         if input.melee {
-            self.start(Clip::Bash);
+            self.swing();
         } else if input.reload && self.can_reload() {
             self.start_reload();
         } else if fire && self.gap <= 0.0 {
             match spec.shot {
                 // No gun: the trigger strikes.
-                None => self.start(Clip::Bash),
+                None => self.swing(),
                 Some(_) if self.mag > 0 => {
                     self.mag -= 1;
                     self.gap = spec.shot.map_or(0.0, |s| s.gap);

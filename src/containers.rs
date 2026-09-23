@@ -24,7 +24,7 @@ pub const REACH: f64 = 2.4;
 pub fn model_name(source: Source) -> &'static str {
     match source {
         Source::Crate => "CONTAINER_Crate",
-        Source::Locker => "CONTAINER_Locker",
+        Source::Locker | Source::ToolLocker => "CONTAINER_Locker",
         Source::Car => "CONTAINER_Car",
         Source::Cage => "CONTAINER_Cage",
         Source::Fridge => "CONTAINER_Fridge",

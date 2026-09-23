@@ -66,9 +66,12 @@ pub enum Kind {
     Shells,
     Rifle,
     RifleRounds,
+    Knife,
+    Machete,
+    FireAxe,
 }
 
-pub const ALL: [Kind; 20] = [
+pub const ALL: [Kind; 23] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -89,6 +92,9 @@ pub const ALL: [Kind; 20] = [
     Kind::Shells,
     Kind::Rifle,
     Kind::RifleRounds,
+    Kind::Knife,
+    Kind::Machete,
+    Kind::FireAxe,
 ];
 
 impl Kind {
@@ -116,6 +122,9 @@ impl Kind {
             Kind::Shells => "shells_12ga",
             Kind::Rifle => "hunting_rifle",
             Kind::RifleRounds => "rounds_308",
+            Kind::Knife => "tactical_knife",
+            Kind::Machete => "machete",
+            Kind::FireAxe => "fire_axe",
         }
     }
 
@@ -129,6 +138,9 @@ impl Kind {
             Kind::Pistol => Some(Weapon::Pistol),
             Kind::Shotgun => Some(Weapon::Shotgun),
             Kind::Rifle => Some(Weapon::Rifle),
+            Kind::Knife => Some(Weapon::Knife),
+            Kind::Machete => Some(Weapon::Machete),
+            Kind::FireAxe => Some(Weapon::Axe),
             _ => None,
         }
     }
@@ -173,6 +185,9 @@ impl Kind {
             Kind::Shells => d("12GA SHELLS", (1, 1), 20, Common, 4, "ITEM_Shells"),
             Kind::Rifle => d("HUNTING RIFLE", (5, 1), 1, Epic, 480, "ITEM_Rifle"),
             Kind::RifleRounds => d(".308 ROUNDS", (1, 1), 20, Uncommon, 8, "ITEM_RifleRounds"),
+            Kind::Knife => d("TACTICAL KNIFE", (2, 1), 1, Uncommon, 90, "ITEM_Knife"),
+            Kind::Machete => d("MACHETE", (3, 1), 1, Uncommon, 110, "ITEM_Machete"),
+            Kind::FireAxe => d("FIRE AXE", (4, 1), 1, Rare, 160, "ITEM_Axe"),
         }
     }
 }
@@ -203,6 +218,15 @@ impl Stack {
     /// As many as `count`, but otherwise the same (a gun's rounds kept).
     pub fn with_count(self, count: u32) -> Self {
         Self { count, ..self }
+    }
+
+    /// How many of `ammo` this could take into its magazine now: a gun
+    /// with room in it, and `ammo` what it takes (else none).
+    pub fn room_for(self, ammo: Stack) -> u32 {
+        match self.kind.weapon().map(|w| w.spec()) {
+            Some(spec) if spec.ammo == Some(ammo.kind) => spec.mag.saturating_sub(self.loaded),
+            _ => 0,
+        }
     }
 
     /// How many rounds a gun holds, if it's a gun.
@@ -301,6 +325,7 @@ mod tests {
                 (Source::Register, "register"),
                 (Source::GunCabinet, "gun cabinet"),
                 (Source::HunterCabinet, "hunter's cabinet"),
+                (Source::ToolLocker, "tool locker"),
                 (Source::Corpse, "zombies"),
             ]
                 .iter()

@@ -100,3 +100,35 @@ fn a_weapon_dropped_on_a_full_slot_swaps_and_anything_else_goes_back() {
     assert_eq!(shelves.bag.slot(Slot::Sidearm), Some(Stack::gun(Kind::Pistol, 3)), "back in its slot");
     assert_eq!(shelves.loot.as_ref().unwrap().1.count(Kind::Watch), 1, "back in the crate");
 }
+
+#[test]
+fn rounds_dropped_on_a_gun_load_it_and_the_rest_go_back() {
+    let mut bag = Bag::empty();
+    bag.pack.put(Stack::gun(Kind::Pistol, 5), 0, 0, false);
+    bag.pack.put(Stack::new(Kind::Rounds, 30), 3, 0, false);
+    bag.slots[Slot::Primary.index()] = Some(Stack::gun(Kind::Shotgun, 1));
+    let mut shelves = Shelves { bag: &mut bag, loot: None };
+    // Thirty rounds onto the pistol: seven go in, twenty-three go back.
+    let item = shelves.take(Which::Pack, 1).unwrap();
+    assert_eq!(landing(&shelves.bag.pack, item, (0, 0), (0, 0)), Landing::Load(0, 7), "green over the pistol");
+    assert_eq!(release(&mut shelves, Held { item, from: Which::Pack, was: item, grab: Vec2::ZERO }, Which::Pack, (0, 0), (0, 0)), 7);
+    assert_eq!(shelves.bag.pack.items[0].stack, Stack::gun(Kind::Pistol, 12));
+    assert_eq!(shelves.bag.pack.count(Kind::Rounds), 23);
+    // The wrong rounds for a gun don't go in: 9mm won't load the shotgun
+    // in its slot.
+    let i = shelves.bag.pack.items.iter().position(|i| i.stack.kind == Kind::Rounds).unwrap();
+    let item = shelves.take(Which::Pack, i).unwrap();
+    assert_eq!(slots::release(&mut shelves, Held { item, from: Which::Pack, was: item, grab: Vec2::ZERO }, Slot::Primary), 0);
+    assert_eq!(shelves.bag.slot(Slot::Primary), Some(Stack::gun(Kind::Shotgun, 1)));
+    // Shells onto it do, as many as there's room for.
+    shelves.bag.pack.place(Stack::new(Kind::Shells, 3));
+    let i = shelves.bag.pack.items.iter().position(|i| i.stack.kind == Kind::Shells).unwrap();
+    let item = shelves.take(Which::Pack, i).unwrap();
+    assert!(slots::takes(item.stack, Slot::Primary, shelves.bag.slot(Slot::Primary)));
+    assert_eq!(slots::release(&mut shelves, Held { item, from: Which::Pack, was: item, grab: Vec2::ZERO }, Slot::Primary), 3);
+    assert_eq!(shelves.bag.slot(Slot::Primary), Some(Stack::gun(Kind::Shotgun, 4)));
+    assert_eq!(shelves.bag.pack.count(Kind::Shells), 0);
+    // A full gun has no room for more.
+    let full = Stack::gun(Kind::Pistol, 12);
+    assert_eq!(full.room_for(Stack::new(Kind::Rounds, 5)), 0);
+}
