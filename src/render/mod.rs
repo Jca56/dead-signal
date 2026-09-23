@@ -56,6 +56,14 @@ unsafe impl Pod for Instance {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MeshId(usize);
 
+impl MeshId {
+    /// A handle to nothing, for tests that never draw.
+    #[cfg(test)]
+    pub fn placeholder() -> Self {
+        Self(usize::MAX)
+    }
+}
+
 #[derive(Clone, Copy)]
 struct MeshRange {
     first: u32,

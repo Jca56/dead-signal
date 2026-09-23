@@ -75,7 +75,7 @@ impl Viewmodel {
 
     /// The arms as they are drawn this frame, playing `clip` at `t`
     /// seconds (a looping clip wraps round).
-    pub fn draw(&self, view: &View, clip: &str, t: f64, looping: bool) -> SkinnedDraw {
+    pub fn draw(&self, view: &View, clip: &str, t: f64, looping: bool, lowered: f64) -> SkinnedDraw {
         let gltf = &self.rig.gltf;
         let mut pose: Vec<Transform> = gltf.rest_pose();
         if let Some(anim) = gltf.animations.iter().find(|a| a.name.as_deref() == Some(clip)) {
@@ -85,13 +85,14 @@ impl Viewmodel {
             }
         }
         let joints = gltf.skins[self.rig.skin].joint_matrices(&gltf.world_matrices(&pose));
-        SkinnedDraw { mesh: self.rig.mesh, model: self.placement(view), joints }
+        SkinnedDraw { mesh: self.rig.mesh, model: self.placement(view, lowered), joints }
     }
 
     /// Where the whole rig sits in front of the eye.
-    fn placement(&self, view: &View) -> Mat4 {
+    /// `lowered` (0–1) drops the gun out of the way (patching up).
+    fn placement(&self, view: &View, lowered: f64) -> Mat4 {
         let sway = self.sway.angle;
-        let sprint = view.sprint_amount;
+        let sprint = view.sprint_amount.max(lowered);
         let amount = view.bob_amount * (1.0 + 0.6 * sprint);
         let phase = view.bob_phase;
         let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0);

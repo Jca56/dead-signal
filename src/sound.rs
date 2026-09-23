@@ -34,9 +34,36 @@ pub enum Sfx {
     Flesh,
     Gurgle,
     Shuffle,
+    /// The player: a heart thumping when hurt badly, the drone under YOU
+    /// DIED, something picked up, a bandage torn and wound.
+    Heartbeat,
+    Died,
+    Pickup,
+    Heal,
 }
 
-const ALL: [Sfx; 16] = [Sfx::Shot, Sfx::DryFire, Sfx::MagOut, Sfx::MagIn, Sfx::SlideRack, Sfx::Whoosh, Sfx::HitWood, Sfx::HitDirt, Sfx::HitStone, Sfx::Ding, Sfx::Confirm, Sfx::Groan, Sfx::Snarl, Sfx::Flesh, Sfx::Gurgle, Sfx::Shuffle];
+const ALL: [Sfx; 20] = [
+    Sfx::Shot,
+    Sfx::DryFire,
+    Sfx::MagOut,
+    Sfx::MagIn,
+    Sfx::SlideRack,
+    Sfx::Whoosh,
+    Sfx::HitWood,
+    Sfx::HitDirt,
+    Sfx::HitStone,
+    Sfx::Ding,
+    Sfx::Confirm,
+    Sfx::Groan,
+    Sfx::Snarl,
+    Sfx::Flesh,
+    Sfx::Gurgle,
+    Sfx::Shuffle,
+    Sfx::Heartbeat,
+    Sfx::Died,
+    Sfx::Pickup,
+    Sfx::Heal,
+];
 
 struct Play {
     sfx: Sfx,
@@ -308,6 +335,39 @@ fn synth(sfx: Sfx) -> Vec<f32> {
         Sfx::Shuffle => {
             let mut f = Svf::default();
             render(0.14, 0.4, |t, n| f.run(n.next(), 900.0, 1.2).1 * (std::f32::consts::PI * (t / 0.14)).sin())
+        }
+        Sfx::Heartbeat => render(0.6, 0.8, |t, _| {
+            // Lub, and a quieter dub.
+            let beat = |at: f32, gain: f32| if t >= at { (std::f32::consts::TAU * sweep_phase(t - at, 70.0, 40.0, 0.05)).sin() * env(t - at, 0.004, 0.06) * gain } else { 0.0 };
+            beat(0.0, 1.0) + beat(0.22, 0.6)
+        }),
+        Sfx::Died => {
+            // Two low buzzes a hair apart, beating slowly, through a dark
+            // filter: a drone that swells in and dies away.
+            let mut f = Svf::default();
+            let (mut pa, mut pb) = (0.0f32, 0.0f32);
+            let dt = 1.0 / RATE as f32;
+            render(4.0, 0.7, move |t, n| {
+                pa = (pa + 55.0 * dt).fract();
+                pb = (pb + 55.7 * dt).fract();
+                let saw = (pa * 2.0 - 1.0) + (pb * 2.0 - 1.0) + n.next() * 0.1;
+                let swell = (t / 1.2).min(1.0) * (-(t - 1.2).max(0.0) / 1.6).exp();
+                f.run(saw, 260.0 + 140.0 * (t / 4.0), 0.7).0 * swell
+            })
+        }
+        Sfx::Pickup => {
+            let mut f = Svf::default();
+            render(0.18, 0.5, |t, n| f.run(n.next(), 1800.0, 0.9).1 * env(t, 0.004, 0.04) + sine(t, 520.0) * env(t, 0.002, 0.05) * 0.3)
+        }
+        Sfx::Heal => {
+            // A strip torn off, and wound round.
+            let mut f = Svf::default();
+            render(0.7, 0.55, |t, n| {
+                let x = n.next();
+                let rip = f.run(x, 2500.0 + 2000.0 * (t / 0.25).min(1.0), 0.5).1 * f32::from(t < 0.25) * (0.6 + 0.4 * sine(t, 60.0).abs());
+                let wind = x * 0.12 * f32::from(t > 0.3) * (0.5 + 0.5 * sine(t, 7.0)) * env((t - 0.3).max(0.0), 0.05, 0.3);
+                rip + wind
+            })
         }
     }
 }

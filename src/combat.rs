@@ -12,6 +12,7 @@ use crate::head::{self, View};
 use crate::player::Body;
 use crate::render::Renderer;
 use crate::sound::{Sfx, Sound};
+use crate::stats::Stats;
 use crate::targets::{self, Kind, Target};
 use crate::weapon::{Act, Pistol, Trigger};
 use crate::world::{Game, Solid};
@@ -73,16 +74,22 @@ impl Combat {
 
     /// What the dead did since last frame: play their sounds where they
     /// are, and take their blows (a shove, a shake, the edges gone red).
-    pub fn answer_the_dead(&mut self, game: &mut Game) {
+    /// Once the player is dead (not `alive`) it's all let go unheard. How
+    /// many blows landed.
+    pub fn answer_the_dead(&mut self, game: &mut Game, alive: bool) -> usize {
         let (sounds, blows) = {
             let mut horde = game.world.resource_mut::<Horde>();
             (std::mem::take(&mut horde.sounds), std::mem::take(&mut horde.blows))
         };
-        let Some((body, view)) = game.player() else { return };
+        if !alive {
+            return 0;
+        }
+        let Some((body, view)) = game.player() else { return 0 };
         let aim = aim(&view, &body, game.alpha());
         for (sfx, at, gain) in sounds {
             self.sound.play_at(sfx, gain, at, aim.eye, aim.right);
         }
+        let landed = blows.len();
         for push in blows {
             self.sound.play(Sfx::Flesh, 0.9);
             self.hurt = 1.0;
@@ -92,6 +99,12 @@ impl Combat {
             }
             game.push_player(push * BLOW_SHOVE);
         }
+        landed
+    }
+
+    /// Play a sound at the listener.
+    pub fn play(&self, sfx: Sfx, gain: f32) {
+        self.sound.play(sfx, gain);
     }
 
     fn rand(&mut self) -> f64 {
@@ -102,7 +115,7 @@ impl Combat {
     }
 
     /// One frame of a run: the pistol, what it does, and what flies.
-    pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64) {
+    pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64, stats: &mut Stats) {
         self.fx.update(dt);
         self.sprint_block -= dt;
         self.hurt = (self.hurt - dt * 1.6).max(0.0);
@@ -115,6 +128,7 @@ impl Combat {
         for act in acts {
             match act {
                 Act::Shoot => {
+                    stats.shots += 1;
                     self.sound.play(Sfx::Shot, 0.9);
                     zombie::noise(&mut game.world, aim.eye);
                     self.sprint_block = SPRINT_BLOCK;
@@ -124,11 +138,14 @@ impl Combat {
                     }
                     let spread = if !body.grounded { SPREAD_AIR } else if body.speed_flat() > 0.5 { SPREAD_MOVING } else { 0.0 };
                     let dir = self.scatter(&aim, spread);
-                    self.strike(game, &aim, dir, SHOT_RANGE, SHOT_DAMAGE, false);
+                    self.strike(game, &aim, dir, SHOT_RANGE, SHOT_DAMAGE, false, stats);
                 }
                 Act::DryFire => self.sound.play(Sfx::DryFire, 0.8),
                 Act::MagOut => self.sound.play(Sfx::MagOut, 0.7),
-                Act::MagIn => self.sound.play(Sfx::MagIn, 0.8),
+                Act::MagIn => {
+                    stats.reloads += 1;
+                    self.sound.play(Sfx::MagIn, 0.8);
+                }
                 Act::SlideRack => self.sound.play(Sfx::SlideRack, 0.8),
                 Act::Swing => self.sound.play(Sfx::Whoosh, 0.7),
                 Act::Strike => {
@@ -136,7 +153,7 @@ impl Combat {
                     for turn in [0.0f64, -8.0, 8.0] {
                         let t = turn.to_radians();
                         let dir = (aim.dir * t.cos() + aim.right * t.sin()).normalize();
-                        if self.strike(game, &aim, dir, BLOW_RANGE, BLOW_DAMAGE, true) {
+                        if self.strike(game, &aim, dir, BLOW_RANGE, BLOW_DAMAGE, true, stats) {
                             break;
                         }
                     }
@@ -157,7 +174,8 @@ impl Combat {
 
     /// A shot or a blow along `dir`: whatever it meets first. Whether it
     /// met anything.
-    fn strike(&mut self, game: &mut Game, aim: &Aim, dir: Vec3, range: f64, damage: f64, blow: bool) -> bool {
+    #[allow(clippy::too_many_arguments)]
+    fn strike(&mut self, game: &mut Game, aim: &Aim, dir: Vec3, range: f64, damage: f64, blow: bool, stats: &mut Stats) -> bool {
         let wall = game.world.resource::<Solid>().0.raycast(aim.eye, dir, range);
         let reach = wall.map_or(range, |h| h.t);
         let dead = zombie::raycast(&mut game.world, aim.eye, dir, reach);
@@ -168,6 +186,15 @@ impl Combat {
         {
             let point = aim.eye + dir * t;
             let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, damage, head, blow);
+            stats.damage_dealt += damage * if head { 2.0 } else { 1.0 };
+            if !blow {
+                stats.hits += 1;
+                stats.headshots += u32::from(head);
+            }
+            if killed {
+                if blow { stats.melee_kills += 1 } else { stats.gun_kills += 1 }
+                stats.longest_kill = stats.longest_kill.max(t);
+            }
             self.fx.burst(point, -dir, Surface::Flesh, if blow { 12 } else { 9 });
             self.fx.mark(killed);
             self.sound.play(Sfx::Confirm, if killed { 0.7 } else { 0.45 });
@@ -180,6 +207,14 @@ impl Combat {
         if let Some((e, t, head)) = target {
             let point = aim.eye + dir * t;
             let Some((beaten, kind)) = game.world.get_mut::<Target>(e).map(|mut target| (target.hit(dir, point, damage, head), target.kind)) else { return false };
+            if !blow {
+                stats.hits += 1;
+                stats.headshots += u32::from(head);
+            }
+            match kind {
+                Kind::Dummy => stats.dummies_downed += u32::from(beaten),
+                Kind::Plate => stats.plates_rung += 1,
+            }
             let (surface, sfx, gain) = match kind {
                 Kind::Dummy => (Surface::Wood, Sfx::HitWood, 0.9),
                 Kind::Plate => (Surface::Metal, Sfx::Ding, 1.0),

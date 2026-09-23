@@ -1,5 +1,5 @@
 //! A camera by position and angles: yaw turns about +Y (0 looks down -Z),
-//! pitch tilts up. What mouse look will drive.
+//! pitch tilts up, roll leans it over (a body falling onto its side).
 
 use lntrn_math::{Mat4, Vec3};
 
@@ -8,6 +8,8 @@ pub struct Camera {
     pub position: Vec3,
     pub yaw: f64,
     pub pitch: f64,
+    /// Leaning over, radians: positive tips the top to the right.
+    pub roll: f64,
     /// Vertical field of view, radians.
     pub fov_y: f64,
     pub near: f64,
@@ -15,7 +17,7 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(position: Vec3) -> Self {
-        Self { position, yaw: 0.0, pitch: 0.0, fov_y: 70f64.to_radians(), near: 0.05 }
+        Self { position, yaw: 0.0, pitch: 0.0, roll: 0.0, fov_y: 70f64.to_radians(), near: 0.05 }
     }
 
     /// Turn to face `target`.
@@ -31,15 +33,18 @@ impl Camera {
         Vec3::new(-sy * cp, sp, -cy * cp)
     }
 
-    /// Right, up and forward, each unit length.
+    /// Right, up and forward, each unit length, rolled.
     pub fn basis(&self) -> (Vec3, Vec3, Vec3) {
         let f = self.forward();
         let r = f.cross(Vec3::Y).normalize();
-        (r, r.cross(f), f)
+        let u = r.cross(f);
+        let (s, c) = self.roll.sin_cos();
+        (r * c - u * s, u * c + r * s, f)
     }
 
     pub fn view(&self) -> Mat4 {
-        Mat4::look_at(self.position, self.position + self.forward(), Vec3::Y)
+        let (_, up, f) = self.basis();
+        Mat4::look_at(self.position, self.position + f, up)
     }
 
     pub fn projection(&self, aspect: f64) -> Mat4 {

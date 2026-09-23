@@ -6,6 +6,8 @@ use crate::render::Atmosphere;
 
 /// The face every word is set in.
 pub const FONT: &str = "DejaVu Sans";
+/// The face of the one line that has to feel old and final: YOU DIED.
+pub const SERIF: &str = "DejaVu Serif";
 
 /// Text: bleached bone, and the same gone dim.
 pub const BONE: Color = Color::rgb(0.87, 0.85, 0.79);

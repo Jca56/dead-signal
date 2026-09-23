@@ -97,11 +97,13 @@ pub struct Body {
     /// A shove (a blow knocking it back), m/s, fading: added to how it
     /// moves on top of its steering.
     pub push: Vec3,
+    /// Jumps made, all told.
+    pub jumps: u32,
 }
 
 impl Body {
     pub fn at(pos: Vec3) -> Self {
-        Self { pos, prev: pos, vel: Vec3::ZERO, grounded: true, airborne: 0.0, jump_wait: None, want_crouch: false, crouched: false, sprinting: false, landed: 0.0, stepped: 0.0, push: Vec3::ZERO }
+        Self { pos, prev: pos, vel: Vec3::ZERO, grounded: true, airborne: 0.0, jump_wait: None, want_crouch: false, crouched: false, sprinting: false, landed: 0.0, stepped: 0.0, push: Vec3::ZERO, jumps: 0 }
     }
 
     pub fn speed_flat(&self) -> f64 {
@@ -243,6 +245,7 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
             body.grounded = false;
             body.airborne = COYOTE + dt;
             body.jump_wait = None;
+            body.jumps += 1;
             jumped = true;
         } else if waited + dt > JUMP_BUFFER {
             body.jump_wait = None;

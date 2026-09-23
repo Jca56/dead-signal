@@ -6,20 +6,21 @@
 use lntrn_app::lntrn_render::{Gpu, Images};
 use lntrn_app::{AppHost, RenderCx, wgpu};
 use lntrn_core::{log_error, log_info};
-use lntrn_math::{Color, Vec2, Vec3};
+use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
 use crate::assets;
 use crate::camera::Camera;
+use crate::death::After;
+use crate::run::Run;
 use crate::combat::Combat;
-use crate::hud;
 use crate::menu::SideMenu;
 use crate::head;
 use crate::player::Controls;
 use crate::render::{Draw, FigureDraw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
-use crate::weapon::{Clip, Trigger};
+use crate::weapon::Clip;
 use crate::world::{Game, Look, Model, Placed};
 use crate::zombie::{self, figure::Figure};
 
@@ -69,6 +70,7 @@ pub struct DeadSignal {
     /// The arms, once loaded.
     viewmodel: Option<Viewmodel>,
     combat: Combat,
+    run: Run,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
@@ -91,6 +93,7 @@ impl DeadSignal {
             renderer: None,
             viewmodel: None,
             combat: Combat::new(),
+            run: Run::default(),
             screen: Screen::Title,
             title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
@@ -142,11 +145,14 @@ impl DeadSignal {
                 }
                 self.combat.reset();
                 zombie::clear(&mut self.game.world);
+                self.run.start(&mut self.game);
                 cx.request(ShellRequest::LockPointer(true));
             }
             Screen::Title => {
                 self.game.despawn_player();
                 zombie::clear(&mut self.game.world);
+                crate::items::clear(&mut self.game.world);
+                self.run.death = None;
                 self.title_menu.reset();
             }
         }
@@ -164,8 +170,16 @@ impl DeadSignal {
         cx.request(ShellRequest::LockPointer(true));
     }
 
-    /// A run's frame: look, move, pause.
+    /// A run's frame: look, move, pause; or, dead, the way out.
     fn run_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, active: bool) {
+        if self.run.death.is_some() {
+            match self.run.dying(ui, cx, &mut self.game, &mut self.combat, active) {
+                Some(After::Again) => self.fade_to(Then::Show(Screen::Run)),
+                Some(After::Title) => self.fade_to(Then::Show(Screen::Title)),
+                None => {}
+            }
+            return;
+        }
         let locked = ui.state.pointer_locked;
         if self.was_locked && !locked && !self.paused && active {
             self.pause(cx);
@@ -190,41 +204,8 @@ impl DeadSignal {
         if !active {
             return;
         }
-        if locked {
-            let motion = ui.state.locked_motion;
-            if let Some(mut view) = self.game.player_view_mut() {
-                view.look(motion);
-            }
-        } else if ui.state.pressed {
-            // The lock was refused or lost: a click takes it again.
-            cx.request(ShellRequest::LockPointer(true));
-        }
-        let held = |ui: &Ui, keys: &[char], other: Key| ui.state.keys_down.iter().any(|k| *k == other || matches!(k, Key::Char(c) if keys.iter().any(|w| c.eq_ignore_ascii_case(w))));
-        let axis = |neg: bool, pos: bool| f64::from(i8::from(pos) - i8::from(neg));
-        let walk = Vec2::new(axis(held(ui, &['a'], Key::ArrowLeft), held(ui, &['d'], Key::ArrowRight)), axis(held(ui, &['s'], Key::ArrowDown), held(ui, &['w'], Key::ArrowUp)));
-        let sprint = ui.state.keys_down.contains(&Key::Shift) && self.combat.sprint_allowed();
-        let jump = ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Space | Key::Char(' '))).is_some();
-        let crouch = ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char('c' | 'C'))).is_some();
-        let mut controls = self.game.controls_mut();
-        controls.walk = walk;
-        controls.sprint = sprint;
-        // Presses wait for the next fixed step to use them.
-        controls.jump |= jump;
-        controls.crouch_toggle ^= crouch;
-
-        // The pistol: left button fires, R reloads, V or the middle button
-        // strikes. Only with the pointer held (a click that takes the lock
-        // back is not a shot).
-        let trigger = Trigger {
-            fire: locked && ui.state.pressed,
-            reload: ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char('r' | 'R'))).is_some(),
-            melee: ui.state.middle_pressed || ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char('v' | 'V'))).is_some(),
-        };
-        let dt = self.game.clock().dt;
-        self.combat.frame(&mut self.game, trigger, dt);
-        self.combat.answer_the_dead(&mut self.game);
+        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked);
         self.keep_one_shambling();
-        hud::draw(ui, self.combat.pistol.mag, self.combat.fx.marker, self.combat.hurt);
     }
 
     /// There is always one of the dead about: a new one comes from out of
@@ -251,6 +232,7 @@ impl DeadSignal {
                     eye.y = eye.y.max(h + 2.0);
                 }
                 self.camera.position = eye;
+                self.camera.roll = 0.0;
                 self.camera.fov_y = TITLE_FOV.to_radians();
                 self.camera.look_at(TITLE_LOOK + Vec3::new((time * 0.09).sin() * 1.5, 0.0, 0.0));
             }
@@ -260,6 +242,10 @@ impl DeadSignal {
                     self.camera.position = head::eye_position(&view, &body, alpha);
                     (self.camera.yaw, self.camera.pitch) = view.aim();
                     self.camera.fov_y = view.fov_y();
+                    self.camera.roll = 0.0;
+                    if let Some(death) = &self.run.death {
+                        death.fall(&mut self.camera);
+                    }
                 }
             }
         }
@@ -291,7 +277,9 @@ impl Host for DeadSignal {
     }
 
     fn draw_body(&mut self, _: (), ui: &mut Ui, cx: &mut AreaCx<()>) -> bool {
-        self.game.simulating = self.screen == Screen::Run && !self.paused;
+        // The world stops for the dead: nothing moves or makes a sound while
+        // they fall and read their numbers.
+        self.game.simulating = self.screen == Screen::Run && !self.paused && self.run.death.is_none();
         self.game.tick(ui.state.now);
         let clock = self.game.clock();
 
@@ -342,6 +330,15 @@ impl AppHost for DeadSignal {
         }
         log_info!("world: {} solid triangles", self.game.solid_count());
         self.combat.init(&mut renderer);
+        match assets::load(&mut renderer, "items") {
+            Ok(props) => {
+                let find = |name: &str| props.iter().find(|p| p.name == name).and_then(|p| p.mesh);
+                if let (Some(bandage), Some(medkit)) = (find("ITEM_Bandage"), find("ITEM_Medkit")) {
+                    self.game.world.insert_resource(crate::items::Meshes { bandage, medkit });
+                }
+            }
+            Err(e) => log_error!("items: {e}"),
+        }
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
             Ok(model) => self.game.world.insert_resource(model),
             Err(e) => log_error!("shambler: {e}"),
@@ -367,9 +364,11 @@ impl AppHost for DeadSignal {
         if self.screen == Screen::Run
             && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
         {
-            let (clip, t) = self.combat.pistol.clip();
-            let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
-            renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping));
+            if self.run.death.is_none() {
+                let (clip, t) = self.combat.pistol.clip();
+                let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
+                renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping, self.run.lowered()));
+            }
             self.combat.draw(renderer);
         }
         if let Some(mesh) = self.game.world.get_resource::<zombie::figure::Model>().map(|m| m.mesh) {
