@@ -205,20 +205,6 @@ impl DeadSignal {
             return;
         }
         self.run.play(ui, cx, &mut self.game, &mut self.combat, locked);
-        self.keep_one_shambling();
-    }
-
-    /// There is always one of the dead about: a new one comes from out of
-    /// sight when the last has sunk away.
-    fn keep_one_shambling(&mut self) {
-        if zombie::count(&mut self.game.world) > 0 {
-            return;
-        }
-        if let Some((body, view)) = self.game.player() {
-            let eye = body.pos + Vec3::new(0.0, 1.6, 0.0);
-            let forward = Vec3::new(-view.yaw.sin(), 0.0, -view.yaw.cos());
-            zombie::spawn_unseen(&mut self.game.world, eye, forward);
-        }
     }
 
     /// Where the camera is this frame.
@@ -333,8 +319,8 @@ impl AppHost for DeadSignal {
         match assets::load(&mut renderer, "items") {
             Ok(props) => {
                 let find = |name: &str| props.iter().find(|p| p.name == name).and_then(|p| p.mesh);
-                if let (Some(bandage), Some(medkit)) = (find("ITEM_Bandage"), find("ITEM_Medkit")) {
-                    self.game.world.insert_resource(crate::items::Meshes { bandage, medkit });
+                if let (Some(bandage), Some(medkit), Some(ammo)) = (find("ITEM_Bandage"), find("ITEM_Medkit"), find("ITEM_Ammo")) {
+                    self.game.world.insert_resource(crate::items::Meshes { bandage, medkit, ammo });
                 }
             }
             Err(e) => log_error!("items: {e}"),

@@ -1,165 +1,7 @@
-//! The game's sounds, made in code: noise, oscillators and envelopes,
-//! rendered once at start into buffers, and played on a stream of our own
-//! through `lntrn-audio`'s mixer. A sound in the world is quieter with
-//! distance and sits left or right of the listener.
+//! Every sound made from scratch: noise, oscillators, filters and
+//! envelopes, rendered once into a buffer each.
 
-use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender, channel};
-
-use lntrn_audio::{Audio, Mixer, Output, Source, Spec};
-use lntrn_core::{log_error, log_info};
-use lntrn_math::Vec3;
-
-const RATE: u32 = 48_000;
-
-/// Every sound the game makes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Sfx {
-    Shot,
-    DryFire,
-    MagOut,
-    MagIn,
-    SlideRack,
-    Whoosh,
-    HitWood,
-    HitDirt,
-    HitStone,
-    Ding,
-    /// The hitmarker's tick.
-    Confirm,
-    /// The dead: a moan, a snarl on seeing you or striking, a bullet into
-    /// one, its last gurgle, its feet dragging.
-    Groan,
-    Snarl,
-    Flesh,
-    Gurgle,
-    Shuffle,
-    /// The player: a heart thumping when hurt badly, the drone under YOU
-    /// DIED, something picked up, a bandage torn and wound.
-    Heartbeat,
-    Died,
-    Pickup,
-    Heal,
-}
-
-const ALL: [Sfx; 20] = [
-    Sfx::Shot,
-    Sfx::DryFire,
-    Sfx::MagOut,
-    Sfx::MagIn,
-    Sfx::SlideRack,
-    Sfx::Whoosh,
-    Sfx::HitWood,
-    Sfx::HitDirt,
-    Sfx::HitStone,
-    Sfx::Ding,
-    Sfx::Confirm,
-    Sfx::Groan,
-    Sfx::Snarl,
-    Sfx::Flesh,
-    Sfx::Gurgle,
-    Sfx::Shuffle,
-    Sfx::Heartbeat,
-    Sfx::Died,
-    Sfx::Pickup,
-    Sfx::Heal,
-];
-
-struct Play {
-    sfx: Sfx,
-    left: f32,
-    right: f32,
-}
-
-/// The game's sound: a stream and what it has to play. Silent (and says
-/// so once) when there is no device to play on.
-pub struct Sound {
-    tx: Option<Sender<Play>>,
-    _out: Option<Output>,
-}
-
-impl Sound {
-    pub fn new() -> Self {
-        let bank: Arc<Vec<Arc<Audio>>> = Arc::new(ALL.iter().map(|&s| Arc::new(Audio::new(RATE, 1, synth(s)))).collect());
-        let (tx, rx): (Sender<Play>, Receiver<Play>) = channel();
-        let mut mixer = Mixer::new(Spec::STEREO_48K);
-        mixer.set_master(0.8);
-        let render = move |out: &mut [f32]| {
-            while let Ok(p) = rx.try_recv() {
-                let i = ALL.iter().position(|&s| s == p.sfx).unwrap_or(0);
-                mixer.play(Panned { audio: Arc::clone(&bank[i]), pos: 0, left: p.left, right: p.right });
-            }
-            mixer.render(out);
-        };
-        match Output::open(Spec::STEREO_48K, render) {
-            Ok(out) => {
-                log_info!("sound: {} effects, {:.0} ms latency", ALL.len(), out.latency() * 1000.0);
-                Self { tx: Some(tx), _out: Some(out) }
-            }
-            Err(e) => {
-                log_error!("sound: no output ({e}); the game is silent");
-                Self { tx: None, _out: None }
-            }
-        }
-    }
-
-    /// Play a sound at the listener (the gun in hand, a click).
-    pub fn play(&self, sfx: Sfx, gain: f32) {
-        self.send(sfx, gain, gain);
-    }
-
-    /// Play a sound at `at`, heard from `ear` with `right` pointing to the
-    /// listener's right: fainter with distance, panned to its side.
-    pub fn play_at(&self, sfx: Sfx, gain: f32, at: Vec3, ear: Vec3, right: Vec3) {
-        let (l, r) = placed(gain, at, ear, right);
-        self.send(sfx, l, r);
-    }
-
-    fn send(&self, sfx: Sfx, left: f32, right: f32) {
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(Play { sfx, left, right });
-        }
-    }
-}
-
-/// Left and right gains for a sound at `at` heard at `ear`: the inverse of
-/// distance past a few metres, and an equal-power pan.
-fn placed(gain: f32, at: Vec3, ear: Vec3, right: Vec3) -> (f32, f32) {
-    let to = at - ear;
-    let d = to.length();
-    let fall = (1.0 / (1.0 + (d - 2.0).max(0.0) / 6.0)) as f32;
-    let side = if d > 1e-6 { (to.dot(right) / d).clamp(-1.0, 1.0) } else { 0.0 };
-    let angle = (side + 1.0) * std::f64::consts::FRAC_PI_4;
-    let g = gain * fall * std::f32::consts::SQRT_2;
-    (g * angle.cos() as f32, g * angle.sin() as f32)
-}
-
-/// A mono buffer played into both channels at its own gains.
-struct Panned {
-    audio: Arc<Audio>,
-    pos: usize,
-    left: f32,
-    right: f32,
-}
-
-impl Source for Panned {
-    fn spec(&self) -> Spec {
-        Spec::STEREO_48K
-    }
-
-    fn fill(&mut self, out: &mut [f32]) -> usize {
-        let frames = (out.len() / 2).min(self.audio.samples.len() - self.pos);
-        for (i, frame) in out.chunks_exact_mut(2).take(frames).enumerate() {
-            let s = self.audio.samples[self.pos + i];
-            frame[0] = s * self.left;
-            frame[1] = s * self.right;
-        }
-        self.pos += frames;
-        frames
-    }
-}
-
-// ---- synthesis -------------------------------------------------------------------
+use super::{RATE, Sfx};
 
 /// A little noise source, the same every run.
 struct Noise(u32);
@@ -246,7 +88,7 @@ fn sweep_phase(t: f32, from: f32, to: f32, tau: f32) -> f32 {
     to * t + (from - to) * tau * (1.0 - (-t / tau).exp())
 }
 
-fn synth(sfx: Sfx) -> Vec<f32> {
+pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
     match sfx {
         Sfx::Shot => {
             let (mut body, mut tail) = (Svf::default(), Svf::default());
@@ -375,6 +217,7 @@ fn synth(sfx: Sfx) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::ALL;
 
     #[test]
     fn every_sound_is_made_and_in_range() {
@@ -386,17 +229,5 @@ mod tests {
             assert!(peak > 0.2, "{s:?} peaks at {peak}");
             assert!(b.last().unwrap().abs() < 1e-3, "{s:?} ends with a click");
         }
-    }
-
-    #[test]
-    fn far_is_quiet_and_right_is_right() {
-        let ear = Vec3::ZERO;
-        let right = Vec3::new(1.0, 0.0, 0.0);
-        let (l, r) = placed(1.0, Vec3::new(5.0, 0.0, 0.0), ear, right);
-        assert!(r > 0.9 && l < 0.05, "hard right: {l} {r}");
-        let (l2, r2) = placed(1.0, Vec3::new(0.0, 0.0, -50.0), ear, right);
-        assert!((l2 - r2).abs() < 1e-6 && l2 < 0.15, "far and ahead: {l2}");
-        let (l3, _) = placed(1.0, Vec3::new(0.0, 0.0, -1.0), ear, right);
-        assert!((l3 - 1.0).abs() < 1e-6, "close and ahead is full: {l3}");
     }
 }

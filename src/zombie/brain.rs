@@ -11,7 +11,7 @@ use lntrn_math::{Vec2, Vec3};
 use super::figure::Clip;
 use super::nav::NavGrid;
 use crate::collide::Solids;
-use crate::player::{Body, Controls};
+use crate::player::{Body, Controls, Gait};
 use crate::sound::Sfx;
 
 /// How far it sees, and how wide (either side of straight ahead).
@@ -19,8 +19,9 @@ pub const SIGHT: f64 = 25.0;
 const SIGHT_HALF: f64 = 55.0;
 /// Closer than this it knows you're there, whichever way it faces.
 const CLOSE: f64 = 2.5;
-/// How far it hears a shot.
+/// How far it hears a shot, and another's snarl on seeing the player.
 pub const HEARING: f64 = 40.0;
+pub const ALERT_RANGE: f64 = 15.0;
 /// It swipes from this close, and the swipe reaches this far.
 pub const ATTACK_RANGE: f64 = 1.4;
 const REACH: f64 = 1.8;
@@ -28,7 +29,9 @@ const REACH: f64 = 1.8;
 const ATTACK_TIME: f64 = 0.9;
 const STRIKE_AT: f64 = 0.4;
 const COOLDOWN: f64 = 1.2;
+/// How long a shot staggers it, and a blow (which sends it stumbling back).
 const FLINCH_TIME: f64 = 0.33;
+const STUMBLE_TIME: f64 = 0.6;
 /// It lunges from this close.
 const LUNGE: f64 = 2.2;
 /// How long out of sight before it goes to look where it last saw you.
@@ -47,7 +50,15 @@ const PLAYER_EYE: f64 = 1.5;
 /// A stride of its walk animation covers this much ground.
 const STRIDE: f64 = 1.1;
 const WALK_CLIP: f64 = 0.8;
-pub const HP: f64 = 100.0;
+pub const HP: f64 = 150.0;
+/// A shot to the head does this many times a body shot's damage (blows do
+/// the same wherever they land).
+pub const HEADSHOT: f64 = 6.0;
+/// Its pace, m/s (a walk, and the lunge): most shamble, but one in
+/// `FAST_SHARE` walks fast.
+const SLOW: (f64, f64, f64) = (1.6, 2.0, 3.8);
+const FAST: (f64, f64, f64) = (3.0, 3.4, 4.5);
+const FAST_SHARE: f64 = 0.25;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum State {
@@ -59,7 +70,8 @@ pub enum State {
     /// Going to where a shot came from, then looking about.
     Investigate { at: Vec3, looked: f64 },
     Attack { t: f64, struck: bool },
-    Stagger { t: f64 },
+    /// Knocked off its stride for `until` seconds.
+    Stagger { t: f64, until: f64 },
     Dead { t: f64 },
 }
 
@@ -71,6 +83,8 @@ pub struct Senses<'a> {
     pub player: Option<Vec3>,
     /// Shots fired since the last step.
     pub noises: &'a [Vec3],
+    /// Snarls since the last step: where from, and where the player was.
+    pub alerts: &'a [(Vec3, Vec3)],
 }
 
 /// What it wants done this step.
@@ -80,6 +94,8 @@ pub struct Intent {
     pub sounds: Vec<(Sfx, f32)>,
     /// Its blow landed on the player, pushing this way.
     pub hit: Option<Vec3>,
+    /// It has just seen the player, there, and snarled for the rest.
+    pub alert: Option<Vec3>,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -87,6 +103,7 @@ pub struct Zombie {
     pub hp: f64,
     pub state: State,
     pub yaw: f64,
+    pub gait: Gait,
     path: Vec<Vec3>,
     path_goal: Vec3,
     repath: f64,
@@ -106,8 +123,11 @@ pub struct Zombie {
 
 impl Zombie {
     pub fn new(yaw: f64, seed: u32) -> Self {
-        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, path: Vec::new(), path_goal: Vec3::ZERO, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
+        let (lo, hi, lunge) = if z.rand() < FAST_SHARE { FAST } else { SLOW };
+        let walk = lo + (hi - lo) * z.rand();
+        z.gait = Gait { walk, sprint: lunge, crouch: walk };
         z
     }
 
@@ -132,20 +152,21 @@ impl Zombie {
         match self.state {
             State::Dead { t } => (Clip::Death, t),
             State::Attack { t, .. } => (Clip::Attack, t),
-            State::Stagger { t } => (Clip::Flinch, t),
+            State::Stagger { t, until } if until > FLINCH_TIME => (Clip::Stumble, t),
+            State::Stagger { t, .. } => (Clip::Flinch, t),
             _ if self.moving => (Clip::Walk, self.walked / STRIDE * WALK_CLIP),
             _ => (Clip::Idle, self.clip_t),
         }
     }
 
-    /// Take a hit: `head` doubles it; a `blow`, or a shot to the head that
-    /// doesn't kill, staggers it. Being shot, it knows where from. Whether
-    /// this killed it.
+    /// Take a hit: a shot to the `head` does [`HEADSHOT`] times the damage;
+    /// a `blow` sends it stumbling, a shot to the head that doesn't kill
+    /// staggers it. Being hit, it knows where from. Whether this killed it.
     pub fn hurt(&mut self, damage: f64, head: bool, blow: bool, from: Vec3) -> bool {
         if self.dead() {
             return false;
         }
-        self.hp -= damage * if head { 2.0 } else { 1.0 };
+        self.hp -= dealt(damage, head, blow);
         if self.hp <= 0.0 {
             self.set(State::Dead { t: 0.0 });
             return true;
@@ -153,7 +174,7 @@ impl Zombie {
         self.last_seen = Some(from);
         self.unseen = 0.0;
         if blow || head {
-            self.set(State::Stagger { t: 0.0 });
+            self.set(State::Stagger { t: 0.0, until: if blow { STUMBLE_TIME } else { FLINCH_TIME } });
         } else if !matches!(self.state, State::Attack { .. } | State::Stagger { .. }) {
             self.state = State::Hunt;
         }
@@ -197,6 +218,7 @@ impl Zombie {
         if let Some(p) = seen {
             if matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. }) {
                 out.sounds.push((Sfx::Snarl, 1.0));
+                out.alert = Some(p);
                 self.state = State::Hunt;
             }
             self.last_seen = Some(p);
@@ -205,6 +227,12 @@ impl Zombie {
             && !matches!(self.state, State::Hunt | State::Attack { .. } | State::Stagger { .. })
         {
             self.state = State::Investigate { at: shot, looked: 0.0 };
+        } else if let Some(&(_, seen_at)) = s.alerts.iter().find(|(from, _)| flat_dist(*from, body.pos) <= ALERT_RANGE)
+            && matches!(self.state, State::Wander { .. } | State::Search(_))
+        {
+            // Another saw them: come and look, answering it.
+            out.sounds.push((Sfx::Groan, 0.8));
+            self.state = State::Investigate { at: seen_at, looked: 0.0 };
         }
         if self.groan <= 0.0 {
             out.sounds.push((Sfx::Groan, 0.9));
@@ -213,8 +241,8 @@ impl Zombie {
 
         let mut goal: Option<(Vec3, f64, bool, f64)> = None; // where, pace, lunge, turn rate
         match self.state {
-            State::Stagger { t } => {
-                self.state = if t + dt >= FLINCH_TIME { State::Hunt } else { State::Stagger { t: t + dt } };
+            State::Stagger { t, until } => {
+                self.state = if t + dt >= until { State::Hunt } else { State::Stagger { t: t + dt, until } };
             }
             State::Attack { t, struck } => {
                 let t = t + dt;
@@ -332,7 +360,9 @@ impl Zombie {
             self.path.clear();
             target
         } else {
-            if self.repath <= 0.0 || self.path.is_empty() || flat_dist(self.path_goal, target) > 2.0 {
+            // (No way found is remembered until the next repath too: a search
+            // that fails looks at the whole grid.)
+            if self.repath <= 0.0 || flat_dist(self.path_goal, target) > 2.0 {
                 self.path = nav.and_then(|n| n.path(body.pos, target)).unwrap_or_default();
                 self.path_goal = target;
                 self.repath = REPATH;
@@ -346,6 +376,12 @@ impl Zombie {
         let go = pace * off.cos().max(0.0);
         Controls { walk: Vec2::new(0.0, go), sprint: lunge && off.abs() < 0.5, jump: false, crouch_toggle: false }
     }
+}
+
+/// What a hit takes off: a shot to the head many times over; a blow the
+/// same wherever it lands.
+pub fn dealt(damage: f64, head: bool, blow: bool) -> f64 {
+    damage * if head && !blow { HEADSHOT } else { 1.0 }
 }
 
 fn flat_dist(a: Vec3, b: Vec3) -> f64 {

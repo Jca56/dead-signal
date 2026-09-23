@@ -1,6 +1,6 @@
-"""Things to pick up: a bandage roll and a medkit, each its own object
-(ITEM_Bandage, ITEM_Medkit) sitting on its origin, for the game to set down
-wherever it likes.
+"""Things to pick up: a bandage roll, a medkit and a box of 9mm rounds,
+each its own object (ITEM_Bandage, ITEM_Medkit, ITEM_Ammo) sitting on its
+origin, for the game to set down wherever it likes.
 
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/items.py
@@ -27,6 +27,11 @@ KIT_RED = (0.66, 0.10, 0.08)
 KIT_DARK = (0.36, 0.06, 0.05)
 WHITE = (0.92, 0.91, 0.87)
 HANDLE = (0.14, 0.13, 0.12)
+CARTON = (0.33, 0.34, 0.21)
+CARTON_DARK = (0.24, 0.25, 0.15)
+LABEL = (0.78, 0.70, 0.48)
+BRASS = (0.78, 0.60, 0.26)
+LEAD = (0.45, 0.42, 0.40)
 
 
 class Part:
@@ -96,11 +101,30 @@ def medkit():
     p.finish()
 
 
+def ammo():
+    """An olive carton with its lid flipped open, the rounds standing in
+    rows, a tan label round its middle."""
+    p = Part("ITEM_Ammo")
+    w, d, h = 0.20, 0.12, 0.075
+    p.box((0, 0, h / 2), (w, d, h), CARTON)
+    p.box((0, 0, h * 0.5), (w + 0.004, d + 0.004, 0.028), LABEL)
+    # The lid, open and leaning back past upright.
+    p.box((0, -d / 2 - 0.028, h + 0.018), (w, 0.006, 0.07), CARTON_DARK)
+    # Rounds: brass cases, dull noses, in three rows.
+    for row in (-0.03, 0.0, 0.03):
+        for i in range(6):
+            x = -0.075 + i * 0.03
+            p.box((x, row, h + 0.006), (0.014, 0.014, 0.014), BRASS)
+            p.box((x, row, h + 0.017), (0.009, 0.009, 0.01), LEAD)
+    p.finish()
+
+
 def main():
     bandage()
     medkit()
+    ammo()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
-    print(f"items: bandage, medkit -> {os.path.abspath(OUT)}")
+    print(f"items: bandage, medkit, ammo -> {os.path.abspath(OUT)}")
 
 
 main()

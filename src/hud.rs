@@ -1,7 +1,7 @@
 //! What's drawn over a run: a dot at the middle (the hitmarker round it, a
 //! ring filling while a kit is applied, the name of what's in reach),
-//! health and stamina bottom left, rounds and kits bottom right, and red at
-//! the edges when hurt.
+//! health and stamina bottom left, rounds (loaded and spare) and kits
+//! bottom right, and red at the edges when hurt.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -14,6 +14,7 @@ use crate::vitals::{LOW_HP, MAX_HP, MAX_STAMINA};
 /// Everything the HUD shows.
 pub struct Hud<'a> {
     pub mag: u32,
+    pub spare: u32,
     pub marker: Option<Marker>,
     /// A blow's red at the edges, 0–1.
     pub hurt: f64,
@@ -92,11 +93,12 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     ui.draw.rect(stamina, TROUGH);
     ui.draw.rect(Rect::from_min_size(stamina.min, Vec2::new(width * (h.stamina / MAX_STAMINA).clamp(0.0, 1.0), stamina_h)), if h.winded { WINDED } else { STAMINA });
 
-    // Rounds left, and the reserve (which never runs out, for now).
+    // Rounds left, and the spare ones (both red once gone).
     let big = TextStyle::new((60.0 * s) as f32).bold().family(style::FONT);
     let small = TextStyle::new((35.0 * s) as f32).bold().family(style::FONT);
     let count = h.mag.to_string();
-    let spare = " / ∞";
+    let spare = format!(" / {}", h.spare);
+    let spare = spare.as_str();
     let (w_count, w_spare) = (ui.measure(&count, &big), ui.measure(spare, &small));
     let right = screen.max.x - 60.0 * s;
     let base = screen.max.y - 50.0 * s;
@@ -104,7 +106,7 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     let big_h = f64::from(big.line_height());
     let small_h = f64::from(small.line_height());
     ui.text_at(&count, &big, Vec2::new(right - w_spare - w_count, base - big_h), screen.width(), colour);
-    ui.text_at(spare, &small, Vec2::new(right - w_spare, base - small_h - 5.0 * s), screen.width(), style::DIM);
+    ui.text_at(spare, &small, Vec2::new(right - w_spare, base - small_h - 5.0 * s), screen.width(), if h.spare == 0 { style::SIGNAL } else { style::DIM });
 
     // The kits carried, over the rounds: the key, the name, how many.
     let kit = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);

@@ -5,12 +5,13 @@ Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/shambler.py
 
 Writes assets/models/shambler.glb: one skinned mesh on a 17-bone rig and
-five animations, keyed straight onto the bones:
+six animations, keyed straight onto the bones:
 
     Walk    0.8 s  a dragging shamble, one stride a cycle (loops)
     Idle    3 s    swaying where it stands (loops)
     Attack  0.9 s  both arms up and a lunging swipe; lands at 0.4 s
     Flinch  0.33 s snapped back by a hit
+    Stumble 0.6 s  knocked reeling by a blow: a step back, arms flung
     Death   1.2 s  knees go, then face down; ends lying still
 
 Built facing Blender's +Y (the game's -Z, the way a yaw of 0 looks), feet
@@ -301,6 +302,9 @@ def actions(rig):
     action("Attack", [(0, rest), (7, windup), (12, swipe), (18, blend(swipe, rest, 0.5)), (27, rest)])
     struck = with_(rest, chest=(18, 0, 6), spine=(8, 0, 0), head=(22, 8, 0), upper_arm__R=(15, 0, -10))
     action("Flinch", [(0, rest), (3, struck), (10, rest)])
+    reel = with_(rest, chest=(30, 0, 10), spine=(14, 0, 0), head=(30, 12, 0), upper_arm__R=(60, 0, -40), forearm__R=(30, 0, 0), upper_arm__L=(50, 0, 40), forearm__L=(25, 0, 0), hips=(0, 0, 0, (0, -0.06, -0.02)))
+    back = with_(reel, chest=(22, 0, 6), spine=(10, 0, 0), thigh__L=(-28, 0, 0), shin__L=(-12, 0, 0), thigh__R=(12, 0, 0), shin__R=(-18, 0, 0), hips=(0, 0, 0, (0, -0.14, -0.05)))
+    action("Stumble", [(0, rest), (3, reel), (9, back), (13, blend(back, rest, 0.5)), (18, rest)])
     buckle = with_(rest, thigh__R=(45, 0, 0), thigh__L=(40, 0, 0), shin__R=(-85, 0, 0), shin__L=(-80, 0, 0), foot__R=(40, 0, 0), foot__L=(40, 0, 0), hips=(0, 0, 0, (0, 0.05, -0.32)), head=(15, 10, 0))
     tip = with_(buckle, hips=(-45, 5, 0, (0, 0.30, -0.52)), spine=(-10, 0, 0), upper_arm__R=(90, 0, 0), upper_arm__L=(80, 0, 0))
     down = {"hips": (-88, 6, 5, (0, 0.72, -0.80)), "head": (-15, 25, 0), "upper_arm.R": (165, 0, -25), "upper_arm.L": (150, 0, 30), "forearm.R": (20, 0, 0), "forearm.L": (15, 0, 0), "thigh.L": (-6, 0, 4), "shin.L": (-12, 0, 0), "foot.L": (-40, 0, 0), "foot.R": (-40, 0, 0)}

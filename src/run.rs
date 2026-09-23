@@ -8,12 +8,13 @@ use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
 use crate::combat::Combat;
 use crate::death::{After, Death};
 use crate::hud::{self, Hud};
-use crate::items;
+use crate::items::{self, Item};
 use crate::sound::Sfx;
 use crate::stats::Stats;
 use crate::vitals::{Kit, LOW_HP, Vitals};
 use crate::weapon::Trigger;
 use crate::world::Game;
+use crate::zombie::director::Director;
 
 /// How much a blow takes.
 const BLOW_DAMAGE: f64 = 20.0;
@@ -29,14 +30,26 @@ pub struct Run {
     /// Where the player was last frame, for distance walked.
     last: Option<Vec3>,
     /// What the player could pick up right now.
-    pickup: Option<(bevy_ecs::entity::Entity, Kit)>,
+    pickup: Option<(bevy_ecs::entity::Entity, Item)>,
+    director: Director,
 }
 
 impl Run {
-    /// A fresh run: whole, nothing counted, things lying in their spots.
+    /// A fresh run: whole, nothing counted, things lying in their spots,
+    /// the first of the dead already out there.
     pub fn start(&mut self, game: &mut Game) {
         *self = Self::default();
-        items::scatter(&mut game.world);
+        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
+        items::scatter(&mut game.world, seed);
+        if let Some((eye, forward)) = Self::watching(game) {
+            self.director.begin(&mut game.world, eye, forward);
+        }
+    }
+
+    /// Where the player's eye is and which way it looks, flat.
+    fn watching(game: &mut Game) -> Option<(Vec3, Vec3)> {
+        let (body, view) = game.player()?;
+        Some((body.pos + Vec3::new(0.0, 1.6, 0.0), Vec3::new(-view.yaw.sin(), 0.0, -view.yaw.cos())))
     }
 
     /// How far the gun is lowered (while patching up), 0–1.
@@ -101,11 +114,17 @@ impl Run {
             let dir = Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos());
             items::in_view(&mut game.world, eye, dir)
         });
-        if let Some((e, kit)) = self.pickup
+        if let Some((e, item)) = self.pickup
             && pressed(ui, &['e'])
         {
             game.world.despawn(e);
-            self.vitals.take(kit);
+            match item {
+                Item::Kit(kit) => self.vitals.take(kit),
+                Item::Rounds(n) => {
+                    combat.pistol.spare += n;
+                    self.stats.rounds_found += n;
+                }
+            }
             combat.play(Sfx::Pickup, 0.8);
             self.pickup = None;
         }
@@ -121,6 +140,12 @@ impl Run {
                 *game.controls_mut() = Default::default();
                 return;
             }
+        }
+
+        // More of the dead, as the kills mount.
+        if let Some((eye, forward)) = Self::watching(game) {
+            self.director.update(&mut game.world, self.stats.kills(), eye, forward, dt);
+            self.stats.biggest_horde = self.director.peak as u32;
         }
 
         // Health, stamina, the kit being applied, the count.
@@ -155,10 +180,12 @@ impl Run {
 
     fn hud(&self, ui: &mut Ui, combat: &Combat, time: f64) {
         let v = &self.vitals;
+        let pickup = self.pickup.map(|(_, item)| item.label());
         hud::draw(
             ui,
             &Hud {
                 mag: combat.pistol.mag,
+                spare: combat.pistol.spare,
                 marker: combat.fx.marker,
                 hurt: combat.hurt,
                 hp: v.hp,
@@ -167,7 +194,7 @@ impl Run {
                 bandages: v.bandages,
                 medkits: v.medkits,
                 heal: v.heal_progress(),
-                pickup: self.pickup.map(|(_, kit)| kit.name()),
+                pickup: pickup.as_deref(),
                 time,
             },
         );

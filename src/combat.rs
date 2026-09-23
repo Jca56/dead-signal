@@ -65,7 +65,7 @@ impl Combat {
         self.sprint_block <= 0.0
     }
 
-    /// A fresh run: a full magazine, nothing in the air.
+    /// A fresh run: a full magazine and the spare rounds, nothing in the air.
     pub fn reset(&mut self) {
         self.pistol = Pistol::default();
         self.sprint_block = 0.0;
@@ -86,8 +86,16 @@ impl Combat {
         }
         let Some((body, view)) = game.player() else { return 0 };
         let aim = aim(&view, &body, game.alpha());
+        let solids = &game.world.resource::<Solid>().0;
         for (sfx, at, gain) in sounds {
-            self.sound.play_at(sfx, gain, at, aim.eye, aim.right);
+            // Only what could be heard at all is checked for walls between.
+            let to = at - aim.eye;
+            let d = to.length();
+            if d >= sfx.range() {
+                continue;
+            }
+            let blocked = d > 1.0 && solids.raycast(aim.eye, to * (1.0 / d), d - 0.5).is_some();
+            self.sound.play_at(sfx, gain, at, aim.eye, aim.right, blocked);
         }
         let landed = blows.len();
         for push in blows {
@@ -186,7 +194,7 @@ impl Combat {
         {
             let point = aim.eye + dir * t;
             let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, damage, head, blow);
-            stats.damage_dealt += damage * if head { 2.0 } else { 1.0 };
+            stats.damage_dealt += zombie::brain::dealt(damage, head, blow);
             if !blow {
                 stats.hits += 1;
                 stats.headshots += u32::from(head);
@@ -198,7 +206,7 @@ impl Combat {
             self.fx.burst(point, -dir, Surface::Flesh, if blow { 12 } else { 9 });
             self.fx.mark(killed);
             self.sound.play(Sfx::Confirm, if killed { 0.7 } else { 0.45 });
-            self.sound.play_at(Sfx::Flesh, 1.0, point, aim.eye, aim.right);
+            self.sound.play_at(Sfx::Flesh, 1.0, point, aim.eye, aim.right, false);
             if blow && let Some(mut v) = game.player_view_mut() {
                 v.jolt(0.02);
             }
@@ -222,7 +230,7 @@ impl Combat {
             self.fx.burst(point, -dir, surface, if blow { 10 } else { 7 });
             self.fx.mark(beaten);
             self.sound.play(Sfx::Confirm, if beaten { 0.7 } else { 0.45 });
-            self.sound.play_at(sfx, gain, point, aim.eye, aim.right);
+            self.sound.play_at(sfx, gain, point, aim.eye, aim.right, false);
             if blow && let Some(mut v) = game.player_view_mut() {
                 v.jolt(0.02);
             }
@@ -237,7 +245,7 @@ impl Combat {
             Surface::Metal => (Sfx::Ding, 0.35),
             Surface::Flesh => (Sfx::Flesh, 0.8),
         };
-        self.sound.play_at(sfx, gain, hit.point, aim.eye, aim.right);
+        self.sound.play_at(sfx, gain, hit.point, aim.eye, aim.right, false);
         if blow && let Some(mut v) = game.player_view_mut() {
             v.jolt(0.012);
         }

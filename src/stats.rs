@@ -10,10 +10,12 @@ pub struct Stats {
     pub hits: u32,
     pub headshots: u32,
     pub reloads: u32,
+    pub rounds_found: u32,
     pub gun_kills: u32,
     pub melee_kills: u32,
     pub longest_kill: f64,
     pub damage_dealt: f64,
+    pub biggest_horde: u32,
     pub times_hit: u32,
     pub damage_taken: f64,
     pub healed: f64,
@@ -63,6 +65,7 @@ impl Stats {
                     ("Accuracy", format!("{}%", self.accuracy())),
                     ("Headshots", self.headshots.to_string()),
                     ("Reloads", self.reloads.to_string()),
+                    ("Rounds found", self.rounds_found.to_string()),
                 ],
             },
             Group {
@@ -73,6 +76,7 @@ impl Stats {
                     ("By hand", self.melee_kills.to_string()),
                     ("Longest kill", metres(self.longest_kill)),
                     ("Damage dealt", format!("{:.0}", self.damage_dealt)),
+                    ("Most up at once", self.biggest_horde.to_string()),
                 ],
             },
             Group {

@@ -4,8 +4,9 @@
 //! `arms.glb` show them. It knows nothing of the world: the caller turns
 //! what it says into rays, sounds and hits.
 
-/// Rounds in a magazine.
+/// Rounds in a magazine, and spare ones carried at the start of a run.
 pub const MAG: u32 = 12;
+pub const START_SPARE: u32 = 24;
 /// The quickest it fires again, seconds: none, so it fires as fast as the
 /// trigger is pulled (one shot a click).
 const FIRE_GAP: f64 = 0.0;
@@ -64,6 +65,8 @@ pub struct Trigger {
 #[derive(Clone, Debug)]
 pub struct Pistol {
     pub mag: u32,
+    /// Rounds carried to reload with.
+    pub spare: u32,
     clip: Clip,
     /// Seconds into the clip.
     t: f64,
@@ -73,7 +76,7 @@ pub struct Pistol {
 
 impl Default for Pistol {
     fn default() -> Self {
-        Self { mag: MAG, clip: Clip::Idle, t: 0.0, gap: 0.0 }
+        Self { mag: MAG, spare: START_SPARE, clip: Clip::Idle, t: 0.0, gap: 0.0 }
     }
 }
 
@@ -86,6 +89,11 @@ impl Pistol {
     /// Busy with something a shot can't cut short.
     pub fn busy(&self) -> bool {
         matches!(self.clip, Clip::Reload | Clip::Melee)
+    }
+
+    /// Room in the magazine and rounds to fill it with.
+    fn can_reload(&self) -> bool {
+        self.mag < MAG && self.spare > 0
     }
 
     fn start(&mut self, clip: Clip) {
@@ -108,7 +116,9 @@ impl Pistol {
                     }
                 }
                 if self.t >= RELOAD_TIME {
-                    self.mag = MAG;
+                    let taken = (MAG - self.mag).min(self.spare);
+                    self.mag += taken;
+                    self.spare -= taken;
                     self.start(Clip::Idle);
                 }
             }
@@ -130,7 +140,7 @@ impl Pistol {
         }
         if input.melee {
             self.start(Clip::Melee);
-        } else if input.reload && self.mag < MAG {
+        } else if input.reload && self.can_reload() {
             self.start(Clip::Reload);
         } else if input.fire && self.gap <= 0.0 {
             if self.mag > 0 {
@@ -140,7 +150,9 @@ impl Pistol {
                 acts.push(Act::Shoot);
             } else {
                 acts.push(Act::DryFire);
-                self.start(Clip::Reload);
+                if self.can_reload() {
+                    self.start(Clip::Reload);
+                }
             }
         }
         acts
@@ -179,7 +191,21 @@ mod tests {
         let mut p = Pistol { mag: 0, ..Pistol::default() };
         let acts = run(&mut p, FIRE, (RELOAD_TIME * 60.0) as usize + 5);
         assert_eq!(acts, vec![Act::DryFire, Act::MagOut, Act::MagIn, Act::SlideRack]);
-        assert_eq!(p.mag, MAG);
+        assert_eq!((p.mag, p.spare), (MAG, START_SPARE - MAG));
+        assert_eq!(p.clip().0, Clip::Idle);
+    }
+
+    #[test]
+    fn a_reload_takes_only_what_is_carried() {
+        let mut p = Pistol { mag: 4, spare: 5, ..Pistol::default() };
+        run(&mut p, Trigger { reload: true, ..Default::default() }, (RELOAD_TIME * 60.0) as usize + 5);
+        assert_eq!((p.mag, p.spare), (9, 0));
+        // Nothing left to load: the reload key does nothing, an empty
+        // trigger only clicks.
+        run(&mut p, Trigger { reload: true, ..Default::default() }, 2);
+        assert_eq!(p.clip().0, Clip::Idle);
+        let mut p = Pistol { mag: 0, spare: 0, ..Pistol::default() };
+        assert_eq!(run(&mut p, FIRE, 30), vec![Act::DryFire]);
         assert_eq!(p.clip().0, Clip::Idle);
     }
 

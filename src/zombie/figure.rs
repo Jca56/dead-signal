@@ -16,6 +16,7 @@ pub enum Clip {
     Idle,
     Attack,
     Flinch,
+    Stumble,
     Death,
 }
 
@@ -26,6 +27,7 @@ impl Clip {
             Clip::Idle => "Idle",
             Clip::Attack => "Attack",
             Clip::Flinch => "Flinch",
+            Clip::Stumble => "Stumble",
             Clip::Death => "Death",
         }
     }

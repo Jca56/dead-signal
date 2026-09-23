@@ -5,26 +5,31 @@
 //! what they say and whom they hit.
 
 pub mod brain;
+pub mod director;
 pub mod figure;
 pub mod nav;
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Quat, Vec2, Vec3};
 
-use crate::player::{self, Body, Gait, Player, STEP};
+use crate::player::{self, Body, Player, RADIUS, STEP};
 use crate::sound::Sfx;
 use crate::world::{Blend, Solid};
 use brain::{Senses, State, Zombie};
 use figure::{Figure, Model};
 use nav::NavGrid;
 
-/// Its pace, m/s: a shamble, and the lunge.
-const GAIT: Gait = Gait { walk: 1.3, sprint: 3.0, crouch: 1.3 };
 /// How long the dead lie before they sink, and how long sinking takes.
 const LIE_FOR: f64 = 20.0;
 const SINK_FOR: f64 = 3.0;
 /// It keeps this far from the player's middle (their bodies don't pass).
 const PERSONAL: f64 = 0.65;
+/// How hard the dead keep out of each other's way, per metre too close.
+const ELBOW: f64 = 3.0;
+/// How hard a shot and a blow shove one, m/s (a blow sends it about a
+/// metre back).
+const SHOT_SHOVE: f64 = 0.6;
+const BLOW_SHOVE: f64 = 7.0;
 /// Where a new one comes from: this far off, and out of sight.
 const SPAWN_NEAR: f64 = 35.0;
 const SPAWN_FAR: f64 = 60.0;
@@ -33,9 +38,13 @@ const SPAWN_FAR: f64 = 60.0;
 #[derive(Resource, Default)]
 pub struct Nav(pub Option<NavGrid>);
 
-/// Shots fired since the dead last listened.
+/// What the dead hear, since they last listened: shots fired, and each
+/// other's snarls (where from, and where the player was seen).
 #[derive(Resource, Default)]
-pub struct Noises(pub Vec<Vec3>);
+pub struct Noises {
+    pub shots: Vec<Vec3>,
+    pub snarls: Vec<(Vec3, Vec3)>,
+}
 
 /// What the dead did that the rest of the game hears of: sounds where they
 /// are, blows that landed on the player (the way they push), and how many
@@ -50,7 +59,8 @@ pub struct Horde {
 
 fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
     let player = players.iter().next().map(|b| b.pos);
-    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &noises.0 };
+    let heard = std::mem::take(&mut *noises);
+    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &heard.shots, alerts: &heard.snarls };
     for (mut z, mut body) in &mut dead {
         let mut intent = z.think(&body, &senses, STEP);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
@@ -58,12 +68,16 @@ fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Qu
         if let Some(push) = intent.hit {
             horde.blows.push(push);
         }
+        if let Some(seen) = intent.alert {
+            noises.snarls.push((body.pos, seen));
+        }
         if z.dead() {
             body.prev = body.pos;
             continue;
         }
         let before = body.pos;
-        player::step_body(&mut body, z.yaw, &mut intent.controls, &solid.0, &GAIT, STEP);
+        let gait = z.gait;
+        player::step_body(&mut body, z.yaw, &mut intent.controls, &solid.0, &gait, STEP);
         // Kept out of the player's way.
         if let Some(p) = player {
             let off = Vec2::new(body.pos.x - p.x, body.pos.z - p.z);
@@ -76,7 +90,39 @@ fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Qu
         }
         z.walked += Vec2::new(body.pos.x - before.x, body.pos.z - before.z).length();
     }
-    noises.0.clear();
+    elbow(&mut dead);
+}
+
+/// The living dead nudge each other apart (a shove, so walls still stop
+/// them), and a crowd spreads round the player instead of stacking.
+fn elbow(dead: &mut Query<(&mut Zombie, &mut Body), Without<Player>>) {
+    let at: Vec<Option<Vec3>> = dead.iter().map(|(z, b)| (!z.dead()).then_some(b.pos)).collect();
+    let apart = RADIUS * 2.0;
+    let mut nudges = vec![Vec3::ZERO; at.len()];
+    for i in 0..at.len() {
+        for j in i + 1..at.len() {
+            let (Some(a), Some(b)) = (at[i], at[j]) else { continue };
+            if (a.y - b.y).abs() > 1.5 {
+                continue;
+            }
+            let off = Vec3::new(a.x - b.x, 0.0, a.z - b.z);
+            let d = off.length();
+            if d >= apart {
+                continue;
+            }
+            // Exactly on top of each other: any way will do, as long as
+            // it's opposite ways.
+            let dir = if d > 1e-6 { off * (1.0 / d) } else { Vec3::new(1.0, 0.0, 0.0) };
+            let nudge = dir * ((apart - d) * ELBOW);
+            nudges[i] += nudge;
+            nudges[j] -= nudge;
+        }
+    }
+    for ((_, mut body), nudge) in dead.iter_mut().zip(nudges) {
+        if nudge != Vec3::ZERO {
+            body.push += nudge;
+        }
+    }
 }
 
 /// Pose each one for this frame: its animation, where it stands between
@@ -167,8 +213,9 @@ pub fn clear(world: &mut World) {
     }
 }
 
-pub fn count(world: &mut World) -> usize {
-    world.query::<&Zombie>().iter(world).count()
+/// How many are up and about (not lying dead).
+pub fn alive(world: &mut World) -> usize {
+    world.query::<&Zombie>().iter(world).filter(|z| !z.dead()).count()
 }
 
 /// The nearest Shambler along a ray within `max`: which, how far, the head.
@@ -192,7 +239,7 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, he
     if killed {
         sounds.push(Sfx::Gurgle);
     }
-    let push = Vec3::new(dir.x, 0.0, dir.z).normalize() * if blow { 3.0 } else { 0.6 };
+    let push = Vec3::new(dir.x, 0.0, dir.z).normalize() * if blow { BLOW_SHOVE } else { SHOT_SHOVE };
     let at = world.get_mut::<Body>(e).map(|mut body| {
         body.push += push;
         body.pos
@@ -206,7 +253,7 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, he
 
 /// A shot was heard at `at`.
 pub fn noise(world: &mut World, at: Vec3) {
-    world.resource_mut::<Noises>().0.push(at);
+    world.resource_mut::<Noises>().shots.push(at);
 }
 
 #[cfg(test)]
