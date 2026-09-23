@@ -13,6 +13,7 @@ lntrn-text = { path = "../lantern-ui-2/crates/lntrn-text" }
 lntrn-model = { path = "../lantern-ui-2/crates/lntrn-model" }
 lntrn-core = { path = "../lantern-ui-2/crates/lntrn-core" }
 lntrn-audio = { path = "../lantern-ui-2/crates/lntrn-audio" }
+lntrn-image = { path = "../lantern-ui-2/crates/lntrn-image" }
 bevy_ecs = "0.19"
 
 [profile.dev]

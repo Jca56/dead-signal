@@ -23,6 +23,10 @@ pub struct Stats {
     pub medkits_used: u32,
     pub dummies_downed: u32,
     pub plates_rung: u32,
+    pub containers_searched: u32,
+    pub items_looted: u32,
+    /// What was carried at the end.
+    pub loot_value: u32,
 }
 
 /// One group of lines on the stats screen.
@@ -66,6 +70,14 @@ impl Stats {
                     ("Headshots", self.headshots.to_string()),
                     ("Reloads", self.reloads.to_string()),
                     ("Rounds found", self.rounds_found.to_string()),
+                ],
+            },
+            Group {
+                title: "LOOT",
+                lines: vec![
+                    ("Containers searched", self.containers_searched.to_string()),
+                    ("Things picked up", self.items_looted.to_string()),
+                    ("Value carried", format!("${}", self.loot_value)),
                 ],
             },
             Group {

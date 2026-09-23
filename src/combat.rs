@@ -9,6 +9,9 @@ use lntrn_math::Vec3;
 use crate::collide::Surface;
 use crate::fx::Fx;
 use crate::head::{self, View};
+use crate::items;
+use crate::loot::Dice;
+use crate::loot::tables::{self, Source};
 use crate::player::Body;
 use crate::render::Renderer;
 use crate::sound::{Sfx, Sound};
@@ -37,6 +40,9 @@ pub struct Combat {
     seed: u32,
     /// How red the edges of the screen are from a blow, 0–1, fading.
     pub hurt: f64,
+    /// Luck for what the dead drop: its own, so it owes nothing to the
+    /// spread of shots.
+    loot: Dice,
 }
 
 /// How hard a blow shoves the player, m/s, and shakes the view, metres.
@@ -53,7 +59,7 @@ struct Aim {
 
 impl Combat {
     pub fn new() -> Self {
-        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0 }
+        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0, loot: Dice::default() }
     }
 
     pub fn init(&mut self, renderer: &mut Renderer) {
@@ -138,7 +144,7 @@ impl Combat {
                 Act::Shoot => {
                     stats.shots += 1;
                     self.sound.play(Sfx::Shot, 0.9);
-                    zombie::noise(&mut game.world, aim.eye);
+                    zombie::noise(&mut game.world, aim.eye, zombie::brain::HEARING);
                     self.sprint_block = SPRINT_BLOCK;
                     let side = (self.rand() - 0.5) * 0.8;
                     if let Some(mut v) = game.player_view_mut() {
@@ -202,6 +208,7 @@ impl Combat {
             if killed {
                 if blow { stats.melee_kills += 1 } else { stats.gun_kills += 1 }
                 stats.longest_kill = stats.longest_kill.max(t);
+                self.drop_something(game, e);
             }
             self.fx.burst(point, -dir, Surface::Flesh, if blow { 12 } else { 9 });
             self.fx.mark(killed);
@@ -250,6 +257,18 @@ impl Combat {
             v.jolt(0.012);
         }
         true
+    }
+
+    /// Now and then one of the dead had something on it: left where it
+    /// fell.
+    fn drop_something(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
+        if self.loot.unit() >= tables::CORPSE_CHANCE {
+            return;
+        }
+        let Some(at) = game.world.get::<Body>(e).map(|b| b.pos) else { return };
+        let stack = tables::draw(Source::Corpse, &mut self.loot);
+        let yaw = self.loot.unit() * std::f64::consts::TAU;
+        items::set_down(&mut game.world, stack, at + Vec3::new(0.0, 0.8, 0.0), yaw);
     }
 
     /// Queue what flies for drawing.

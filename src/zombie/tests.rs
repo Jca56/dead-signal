@@ -16,7 +16,7 @@ fn floor() -> Solids {
 
 /// Step a Shambler for `seconds` with the player standing at `player`; the
 /// blows it landed.
-fn run(z: &mut Zombie, body: &mut Body, solids: &Solids, nav: Option<&NavGrid>, player: Option<Vec3>, noises: &[Vec3], seconds: f64) -> usize {
+fn run(z: &mut Zombie, body: &mut Body, solids: &Solids, nav: Option<&NavGrid>, player: Option<Vec3>, noises: &[(Vec3, f64)], seconds: f64) -> usize {
     let mut blows = 0;
     let steps = (seconds / STEP) as usize;
     for i in 0..steps {
@@ -56,9 +56,9 @@ fn it_hears_a_shot_within_earshot_only() {
     let behind = |d: f64| Vec3::new(0.0, 0.0, d);
     let mut z = Zombie::new(0.0, 3);
     let mut body = Body::at(Vec3::ZERO);
-    run(&mut z, &mut body, &s, None, None, &[behind(HEARING + 1.0)], 0.1);
+    run(&mut z, &mut body, &s, None, None, &[(behind(HEARING + 1.0), HEARING)], 0.1);
     assert!(matches!(z.state, State::Wander { .. }), "heard it too far off");
-    run(&mut z, &mut body, &s, None, None, &[behind(HEARING - 1.0)], 0.1);
+    run(&mut z, &mut body, &s, None, None, &[(behind(HEARING - 1.0), HEARING)], 0.1);
     assert!(matches!(z.state, State::Investigate { .. }), "didn't hear it: {:?}", z.state);
     // And goes that way.
     run(&mut z, &mut body, &s, None, None, &[], 3.0);
@@ -138,7 +138,7 @@ fn on_the_real_map_it_climbs_to_you_from_any_side() {
     let cases = [
         (roof, ground(6.0, 51.0)),
         (roof, ground(-6.0, 51.0)),
-        (roof, ground(8.0, 41.0)),
+        (roof, ground(7.5, 43.0)),
         (roof, ground(-5.0, 40.0)),
         (ramp30, ground(9.0, 30.0)),
         (ramp30, ground(-2.0, 31.0)),

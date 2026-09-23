@@ -38,11 +38,11 @@ const SPAWN_FAR: f64 = 60.0;
 #[derive(Resource, Default)]
 pub struct Nav(pub Option<NavGrid>);
 
-/// What the dead hear, since they last listened: shots fired, and each
-/// other's snarls (where from, and where the player was seen).
+/// What the dead hear, since they last listened: noises made (where, and
+/// how far they carry), and each other's snarls (where from, and where the player was seen).
 #[derive(Resource, Default)]
 pub struct Noises {
-    pub shots: Vec<Vec3>,
+    pub shots: Vec<(Vec3, f64)>,
     pub snarls: Vec<(Vec3, Vec3)>,
 }
 
@@ -251,9 +251,9 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, he
     killed
 }
 
-/// A shot was heard at `at`.
-pub fn noise(world: &mut World, at: Vec3) {
-    world.resource_mut::<Noises>().shots.push(at);
+/// A noise at `at`, heard `range` metres off.
+pub fn noise(world: &mut World, at: Vec3, range: f64) {
+    world.resource_mut::<Noises>().shots.push((at, range));
 }
 
 #[cfg(test)]

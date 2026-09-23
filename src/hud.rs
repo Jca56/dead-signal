@@ -25,8 +25,10 @@ pub struct Hud<'a> {
     pub medkits: u32,
     /// How far through applying a kit, 0–1.
     pub heal: Option<f64>,
-    /// The name of what could be picked up.
-    pub pickup: Option<&'a str>,
+    /// What E would do: its key (none when it does nothing), and the words.
+    pub prompt: Option<(&'a str, &'a str)>,
+    /// A word flashed under the middle.
+    pub note: Option<&'a str>,
     pub time: f64,
 }
 
@@ -61,15 +63,25 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     if let Some(progress) = h.heal {
         ring(ui, mid, 35.0 * s, 5.0 * s, progress);
     }
-    if let Some(name) = h.pickup {
-        let key = TextStyle::new((30.0 * s) as f32).bold().family(style::FONT);
+    let words = TextStyle::new((30.0 * s) as f32).bold().family(style::FONT);
+    if let Some((key, name)) = h.prompt {
         let at = mid + Vec2::new(45.0 * s, 25.0 * s);
-        let box_w = ui.measure("E", &key) + 20.0 * s;
-        let box_h = f64::from(key.line_height()) + 6.0 * s;
-        ui.draw.rect(Rect::from_min_size(at, Vec2::new(box_w, box_h)), Color::rgba(0.0, 0.0, 0.0, 0.6));
-        ui.draw.stroke_rect(Rect::from_min_size(at, Vec2::new(box_w, box_h)), 2.0 * s, 0.0, style::BONE);
-        ui.text_at("E", &key, at + Vec2::new(10.0 * s, 3.0 * s), box_w, style::BONE);
-        ui.text_at(name, &key, at + Vec2::new(box_w + 15.0 * s, 3.0 * s), screen.width(), style::BONE);
+        let box_h = f64::from(words.line_height()) + 6.0 * s;
+        let mut x = at.x;
+        if !key.is_empty() {
+            let box_w = ui.measure(key, &words) + 20.0 * s;
+            ui.draw.rect(Rect::from_min_size(at, Vec2::new(box_w, box_h)), Color::rgba(0.0, 0.0, 0.0, 0.6));
+            ui.draw.stroke_rect(Rect::from_min_size(at, Vec2::new(box_w, box_h)), 2.0 * s, 0.0, style::BONE);
+            ui.text_at(key, &words, at + Vec2::new(10.0 * s, 3.0 * s), box_w, style::BONE);
+            x += box_w + 15.0 * s;
+        }
+        let tw = ui.measure(name, &words);
+        ui.draw.rect(Rect::from_min_size(Vec2::new(x - 6.0 * s, at.y), Vec2::new(tw + 12.0 * s, box_h)), Color::rgba(0.0, 0.0, 0.0, 0.35));
+        ui.text_at(name, &words, Vec2::new(x, at.y + 3.0 * s), screen.width(), if key.is_empty() { style::DIM } else { style::BONE });
+    }
+    if let Some(note) = h.note {
+        let w = ui.measure(note, &words);
+        ui.text_at(note, &words, Vec2::new(mid.x - w * 0.5, mid.y + 70.0 * s), w + 4.0, style::SIGNAL);
     }
 
     // Health, with its numbers in it, and stamina under it: bottom left.

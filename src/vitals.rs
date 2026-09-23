@@ -1,7 +1,8 @@
 //! The player's condition: health that blows take away and that slowly
 //! comes back (but only so far), stamina that sprinting spends, and the
 //! bandages and medkits carried to heal the rest, each taking a while to
-//! apply and lost if the patching is interrupted.
+//! apply (kept if the patching is interrupted; the caller takes it out
+//! of the pack once it's done).
 
 pub const MAX_HP: f64 = 100.0;
 /// Regen: after this long unhurt, this much a second, never past the cap.
@@ -41,10 +42,11 @@ impl Kit {
         }
     }
 
-    pub fn name(self) -> &'static str {
+    /// What it is as a thing carried.
+    pub fn kind(self) -> crate::loot::Kind {
         match self {
-            Kit::Bandage => "BANDAGE",
-            Kit::Medkit => "MEDKIT",
+            Kit::Bandage => crate::loot::Kind::Bandage,
+            Kit::Medkit => crate::loot::Kind::Medkit,
         }
     }
 }
@@ -66,15 +68,13 @@ pub struct Vitals {
     pub winded: bool,
     since_hurt: f64,
     since_sprint: f64,
-    pub bandages: u32,
-    pub medkits: u32,
     /// A kit being applied, and for how long so far.
     pub healing: Option<(Kit, f64)>,
 }
 
 impl Default for Vitals {
     fn default() -> Self {
-        Self { hp: MAX_HP, stamina: MAX_STAMINA, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, bandages: 0, medkits: 0, healing: None }
+        Self { hp: MAX_HP, stamina: MAX_STAMINA, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None }
     }
 }
 
@@ -99,24 +99,10 @@ impl Vitals {
         self.dead()
     }
 
-    pub fn carrying(&self, kit: Kit) -> u32 {
-        match kit {
-            Kit::Bandage => self.bandages,
-            Kit::Medkit => self.medkits,
-        }
-    }
-
-    pub fn take(&mut self, kit: Kit) {
-        match kit {
-            Kit::Bandage => self.bandages += 1,
-            Kit::Medkit => self.medkits += 1,
-        }
-    }
-
-    /// Start applying `kit`, if one is carried, health isn't full, and
+    /// Start applying `kit`, if one is `carried`, health isn't full, and
     /// nothing else is being applied. Whether it started.
-    pub fn start_heal(&mut self, kit: Kit) -> bool {
-        if self.healing.is_some() || self.carrying(kit) == 0 || self.hp >= MAX_HP || self.dead() {
+    pub fn start_heal(&mut self, kit: Kit, carried: u32) -> bool {
+        if self.healing.is_some() || carried == 0 || self.hp >= MAX_HP || self.dead() {
             return false;
         }
         self.healing = Some((kit, 0.0));
@@ -168,10 +154,6 @@ impl Vitals {
             if t >= kit.takes() {
                 let before = self.hp;
                 self.hp = (self.hp + kit.heals()).min(MAX_HP);
-                match kit {
-                    Kit::Bandage => self.bandages -= 1,
-                    Kit::Medkit => self.medkits -= 1,
-                }
                 self.healing = None;
                 change.healed = Some((kit, self.hp - before));
             } else {
@@ -242,23 +224,20 @@ mod tests {
     fn a_bandage_heals_after_it_is_applied_unless_interrupted() {
         let mut v = Vitals::default();
         v.hurt(50.0);
-        assert!(!v.start_heal(Kit::Bandage), "none carried");
-        v.take(Kit::Bandage);
-        assert!(v.start_heal(Kit::Bandage));
+        assert!(!v.start_heal(Kit::Bandage, 0), "none carried");
+        assert!(v.start_heal(Kit::Bandage, 1));
         wait(&mut v, 1.0, false);
         v.hurt(10.0);
-        assert!(v.healing.is_none() && v.bandages == 1, "interrupted, kept");
-        assert!(v.start_heal(Kit::Bandage));
+        assert!(v.healing.is_none(), "interrupted");
+        assert!(v.start_heal(Kit::Bandage, 1));
         let c = wait(&mut v, 2.1, false);
         assert_eq!(c.healed, Some((Kit::Bandage, 25.0)));
-        assert_eq!((v.hp, v.bandages), (65.0, 0));
+        assert_eq!(v.hp, 65.0);
         // A medkit never heals past full.
-        v.take(Kit::Medkit);
-        assert!(v.start_heal(Kit::Medkit));
+        assert!(v.start_heal(Kit::Medkit, 1));
         let c = wait(&mut v, 4.1, false);
         assert_eq!(c.healed, Some((Kit::Medkit, 35.0)));
         assert_eq!(v.hp, MAX_HP);
-        v.take(Kit::Medkit);
-        assert!(!v.start_heal(Kit::Medkit), "no use at full health");
+        assert!(!v.start_heal(Kit::Medkit, 1), "no use at full health");
     }
 }

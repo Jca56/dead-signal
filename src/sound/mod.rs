@@ -46,9 +46,14 @@ pub enum Sfx {
     Died,
     Pickup,
     Heal,
+    /// Searching: a container gone through, a lock opened, a lock that
+    /// won't.
+    Rummage,
+    Unlock,
+    Rattle,
 }
 
-const ALL: [Sfx; 20] = [
+const ALL: [Sfx; 23] = [
     Sfx::Shot,
     Sfx::DryFire,
     Sfx::MagOut,
@@ -69,6 +74,9 @@ const ALL: [Sfx; 20] = [
     Sfx::Died,
     Sfx::Pickup,
     Sfx::Heal,
+    Sfx::Rummage,
+    Sfx::Unlock,
+    Sfx::Rattle,
 ];
 
 struct Play {

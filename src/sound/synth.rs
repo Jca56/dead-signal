@@ -211,6 +211,37 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 rip + wind
             })
         }
+        Sfx::Rummage => {
+            // Things shoved about: a few scuffs of cloth and wood, knocks
+            // under them.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.45, 0.5, |t, n| {
+                let x = n.next();
+                let scuffs = [(0.0, 1.0), (0.12, 0.7), (0.26, 0.85)];
+                let scuff: f32 = scuffs.iter().map(|&(at, gain)| if t >= at { env(t - at, 0.01, 0.05) * gain } else { 0.0 }).sum();
+                let knock = if t >= 0.2 { sine(t - 0.2, 180.0) * env(t - 0.2, 0.001, 0.03) * 0.5 } else { 0.0 };
+                f.run(x, 1300.0, 0.8).1 * scuff + g.run(x, 400.0, 1.0).0 * scuff * 0.4 + knock
+            })
+        }
+        Sfx::Unlock => {
+            // A key turning: a scrape, the click, the shackle springing.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.4, 0.6, |t, n| {
+                let x = n.next();
+                let turn = f.run(x, 2800.0, 0.6).1 * env(t, 0.02, 0.05) * f32::from(t < 0.14) * 0.5;
+                let click = if t >= 0.15 { g.run(x, 3500.0, 0.2).1 * env(t - 0.15, 0.0003, 0.006) + sine(t - 0.15, 1900.0) * env(t - 0.15, 0.0005, 0.02) * 0.4 } else { 0.0 };
+                let spring = if t >= 0.24 { sine(t - 0.24, 950.0) * env(t - 0.24, 0.0008, 0.06) * 0.5 } else { 0.0 };
+                turn + click + spring
+            })
+        }
+        Sfx::Rattle => {
+            // A locked door shaken: chain-link and a padlock knocking.
+            let mut f = Svf::default();
+            render(0.35, 0.55, |t, n| {
+                let shakes = (0.5 + 0.5 * sine(t, 16.0)).powi(4) * env(t, 0.01, 0.12);
+                f.run(n.next(), 2400.0, 0.4).1 * shakes + sine(t, 740.0) * shakes * 0.25
+            })
+        }
     }
 }
 

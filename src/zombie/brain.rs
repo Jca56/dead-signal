@@ -19,7 +19,7 @@ pub const SIGHT: f64 = 25.0;
 const SIGHT_HALF: f64 = 55.0;
 /// Closer than this it knows you're there, whichever way it faces.
 const CLOSE: f64 = 2.5;
-/// How far it hears a shot, and another's snarl on seeing the player.
+/// How far a shot is heard, and another's snarl on seeing the player.
 pub const HEARING: f64 = 80.0;
 pub const ALERT_RANGE: f64 = 15.0;
 /// It swipes from this close, and the swipe reaches this far.
@@ -89,8 +89,9 @@ pub struct Senses<'a> {
     pub nav: Option<&'a NavGrid>,
     /// Where the player stands, if there is one.
     pub player: Option<Vec3>,
-    /// Shots fired since the last step.
-    pub noises: &'a [Vec3],
+    /// Noises made since the last step (a shot, a rummage): where, and
+    /// how far off they're heard.
+    pub noises: &'a [(Vec3, f64)],
     /// Snarls since the last step: where from, and where the player was.
     pub alerts: &'a [(Vec3, Vec3)],
 }
@@ -233,7 +234,7 @@ impl Zombie {
             }
             self.last_seen = Some(p);
             self.unseen = 0.0;
-        } else if let Some(&shot) = s.noises.iter().find(|n| (**n - body.pos).length() <= HEARING)
+        } else if let Some(&(shot, _)) = s.noises.iter().find(|(at, range)| (*at - body.pos).length() <= *range)
             && !matches!(self.state, State::Hunt | State::Attack { .. } | State::Stagger { .. })
         {
             self.state = State::Investigate { at: shot, looked: 0.0 };

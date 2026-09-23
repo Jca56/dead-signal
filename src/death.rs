@@ -121,8 +121,8 @@ impl Death {
         let left = screen.max.x - 2.0 * col_w - gap - 90.0 * s;
         let top = screen.min.y + screen.height() * 0.16;
         let groups = self.stats.groups();
-        // SURVIVAL and SHOOTING on the left; the rest on the right.
-        for (column, range) in [(0usize, 0..2usize), (1, 2..groups.len())] {
+        // SURVIVAL, SHOOTING and LOOT on the left; the rest on the right.
+        for (column, range) in [(0usize, 0..3usize), (1, 3..groups.len())] {
             let x = left + column as f64 * (col_w + gap);
             let mut y = top;
             for g in &groups[range] {

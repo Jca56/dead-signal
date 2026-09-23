@@ -10,6 +10,7 @@ use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
 use crate::assets;
+use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::death::After;
 use crate::run::Run;
@@ -21,7 +22,9 @@ use crate::render::{Draw, FigureDraw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
 use crate::weapon::Clip;
-use crate::world::{Game, Look, Model, Placed};
+use crate::world::{Game, Look, Model, Placed, Solid};
+use crate::loot::tables::Source;
+use crate::{containers, icons, loot};
 use crate::zombie::{self, figure::Figure};
 
 /// Seconds a fade to or from black takes.
@@ -71,6 +74,8 @@ pub struct DeadSignal {
     viewmodel: Option<Viewmodel>,
     combat: Combat,
     run: Run,
+    /// Every kind of thing's picture, for the inventory.
+    icons: Icons,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
@@ -94,6 +99,7 @@ impl DeadSignal {
             viewmodel: None,
             combat: Combat::new(),
             run: Run::default(),
+            icons: Icons::default(),
             screen: Screen::Title,
             title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
@@ -167,7 +173,9 @@ impl DeadSignal {
 
     fn resume(&mut self, cx: &mut AreaCx<()>) {
         self.paused = false;
-        cx.request(ShellRequest::LockPointer(true));
+        if self.run.wants_lock() {
+            cx.request(ShellRequest::LockPointer(true));
+        }
     }
 
     /// A run's frame: look, move, pause; or, dead, the way out.
@@ -181,11 +189,13 @@ impl DeadSignal {
             return;
         }
         let locked = ui.state.pointer_locked;
-        if self.was_locked && !locked && !self.paused && active {
+        // Losing the lock unasked (the window lost focus) pauses; the
+        // inventory letting it go doesn't.
+        if self.was_locked && !locked && !self.paused && active && self.run.wants_lock() {
             self.pause(cx);
         }
         self.was_locked = locked;
-        if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() {
+        if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() && !self.run.shut_bag(&mut self.game, cx) {
             if self.paused { self.resume(cx) } else { self.pause(cx) }
         }
         if self.paused {
@@ -204,7 +214,7 @@ impl DeadSignal {
         if !active {
             return;
         }
-        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked);
+        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons);
     }
 
     /// Where the camera is this frame.
@@ -306,7 +316,7 @@ impl Host for DeadSignal {
 }
 
 impl AppHost for DeadSignal {
-    fn init_gpu(&mut self, gpu: &Gpu, format: wgpu::TextureFormat, _: &mut Images) {
+    fn init_gpu(&mut self, gpu: &Gpu, format: wgpu::TextureFormat, images: &mut Images) {
         let mut renderer = Renderer::new(gpu, format);
         for scene in ["title_scene", "proving_ground"] {
             match assets::load(&mut renderer, scene) {
@@ -316,12 +326,45 @@ impl AppHost for DeadSignal {
         }
         log_info!("world: {} solid triangles", self.game.solid_count());
         self.combat.init(&mut renderer);
+        match assets::load(&mut renderer, "containers") {
+            Ok(props) => {
+                let mut shapes = std::collections::HashMap::new();
+                let mut meshes = std::collections::HashMap::new();
+                for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
+                    let name = containers::model_name(source);
+                    let open = format!("{name}_Open");
+                    let find = |n: &str| props.iter().find(|p| p.name == n);
+                    if let Some(p) = find(name) {
+                        shapes.insert(source, p.triangles.clone());
+                        if let (Some(shut), Some(open)) = (p.mesh, find(&open).and_then(|o| o.mesh)) {
+                            meshes.insert(source, (shut, open));
+                        }
+                    }
+                }
+                let placed = containers::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
+                containers::spawn(&mut self.game.world, placed, &meshes);
+            }
+            Err(e) => log_error!("containers: {e}"),
+        }
         match assets::load(&mut renderer, "items") {
             Ok(props) => {
-                let find = |name: &str| props.iter().find(|p| p.name == name).and_then(|p| p.mesh);
-                if let (Some(bandage), Some(medkit), Some(ammo)) = (find("ITEM_Bandage"), find("ITEM_Medkit"), find("ITEM_Ammo")) {
-                    self.game.world.insert_resource(crate::items::Meshes { bandage, medkit, ammo });
+                let started = std::time::Instant::now();
+                let mut meshes = crate::items::Meshes::default();
+                for kind in loot::ALL {
+                    let def = kind.def();
+                    let Some(p) = props.iter().find(|p| p.name == def.model) else {
+                        log_error!("items: no {}", def.model);
+                        continue;
+                    };
+                    if let Some(mesh) = p.mesh {
+                        meshes.0.insert(kind, mesh);
+                    }
+                    let picture = icons::draw(&p.vertices, def.size);
+                    let turned = icons::turned(&picture);
+                    self.icons.0.insert(kind, (images.add(gpu, &picture), images.add(gpu, &turned)));
                 }
+                self.game.world.insert_resource(meshes);
+                log_info!("icons: drawn in {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
             }
             Err(e) => log_error!("items: {e}"),
         }

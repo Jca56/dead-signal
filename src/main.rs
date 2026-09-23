@@ -2,14 +2,18 @@
 
 mod app;
 mod assets;
+mod bag_ui;
 mod camera;
 mod collide;
 mod death;
 mod combat;
+mod containers;
 mod fx;
 mod head;
 mod hud;
+mod icons;
 mod items;
+mod loot;
 mod menu;
 mod player;
 mod render;

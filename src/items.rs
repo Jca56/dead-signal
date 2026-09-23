@@ -1,13 +1,15 @@
-//! Things lying about to pick up: bandages, medkits and boxes of rounds,
-//! set down on whatever is under their spots when a run begins (how many
-//! rounds are in each box is down to luck). The player takes one by
-//! looking at it within reach and pressing E.
+//! Things lying about to pick up: what's set down on whatever is under its
+//! spot when a run begins (how many rounds are in each box is down to
+//! luck), what the dead drop and what the player throws down. The player
+//! takes one by looking at it within reach and pressing E.
+
+use std::collections::HashMap;
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Quat, Vec3};
 
+use crate::loot::{Dice, Kind, Stack};
 use crate::render::MeshId;
-use crate::vitals::Kit;
 use crate::world::{Look, Model, Placed, Solid};
 
 /// How far away something can be taken from, and how near the middle of
@@ -15,64 +17,36 @@ use crate::world::{Look, Model, Placed, Solid};
 pub const REACH: f64 = 2.6;
 const AIM: f64 = 0.965;
 
+/// Where things lie: what, how many (fewest to most), where (game x and
+/// z), a height above the floor meant (so the one inside the building
+/// lands on its floor, not its roof), and which way it's turned.
+type Spot = (Kind, (u32, u32), f64, f64, f64, f64);
+const SPOTS: [Spot; 14] = [
+    (Kind::Bandage, (1, 1), 4.0, 3.0, 3.0, 0.4),
+    (Kind::Bandage, (1, 1), 1.0, 2.2, 37.0, 1.1),
+    (Kind::Bandage, (1, 1), -1.5, 5.2, 46.0, 2.3),
+    (Kind::Bandage, (1, 1), 12.0, 3.0, -46.0, 0.2),
+    (Kind::Medkit, (1, 1), 0.0, 2.2, 45.5, 0.6),
+    (Kind::Medkit, (1, 1), 2.5, 5.0, -36.5, 2.0),
+    (Kind::Rounds, ROUNDS, -5.0, 3.0, 12.0, 0.3),
+    (Kind::Rounds, ROUNDS, 18.0, 3.0, 2.0, 1.9),
+    (Kind::Rounds, ROUNDS, -20.0, 3.0, -8.0, 0.8),
+    (Kind::Rounds, ROUNDS, 8.0, 3.0, -28.0, 2.6),
+    (Kind::Rounds, ROUNDS, -16.0, 3.0, -44.0, 1.2),
+    (Kind::Rounds, ROUNDS, 28.0, 3.0, -24.0, 0.1),
+    (Kind::Rounds, ROUNDS, -1.9, 2.2, 47.0, 1.6),
+    (Kind::Rounds, ROUNDS, 38.0, 3.0, 36.0, 2.2),
+];
 /// How many rounds a box can hold, fewest to most.
 const ROUNDS: (u32, u32) = (8, 16);
 
-/// Something to pick up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Item {
-    Kit(Kit),
-    Rounds(u32),
-}
-
-impl Item {
-    /// What the prompt calls it.
-    pub fn label(self) -> String {
-        match self {
-            Item::Kit(kit) => kit.name().to_string(),
-            Item::Rounds(n) => format!("9MM ROUNDS  ×{n}"),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum What {
-    Bandage,
-    Medkit,
-    Ammo,
-}
-
-/// Where things lie: what, where (game x and z), a height above the floor
-/// meant (so the one inside the building lands on its floor, not its
-/// roof), and which way it's turned.
-const SPOTS: [(What, f64, f64, f64, f64); 14] = [
-    (What::Bandage, 4.0, 3.0, 3.0, 0.4),
-    (What::Bandage, 1.0, 2.2, 37.0, 1.1),
-    (What::Bandage, -1.5, 5.2, 46.0, 2.3),
-    (What::Bandage, 12.0, 3.0, -46.0, 0.2),
-    (What::Medkit, 0.0, 2.2, 45.5, 0.6),
-    (What::Medkit, 2.5, 5.0, -36.5, 2.0),
-    (What::Ammo, -5.0, 3.0, 12.0, 0.3),
-    (What::Ammo, 18.0, 3.0, 2.0, 1.9),
-    (What::Ammo, -20.0, 3.0, -8.0, 0.8),
-    (What::Ammo, 8.0, 3.0, -28.0, 2.6),
-    (What::Ammo, -16.0, 3.0, -44.0, 1.2),
-    (What::Ammo, 28.0, 3.0, -24.0, 0.1),
-    (What::Ammo, -1.9, 2.2, 47.0, 1.6),
-    (What::Ammo, 38.0, 3.0, 36.0, 2.2),
-];
-
-/// The things' meshes.
-#[derive(Resource, Clone, Copy)]
-pub struct Meshes {
-    pub bandage: MeshId,
-    pub medkit: MeshId,
-    pub ammo: MeshId,
-}
+/// Every kind of thing's mesh.
+#[derive(Resource, Clone, Default)]
+pub struct Meshes(pub HashMap<Kind, MeshId>);
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Pickup {
-    pub item: Item,
+    pub stack: Stack,
     /// Its middle, for looking at.
     pub at: Vec3,
 }
@@ -81,32 +55,22 @@ pub struct Pickup {
 /// boxes filled by `seed`'s luck.
 pub fn scatter(world: &mut World, seed: u32) {
     clear(world);
-    let Some(meshes) = world.get_resource::<Meshes>().copied() else { return };
-    let mut seed = seed | 1;
-    let mut rounds = || {
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
-        ROUNDS.0 + seed % (ROUNDS.1 - ROUNDS.0 + 1)
-    };
-    let mut placed = Vec::new();
-    {
-        let solids = &world.resource::<Solid>().0;
-        for (what, x, hint, z, yaw) in SPOTS {
-            let from = Vec3::new(x, hint + 1.0, z);
-            let Some(hit) = solids.raycast(from, Vec3::new(0.0, -1.0, 0.0), 20.0) else { continue };
-            placed.push((what, hit.point, yaw));
-        }
+    let mut dice = Dice(seed | 1);
+    for (kind, (lo, hi), x, hint, z, yaw) in SPOTS {
+        let stack = Stack::new(kind, dice.range(lo, hi));
+        set_down(world, stack, Vec3::new(x, hint, z), yaw);
     }
-    for (what, floor, yaw) in placed {
-        let (item, mesh) = match what {
-            What::Bandage => (Item::Kit(Kit::Bandage), meshes.bandage),
-            What::Medkit => (Item::Kit(Kit::Medkit), meshes.medkit),
-            What::Ammo => (Item::Rounds(rounds()), meshes.ammo),
-        };
-        let model = Mat4::from_translation(floor) * Mat4::from_quat(Quat::from_rotation_y(yaw));
-        world.spawn((Pickup { item, at: floor + Vec3::new(0.0, 0.06, 0.0) }, Placed(model), Model(mesh), Look::default()));
-    }
+}
+
+/// Lay `stack` on whatever is under `above` (from a metre over it), turned
+/// `yaw`. Whether there was a floor to lay it on.
+pub fn set_down(world: &mut World, stack: Stack, above: Vec3, yaw: f64) -> bool {
+    let Some(mesh) = world.get_resource::<Meshes>().and_then(|m| m.0.get(&stack.kind)).copied() else { return false };
+    let from = above + Vec3::new(0.0, 1.0, 0.0);
+    let Some(hit) = world.resource::<Solid>().0.raycast(from, Vec3::new(0.0, -1.0, 0.0), 20.0) else { return false };
+    let model = Mat4::from_translation(hit.point) * Mat4::from_quat(Quat::from_rotation_y(yaw));
+    world.spawn((Pickup { stack, at: hit.point + Vec3::new(0.0, 0.06, 0.0) }, Placed(model), Model(mesh), Look::default()));
+    true
 }
 
 pub fn clear(world: &mut World) {
@@ -118,8 +82,8 @@ pub fn clear(world: &mut World) {
 
 /// What the eye at `eye`, looking along `dir`, could take: the nearest
 /// thing within reach, near the middle of the view, nothing in between.
-pub fn in_view(world: &mut World, eye: Vec3, dir: Vec3) -> Option<(Entity, Item)> {
-    let mut best: Option<(Entity, Item, f64)> = None;
+pub fn in_view(world: &mut World, eye: Vec3, dir: Vec3) -> Option<(Entity, Stack)> {
+    let mut best: Option<(Entity, Stack, f64)> = None;
     for (e, p) in world.query::<(Entity, &Pickup)>().iter(world) {
         let to = p.at - eye;
         let d = to.length();
@@ -127,13 +91,13 @@ pub fn in_view(world: &mut World, eye: Vec3, dir: Vec3) -> Option<(Entity, Item)
             continue;
         }
         if best.is_none_or(|(_, _, b)| d < b) {
-            best = Some((e, p.item, d));
+            best = Some((e, p.stack, d));
         }
     }
-    let (e, item, d) = best?;
+    let (e, stack, d) = best?;
     let at = world.get::<Pickup>(e)?.at;
     let blocked = world.resource::<Solid>().0.raycast(eye, (at - eye) * (1.0 / d), d - 0.1).is_some();
-    (!blocked).then_some((e, item))
+    (!blocked).then_some((e, stack))
 }
 
 #[cfg(test)]
@@ -146,8 +110,7 @@ mod tests {
         let solids = crate::testing::real_world();
         let nav = crate::zombie::nav::NavGrid::build(&solids, crate::player::capsule(false));
         world.insert_resource(Solid(solids));
-        let mesh = MeshId::placeholder();
-        world.insert_resource(Meshes { bandage: mesh, medkit: mesh, ammo: mesh });
+        world.insert_resource(Meshes(crate::loot::ALL.iter().map(|&k| (k, MeshId::placeholder())).collect()));
         scatter(&mut world, 1234);
         let all: Vec<Pickup> = world.query::<&Pickup>().iter(&world).copied().collect();
         assert_eq!(all.len(), SPOTS.len(), "every spot had a floor under it");
@@ -163,9 +126,9 @@ mod tests {
         }
         // The one in the building is on its floor (the pad's top, 1.11 m),
         // not its roof.
-        let inside = all.iter().find(|p| p.item == Item::Kit(Kit::Medkit) && (p.at.z - 45.5).abs() < 0.1).expect("the building's medkit");
+        let inside = all.iter().find(|p| p.stack.kind == Kind::Medkit && (p.at.z - 45.5).abs() < 0.1).expect("the building's medkit");
         assert!((inside.at.y - 1.11 - 0.06).abs() < 0.05, "at {}", inside.at.y);
-        let boxes: Vec<u32> = all.iter().filter_map(|p| if let Item::Rounds(n) = p.item { Some(n) } else { None }).collect();
+        let boxes: Vec<u32> = all.iter().filter(|p| p.stack.kind == Kind::Rounds).map(|p| p.stack.count).collect();
         assert_eq!(boxes.len(), 8);
         assert!(boxes.iter().all(|n| (ROUNDS.0..=ROUNDS.1).contains(n)), "{boxes:?}");
         assert!(boxes.iter().any(|n| *n != boxes[0]), "all alike: {boxes:?}");
@@ -173,7 +136,7 @@ mod tests {
         let p = all[0];
         let eye = p.at + Vec3::new(0.0, 1.5, 1.0);
         let dir = (p.at - eye).normalize();
-        assert!(in_view(&mut world, eye, dir).is_some_and(|(_, item)| item == p.item));
+        assert!(in_view(&mut world, eye, dir).is_some_and(|(_, stack)| stack == p.stack));
         assert!(in_view(&mut world, eye, Vec3::new(0.0, 0.0, -1.0)).is_none());
         scatter(&mut world, 99);
         assert_eq!(world.query::<&Pickup>().iter(&world).count(), SPOTS.len(), "a fresh set, not a second one");

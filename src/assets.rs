@@ -19,6 +19,9 @@ pub struct Prop {
     pub model: Mat4,
     /// Its triangles in world space, for standing on (the ground).
     pub triangles: Vec<[Vec3; 3]>,
+    /// Its vertices as made, about its own origin, three to a face (for
+    /// drawing it small: an icon).
+    pub vertices: Vec<Vertex>,
 }
 
 /// Where the game's files are: beside the executable when installed,
@@ -71,7 +74,7 @@ fn props(renderer: &mut Renderer, gltf: &Gltf, path: &Path) -> Vec<Prop> {
             .collect();
         let name = node.name.clone().unwrap_or_else(|| format!("{}#{i}", path.display()));
         let mesh = (!name.starts_with("COL_")).then(|| renderer.add_mesh(&vertices));
-        out.push(Prop { name, mesh, model, triangles });
+        out.push(Prop { name, mesh, model, triangles, vertices });
     }
     out
 }

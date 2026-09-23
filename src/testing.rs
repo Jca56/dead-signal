@@ -5,8 +5,16 @@ use lntrn_math::Vec3;
 
 use crate::collide::Solids;
 
-/// Everything solid in the game's own scene files, as the game sorts it.
+/// Everything solid in the game's own scene files, as the game sorts it,
+/// with the containers set down in it as the game sets them.
 pub fn real_world() -> Solids {
+    let mut s = bare_world();
+    crate::containers::set_down(&mut s, &crate::containers::shapes());
+    s
+}
+
+/// The scene files' solids alone, before any container is set down.
+pub fn bare_world() -> Solids {
     let mut s = Solids::new();
     for file in ["title_scene", "proving_ground"] {
         let path = format!("{}/assets/models/{file}.glb", env!("CARGO_MANIFEST_DIR"));
