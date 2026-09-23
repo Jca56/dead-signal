@@ -1,7 +1,9 @@
 //! The game as a Lantern app: one full-window view, no title bar, drawn
 //! every frame. Screens (the title, the hideout, a run) take turns in it,
-//! with a fade through black between them. In a run the pointer is locked
-//! for mouse look; Esc (or leaving the window) pauses and lets it go.
+//! with a fade through black between them. A run is only ever started from
+//! the hideout, with what's packed in sight. In a run the pointer is
+//! locked for mouse look; Esc (or leaving the window) pauses and lets it
+//! go; walking out of a run is as good as dying, so it's asked twice.
 //! What's loaded at the start is in `load.rs`, the GPU's side in
 //! `gpu.rs`, and every run's map (built behind the loading screen, then
 //! put in) in `level.rs`. The player's profile is saved as a run starts
@@ -64,7 +66,6 @@ enum Screen {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TitleItem {
-    Play,
     Hideout,
     Quit,
 }
@@ -73,6 +74,13 @@ enum TitleItem {
 enum PauseItem {
     Resume,
     ToTitle,
+}
+
+/// Leaving a run, asked again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LeaveItem {
+    Stay,
+    Leave,
 }
 
 /// Where a fade is going once the screen is black.
@@ -120,7 +128,10 @@ pub struct DeadSignal {
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
+    leave_menu: SideMenu<LeaveItem>,
     paused: bool,
+    /// Paused and asked whether to walk out of the run.
+    leaving: bool,
     /// Whether the pointer was locked last frame: losing the lock without
     /// asking (the window lost focus) pauses.
     was_locked: bool,
@@ -158,9 +169,12 @@ impl DeadSignal {
             picture: None,
             map_open: false,
             screen: Screen::Title,
-            title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("HIDEOUT", TitleItem::Hideout), ("QUIT", TitleItem::Quit)]),
+            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
+            leave_menu: SideMenu::new("LEAVE THE RUN?", &[("STAY", LeaveItem::Stay), ("LEAVE", LeaveItem::Leave)])
+                .warning(&["Leaving now counts as dying.", "Everything but your pockets is lost."]),
             paused: false,
+            leaving: false,
             was_locked: false,
             camera: Camera::new(TITLE_EYE),
             black: 1.0,
@@ -196,8 +210,9 @@ impl DeadSignal {
 
     /// The screen is black: change what is behind it.
     fn show(&mut self, screen: Screen, cx: &mut AreaCx<()>) {
-        self.screen = screen;
+        let from = std::mem::replace(&mut self.screen, screen);
         self.paused = false;
+        self.leaving = false;
         self.was_locked = false;
         match screen {
             Screen::Loading => self.start_loading(),
@@ -226,15 +241,25 @@ impl DeadSignal {
                 self.black = 1.0;
                 cx.request(ShellRequest::LockPointer(true));
             }
-            Screen::Hideout => {}
+            Screen::Hideout => {
+                if from == Screen::Run {
+                    self.leave_run();
+                }
+            }
             Screen::Title => {
-                self.settle_run();
-                self.game.despawn_player();
-                self.run.ending = None;
-                self.show_title_scene();
+                self.leave_run();
                 self.title_menu.reset();
             }
         }
+    }
+
+    /// Out of a run (if in one) and back to the title's scene: the run
+    /// settled, the player gone.
+    fn leave_run(&mut self) {
+        self.settle_run();
+        self.game.despawn_player();
+        self.run.ending = None;
+        self.show_title_scene();
     }
 
     /// A run that's over (or walked out on) settles into the profile, and
@@ -254,6 +279,7 @@ impl DeadSignal {
 
     fn pause(&mut self, cx: &mut AreaCx<()>) {
         self.paused = true;
+        self.leaving = false;
         self.pause_menu.reset();
         *self.game.controls_mut() = Controls::default();
         cx.request(ShellRequest::LockPointer(false));
@@ -270,7 +296,7 @@ impl DeadSignal {
     fn run_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, active: bool) {
         if self.run.ending.is_some() {
             match self.run.ending(ui, cx, &mut self.game, &mut self.combat, active, &self.icons) {
-                Some(After::Again) => self.fade_to(Then::Show(Screen::Loading)),
+                Some(After::Hideout) => self.fade_to(Then::Show(Screen::Hideout)),
                 Some(After::Title) => self.fade_to(Then::Show(Screen::Title)),
                 None => {}
             }
@@ -284,18 +310,36 @@ impl DeadSignal {
         }
         self.was_locked = locked;
         if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() && !self.run.shut_bag(&mut self.game, cx) {
-            if self.paused { self.resume(cx) } else { self.pause(cx) }
+            // Asked about leaving, Esc is staying.
+            if self.leaving {
+                self.leaving = false;
+            } else if self.paused {
+                self.resume(cx)
+            } else {
+                self.pause(cx)
+            }
         }
         if self.paused {
             let screen = ui.clip();
             ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, PAUSE_DIM));
-            match self.pause_menu.draw(ui, active) {
-                Some(PauseItem::Resume) => self.resume(cx),
-                Some(PauseItem::ToTitle) => {
-                    cx.request(ShellRequest::LockPointer(false));
-                    self.fade_to(Then::Show(Screen::Title));
+            if self.leaving {
+                match self.leave_menu.draw(ui, active) {
+                    Some(LeaveItem::Stay) => self.leaving = false,
+                    Some(LeaveItem::Leave) => {
+                        cx.request(ShellRequest::LockPointer(false));
+                        self.fade_to(Then::Show(Screen::Title));
+                    }
+                    None => {}
                 }
-                None => {}
+            } else {
+                match self.pause_menu.draw(ui, active) {
+                    Some(PauseItem::Resume) => self.resume(cx),
+                    Some(PauseItem::ToTitle) => {
+                        self.leaving = true;
+                        self.leave_menu.reset();
+                    }
+                    None => {}
+                }
             }
             return;
         }
@@ -382,7 +426,6 @@ impl Host for DeadSignal {
         let active = self.fading_to.is_none();
         match self.screen {
             Screen::Title => match self.title_menu.draw(ui, active) {
-                Some(TitleItem::Play) => self.fade_to(Then::Show(Screen::Loading)),
                 Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
                 None => {}

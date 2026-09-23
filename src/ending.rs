@@ -37,7 +37,8 @@ const TIP: f64 = 0.25;
 /// What the player chose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum After {
-    Again,
+    /// To the hideout, to see what's left and pack for the next run.
+    Hideout,
     Title,
 }
 
@@ -53,9 +54,12 @@ pub struct Ending {
     t: f64,
     pub outcome: Outcome,
     stats: Stats,
-    /// What was carried at the end, and what it was worth.
+    /// What was carried at the end and got out, or was lost (dead: all
+    /// but the pockets), and what it was worth; and, dead, what the
+    /// pockets kept safe.
     loot: Vec<Stack>,
     value: u32,
+    kept: Vec<Stack>,
     /// What the run earned, and the XP there was before it.
     earned: Earned,
     xp_before: u32,
@@ -70,11 +74,18 @@ fn ease(t: f64) -> f64 {
 impl Ending {
     pub fn new(outcome: Outcome, stats: Stats, bag: &Bag, earned: Earned, xp_before: u32) -> Self {
         let menu = match outcome {
-            Outcome::Died(_) => SideMenu::new("YOU DIED", &[("TRY AGAIN", After::Again), ("TITLE", After::Title)]),
-            Outcome::Extracted(_) => SideMenu::new("EXTRACTED", &[("RUN AGAIN", After::Again), ("TITLE", After::Title)]),
+            Outcome::Died(_) => SideMenu::new("YOU DIED", &[("HIDEOUT", After::Hideout), ("TITLE", After::Title)]),
+            Outcome::Extracted(_) => SideMenu::new("EXTRACTED", &[("HIDEOUT", After::Hideout), ("TITLE", After::Title)]),
         };
-        let loot = bag.everything().collect();
-        Self { t: 0.0, outcome, stats, loot, value: bag.value(), earned, xp_before, menu }
+        let (loot, kept): (Vec<Stack>, Vec<Stack>) = match outcome {
+            Outcome::Extracted(_) => (bag.everything().collect(), Vec::new()),
+            Outcome::Died(_) => {
+                let lost = bag.slots.iter().flatten().copied().chain(bag.pack.items.iter().map(|i| i.stack));
+                (lost.collect(), bag.pockets.items.iter().map(|i| i.stack).collect())
+            }
+        };
+        let value = loot.iter().map(|s| s.value()).sum();
+        Self { t: 0.0, outcome, stats, loot, value, kept, earned, xp_before, menu }
     }
 
     pub fn update(&mut self, dt: f64) {
@@ -194,46 +205,57 @@ impl Ending {
         }
     }
 
-    /// What was carried, under the way on: each thing's picture and how
-    /// many, and what it all was worth, got out or lost.
+    /// What was carried, under the way on: got out with, or lost and (in
+    /// the pockets) kept.
     fn carried(&self, ui: &mut Ui, screen: Rect, shown: f64, icons: &Icons) {
         let s = ui.m.scale;
         let got_out = matches!(self.outcome, Outcome::Extracted(_));
-        let title = TextStyle::new((35.0 * s) as f32).bold().family(style::FONT);
         let heading = format!("{}  ${}", if got_out { "GOT OUT WITH" } else { "LOST" }, self.value);
-        let left = screen.min.x + 120.0 * s;
-        let mut y = screen.min.y + screen.height() * 0.66;
-        let colour = if got_out { SIGNAL_GREEN } else { style::SIGNAL };
-        ui.text_at(&heading, &title, Vec2::new(left, y), screen.width(), Color::rgba(colour.r, colour.g, colour.b, shown));
-        y += f64::from(title.line_height()) + 12.0 * s;
-        if self.loot.is_empty() {
-            let line = TextStyle::new((28.0 * s) as f32).family(style::FONT);
-            ui.text_at("Nothing.", &line, Vec2::new(left, y), screen.width(), Color::rgba(style::DIM.r, style::DIM.g, style::DIM.b, shown));
-            return;
-        }
-        let tile = 64.0 * s;
-        let per_row = 8;
-        let count = TextStyle::new((20.0 * s) as f32).bold().family(style::FONT);
-        for (i, stack) in self.loot.iter().enumerate() {
-            let at = Vec2::new(left + (i % per_row) as f64 * (tile + 8.0 * s), y + (i / per_row) as f64 * (tile + 8.0 * s));
-            let r = Rect::from_min_size(at, Vec2::splat(tile));
-            let c = stack.kind.def().rarity.colour();
-            ui.draw.rect(r, Color::rgba(c.r * 0.35, c.g * 0.35, c.b * 0.35, 0.85 * shown));
-            ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(c.r, c.g, c.b, shown));
-            if let Some(&(flat, _)) = icons.0.get(&stack.kind) {
-                // A long thing fitted into a square, keeping its shape.
-                let aspect = f64::from(flat.width) / f64::from(flat.height.max(1));
-                let inner = r.shrink(5.0 * s);
-                let size = if aspect >= 1.0 { Vec2::new(inner.width(), inner.width() / aspect) } else { Vec2::new(inner.height() * aspect, inner.height()) };
-                ui.draw.image(Rect::from_center_size(inner.center(), size), flat, 0.0, Color::rgba(1.0, 1.0, 1.0, shown));
-            }
-            if stack.count > 1 {
-                let n = stack.count.to_string();
-                let w = ui.measure(&n, &count);
-                ui.text_at(&n, &count, Vec2::new(r.max.x - w - 5.0 * s, r.max.y - f64::from(count.line_height()) - 2.0 * s), w + 4.0, Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, shown));
-            }
+        let at = Vec2::new(screen.min.x + 120.0 * s, screen.min.y + screen.height() * 0.58);
+        let y = row(ui, &heading, if got_out { SIGNAL_GREEN } else { style::SIGNAL }, &self.loot, at, shown, icons);
+        if !self.kept.is_empty() {
+            let worth: u32 = self.kept.iter().map(|s| s.value()).sum();
+            row(ui, &format!("KEPT · POCKETS  ${worth}"), SIGNAL_GREEN, &self.kept, Vec2::new(at.x, y + 24.0 * s), shown, icons);
         }
     }
+}
+
+/// A heading and under it each of `stacks`' picture and how many, from
+/// `at`; where it ends, down the screen.
+fn row(ui: &mut Ui, heading: &str, colour: Color, stacks: &[Stack], at: Vec2, shown: f64, icons: &Icons) -> f64 {
+    let s = ui.m.scale;
+    let title = TextStyle::new((35.0 * s) as f32).bold().family(style::FONT);
+    let (left, mut y) = (at.x, at.y);
+    ui.text_at(heading, &title, Vec2::new(left, y), ui.clip().width(), Color::rgba(colour.r, colour.g, colour.b, shown));
+    y += f64::from(title.line_height()) + 12.0 * s;
+    if stacks.is_empty() {
+        let line = TextStyle::new((28.0 * s) as f32).family(style::FONT);
+        ui.text_at("Nothing.", &line, Vec2::new(left, y), ui.clip().width(), Color::rgba(style::DIM.r, style::DIM.g, style::DIM.b, shown));
+        return y + f64::from(line.line_height());
+    }
+    let tile = 64.0 * s;
+    let per_row = 10;
+    let count = TextStyle::new((20.0 * s) as f32).bold().family(style::FONT);
+    for (i, stack) in stacks.iter().enumerate() {
+        let at = Vec2::new(left + (i % per_row) as f64 * (tile + 8.0 * s), y + (i / per_row) as f64 * (tile + 8.0 * s));
+        let r = Rect::from_min_size(at, Vec2::splat(tile));
+        let c = stack.kind.def().rarity.colour();
+        ui.draw.rect(r, Color::rgba(c.r * 0.35, c.g * 0.35, c.b * 0.35, 0.85 * shown));
+        ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(c.r, c.g, c.b, shown));
+        if let Some(&(flat, _)) = icons.0.get(&stack.kind) {
+            // A long thing fitted into a square, keeping its shape.
+            let aspect = f64::from(flat.width) / f64::from(flat.height.max(1));
+            let inner = r.shrink(5.0 * s);
+            let size = if aspect >= 1.0 { Vec2::new(inner.width(), inner.width() / aspect) } else { Vec2::new(inner.height() * aspect, inner.height()) };
+            ui.draw.image(Rect::from_center_size(inner.center(), size), flat, 0.0, Color::rgba(1.0, 1.0, 1.0, shown));
+        }
+        if stack.count > 1 {
+            let n = stack.count.to_string();
+            let w = ui.measure(&n, &count);
+            ui.text_at(&n, &count, Vec2::new(r.max.x - w - 5.0 * s, r.max.y - f64::from(count.line_height()) - 2.0 * s), w + 4.0, Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, shown));
+        }
+    }
+    y + stacks.len().div_ceil(per_row) as f64 * (tile + 8.0 * s)
 }
 
 #[cfg(test)]
@@ -274,5 +296,25 @@ mod tests {
         e.fall(&mut cam);
         assert!((cam.position.y - 1.7).abs() < 1e-9 && cam.roll == 0.0, "the extracted don't fall");
         assert_eq!((e.loot.len(), e.value), (1, bag.value()), "the pocket's rounds");
+    }
+
+    #[test]
+    fn dead_the_pockets_are_kept_not_lost() {
+        use crate::loot::bag::Slot;
+        use crate::loot::{Kind, Stack};
+        let mut bag = Bag::with_rounds();
+        bag.pack.place(Stack::new(Kind::Rounds, 24));
+        bag.pack.place(Stack::one(Kind::Watch));
+        *bag.slot_mut(Slot::Sidearm) = Some(Stack::gun(Kind::Pistol, 5));
+        let e = Ending::new(Outcome::Died(1.0), Stats::default(), &bag, Earned::default(), 0);
+        // The pocket's 24 rounds are kept; the pack's 24 (just the same) and
+        // the rest are lost.
+        assert_eq!(e.kept, vec![Stack::new(Kind::Rounds, 24)]);
+        assert_eq!(e.loot.len(), 3, "{:?}", e.loot);
+        assert!(e.loot.contains(&Stack::new(Kind::Rounds, 24)) && e.loot.contains(&Stack::gun(Kind::Pistol, 5)));
+        assert_eq!(e.value, bag.value() - Stack::new(Kind::Rounds, 24).value());
+        // Got out: it all came, nothing set apart.
+        let e = Ending::new(Outcome::Extracted(Way::Radio), Stats::default(), &bag, Earned::default(), 0);
+        assert_eq!((e.loot.len(), e.kept.len(), e.value), (4, 0, bag.value()));
     }
 }

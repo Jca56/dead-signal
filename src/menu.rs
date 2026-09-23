@@ -1,6 +1,7 @@
 //! A menu down the left of the screen, over the scene: a heading, a red
-//! rule, and the items. The title screen and the pause screen are both
-//! one. Mouse or keys (W/S, arrows, Enter) both work.
+//! rule, a word of warning if there is one, and the items. The title
+//! screen and the pause screen are both one. Mouse or keys (W/S, arrows,
+//! Enter) both work.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -12,12 +13,19 @@ use crate::style;
 pub struct SideMenu<T: Copy + 'static> {
     heading: &'static str,
     items: &'static [(&'static str, T)],
+    /// Lines under the rule, in red.
+    warning: &'static [&'static str],
     selected: usize,
 }
 
 impl<T: Copy + 'static> SideMenu<T> {
     pub const fn new(heading: &'static str, items: &'static [(&'static str, T)]) -> Self {
-        Self { heading, items, selected: 0 }
+        Self { heading, items, warning: &[], selected: 0 }
+    }
+
+    /// The same, with `lines` of warning over the items.
+    pub const fn warning(self, lines: &'static [&'static str]) -> Self {
+        Self { warning: lines, ..self }
     }
 
     /// Put the highlight back on the first item.
@@ -40,6 +48,14 @@ impl<T: Copy + 'static> SideMenu<T> {
         y += title_h + 10.0 * s;
         ui.draw.rect(Rect::from_min_size(Vec2::new(left + 5.0 * s, y), Vec2::new(200.0 * s, 5.0 * s)), style::SIGNAL);
         y += 60.0 * s;
+        let warning = TextStyle::new((36.0 * s) as f32).bold().family(style::FONT);
+        for line in self.warning {
+            ui.text_at(line, &warning, Vec2::new(left, y), screen.width(), style::SIGNAL);
+            y += f64::from(warning.line_height()) + 6.0 * s;
+        }
+        if !self.warning.is_empty() {
+            y += 40.0 * s;
+        }
 
         let item = TextStyle::new((50.0 * s) as f32).bold().family(style::FONT);
         let item_h = f64::from(item.line_height());
