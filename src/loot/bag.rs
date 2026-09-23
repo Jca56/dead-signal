@@ -26,7 +26,12 @@ impl Default for Bag {
 impl Bag {
     /// Nothing in it at all.
     pub fn empty() -> Self {
-        Self { pack: Grid::new(PACK.0, PACK.1), pockets: Grid::new(POCKETS.0, POCKETS.1) }
+        Self::sized(PACK, POCKETS)
+    }
+
+    /// Nothing in it, with a pack and pockets of these sizes.
+    pub fn sized(pack: (u8, u8), pockets: (u8, u8)) -> Self {
+        Self { pack: Grid::new(pack.0, pack.1), pockets: Grid::new(pockets.0, pockets.1) }
     }
 
     /// A couple of magazines' worth in a pocket (for tests).

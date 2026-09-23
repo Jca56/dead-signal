@@ -37,6 +37,17 @@ const BLOW_SHOVE: f64 = 7.0;
 const SPAWN_NEAR: f64 = 35.0;
 const SPAWN_FAR: f64 = 60.0;
 
+/// How far the dead see the player: a share of how far they see (the
+/// player's light feet).
+#[derive(Resource)]
+pub struct Stealth(pub f64);
+
+impl Default for Stealth {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 /// Where the dead can walk; built once the world is loaded.
 #[derive(Resource, Default)]
 pub struct Nav(pub Option<NavGrid>);
@@ -60,11 +71,12 @@ pub struct Horde {
     seed: u32,
 }
 
-fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
+#[allow(clippy::too_many_arguments)]
+fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, stealth: Option<Res<Stealth>>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
     let player = players.iter().next().map(|b| b.pos);
     let heard = std::mem::take(&mut *noises);
     let searches = std::cell::Cell::new(SEARCHES);
-    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &heard.shots, alerts: &heard.snarls, searches: &searches };
+    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &heard.shots, alerts: &heard.snarls, searches: &searches, sight: stealth.map_or(1.0, |s| s.0) };
     for (mut z, mut body) in &mut dead {
         let mut intent = z.think(&body, &senses, STEP);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
@@ -235,8 +247,10 @@ pub fn raycast(world: &mut World, from: Vec3, dir: Vec3, max: f64) -> Option<(En
     best
 }
 
-/// Hurt the Shambler `e` with a hit along `dir` from `from`. Whether it died.
-pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, head: bool, blow: bool) -> bool {
+/// Hurt the Shambler `e` with a hit along `dir` from `from` (a blow's shove
+/// `shove` times the usual). Whether it died.
+#[allow(clippy::too_many_arguments)]
+pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, head: bool, blow: bool, shove: f64) -> bool {
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
     let killed = z.hurt(damage, head, blow, from);
     let mut sounds = Vec::new();
@@ -245,7 +259,7 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, damage: f64, he
     }
     // (Shot from straight above, it isn't shoved at all.)
     let flat = Vec3::new(dir.x, 0.0, dir.z);
-    let push = if flat.length() > 1e-6 { flat.normalize() * if blow { BLOW_SHOVE } else { SHOT_SHOVE } } else { Vec3::ZERO };
+    let push = if flat.length() > 1e-6 { flat.normalize() * if blow { BLOW_SHOVE * shove } else { SHOT_SHOVE } } else { Vec3::ZERO };
     let at = world.get_mut::<Body>(e).map(|mut body| {
         body.push += push;
         body.pos

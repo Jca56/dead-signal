@@ -143,18 +143,19 @@ impl BagUi {
     /// The grids' places on screen: which, and its rect. In a run the bag
     /// on the left, what's searched on the right; in the hideout the stash
     /// on the left, the bag on the right.
-    fn layout(&self, ui: &Ui, loot: Option<(u8, u8)>) -> Vec<(Which, Rect)> {
+    fn layout(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>) -> Vec<(Which, Rect)> {
         let s = ui.m.scale;
         let screen = ui.clip();
         let (cell, gap, title) = (self.cell() * s, GAP * s, TITLE * s * 1.6);
-        let pack_w = f64::from(crate::loot::bag::PACK.0) * cell;
+        let (pack_dims, pocket_dims) = ((bag.pack.w, bag.pack.h), (bag.pockets.w, bag.pockets.h));
+        let pack_w = f64::from(pack_dims.0) * cell;
         let loot_w = loot.map_or(0.0, |(w, _)| gap + f64::from(w) * cell);
         let left = screen.center().x - (pack_w + loot_w) * 0.5;
-        let top = screen.min.y + screen.height() * if self.hideout { 0.14 } else { 0.17 } + title;
+        let top = screen.min.y + screen.height() * 0.17 + title;
         let size = |(w, h): (u8, u8)| Vec2::new(f64::from(w) * cell, f64::from(h) * cell);
         let bag_x = if self.hideout { left + loot_w } else { left };
-        let pack = Rect::from_min_size(Vec2::new(bag_x, top), size(crate::loot::bag::PACK));
-        let pockets = Rect::from_min_size(Vec2::new(bag_x, pack.max.y + title + gap * 0.5), size(crate::loot::bag::POCKETS));
+        let pack = Rect::from_min_size(Vec2::new(bag_x, top), size(pack_dims));
+        let pockets = Rect::from_min_size(Vec2::new(bag_x, pack.max.y + title + gap * 0.5), size(pocket_dims));
         let mut out = vec![(Which::Pack, pack), (Which::Pockets, pockets)];
         if let Some(dims) = loot {
             let x = if self.hideout { left } else { pack.max.x + gap };
@@ -178,7 +179,7 @@ impl BagUi {
         let s = ui.m.scale;
         let cell = self.cell() * s;
         let mut moved = Moved::default();
-        let places = self.layout(ui, shelves.loot.as_ref().map(|(_, g)| (g.w, g.h)));
+        let places = self.layout(ui, shelves.bag, shelves.loot.as_ref().map(|(_, g)| (g.w, g.h)));
         let p = ui.state.pointer;
         let under_item = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| {
             let (cx, cy) = cell_under(r, p, cell);

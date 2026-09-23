@@ -51,7 +51,7 @@ impl Way {
 /// -Z is in front of it, +Z behind), and how wide the zone is.
 type Spot = (Way, (f64, f64, f64, f64), Vec3, f64);
 const SPOTS: [Spot; 3] = [
-    (Way::Radio, (7.6, -44.2, std::f64::consts::FRAC_PI_2, 3.0), Vec3::new(0.0, 0.0, -2.0), 8.0),
+    (Way::Radio, (7.6, -44.2, std::f64::consts::FRAC_PI_2, 3.0), Vec3::new(1.0, 0.0, -4.0), 11.0),
     (Way::Road, (-6.0, 61.0, -0.2, 6.0), Vec3::new(0.0, 0.0, 7.0), 3.5),
     (Way::Truck, (48.0, 35.0, 0.1, 3.0), Vec3::new(0.0, 0.0, 0.0), 0.0),
 ];

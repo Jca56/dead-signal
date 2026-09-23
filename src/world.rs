@@ -123,6 +123,7 @@ impl Game {
         world.insert_resource(Blend::default());
         world.insert_resource(zombie::Nav::default());
         world.insert_resource(zombie::Noises::default());
+        world.insert_resource(zombie::Stealth::default());
         world.insert_resource(zombie::Horde::default());
         let mut frame = Schedule::default();
         let mut fixed = Schedule::default();

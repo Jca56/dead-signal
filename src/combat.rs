@@ -40,6 +40,8 @@ pub struct Combat {
     seed: u32,
     /// How red the edges of the screen are from a blow, 0–1, fading.
     pub hurt: f64,
+    /// Melee damage and shove, a multiple of the usual (brawler).
+    pub melee: f64,
     /// Luck for what the dead drop: its own, so it owes nothing to the
     /// spread of shots.
     loot: Dice,
@@ -59,7 +61,7 @@ struct Aim {
 
 impl Combat {
     pub fn new() -> Self {
-        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0, loot: Dice::default() }
+        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0, melee: 1.0, loot: Dice::default() }
     }
 
     pub fn init(&mut self, renderer: &mut Renderer) {
@@ -167,7 +169,7 @@ impl Combat {
                     for turn in [0.0f64, -8.0, 8.0] {
                         let t = turn.to_radians();
                         let dir = (aim.dir * t.cos() + aim.right * t.sin()).normalize();
-                        if self.strike(game, &aim, dir, BLOW_RANGE, BLOW_DAMAGE, true, stats) {
+                        if self.strike(game, &aim, dir, BLOW_RANGE, BLOW_DAMAGE * self.melee, true, stats) {
                             break;
                         }
                     }
@@ -199,7 +201,7 @@ impl Combat {
             && let Some((e, t, head)) = dead
         {
             let point = aim.eye + dir * t;
-            let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, damage, head, blow);
+            let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, damage, head, blow, self.melee);
             stats.damage_dealt += zombie::brain::dealt(damage, head, blow);
             if !blow {
                 stats.hits += 1;

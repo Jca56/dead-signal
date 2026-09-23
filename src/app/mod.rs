@@ -179,7 +179,7 @@ impl DeadSignal {
                 let mut committed = self.profile.clone();
                 committed.loadout.pockets = loadout.pockets.clone();
                 save::store(&committed);
-                self.run.start(&mut self.game, loadout, self.profile.xp);
+                self.run.start(&mut self.game, &mut self.combat, loadout, self.profile.xp, self.profile.perks);
                 self.in_run = true;
                 cx.request(ShellRequest::LockPointer(true));
             }

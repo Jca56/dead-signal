@@ -16,6 +16,7 @@ use crate::exits::{self, Way};
 use crate::hud::{self, Hud};
 use crate::loot::{Dice, Kind};
 use crate::loot::bag::Bag;
+use crate::profile::perks::Perks;
 use crate::sound::Sfx;
 use crate::stats::Stats;
 use crate::vitals::{Kit, LOW_HP, Vitals};
@@ -56,6 +57,8 @@ pub struct Run {
     /// (for the profile to settle, once).
     xp_before: u32,
     result: Option<(bool, u32)>,
+    /// The perks the player came in with.
+    perks: Perks,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,10 +69,16 @@ struct Open {
 impl Run {
     /// A fresh run: whole, nothing counted, things lying in their spots and
     /// in their containers, the first of the dead already out there.
-    pub fn start(&mut self, game: &mut Game, loadout: Bag, xp_before: u32) {
+    pub fn start(&mut self, game: &mut Game, combat: &mut Combat, loadout: Bag, xp_before: u32, perks: Perks) {
         *self = Self::default();
         self.bag = loadout;
         self.xp_before = xp_before;
+        // What the perks make of the player.
+        self.perks = perks;
+        self.vitals = Vitals::with(&perks);
+        combat.pistol.reload_speed = perks.reload_speed();
+        combat.melee = perks.melee();
+        game.world.insert_resource(crate::zombie::Stealth(perks.seen_from()));
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
         crate::items::scatter(&mut game.world, seed);
         crate::containers::fill(&mut game.world, seed.rotate_left(13));
@@ -266,7 +275,9 @@ impl Run {
                 marker: combat.fx.marker,
                 hurt: combat.hurt,
                 hp: v.hp,
+                max_hp: v.max_hp,
                 stamina: v.stamina,
+                max_stamina: v.max_stamina,
                 winded: v.winded,
                 bandages: self.bag.count(Kind::Bandage),
                 medkits: self.bag.count(Kind::Medkit),

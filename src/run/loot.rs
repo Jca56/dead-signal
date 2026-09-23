@@ -173,13 +173,13 @@ impl Run {
         }
         let mut s = match self.search {
             Some(s) if s.target == e => s,
-            _ => Search { target: e, t: 0.0, of: source.search_time(), rummage: 0.0 },
+            _ => Search { target: e, t: 0.0, of: source.search_time() / self.perks.search_speed(), rummage: 0.0 },
         };
         s.t += dt;
         s.rummage -= dt;
         if s.rummage <= 0.0 {
             combat.play(Sfx::Rummage, 0.6);
-            zombie::noise(&mut game.world, middle, RUMMAGE_HEARD);
+            zombie::noise(&mut game.world, middle, RUMMAGE_HEARD * self.perks.search_heard());
             s.rummage = RUMMAGE_EVERY;
         }
         if s.t < s.of {

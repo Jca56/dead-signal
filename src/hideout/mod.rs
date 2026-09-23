@@ -1,7 +1,10 @@
-//! The hideout, between runs: the stash on the left, the bag to take into
-//! the next run on the right, things dragged (or right-clicked) between
-//! them; the player's level over it all; and the way on (back to the
-//! title, or straight into a run with what's packed).
+//! The hideout, between runs, in two tabs: the stash on the left and the
+//! bag to take into the next run on the right, things dragged (or
+//! right-clicked) between them; and the perks (`perks.rs`). The player's
+//! level over it all, and the way on (back to the title, or straight into
+//! a run with what's packed).
+
+mod perks;
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -18,13 +21,22 @@ pub enum Leave {
     Play,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Tab {
+    Stash,
+    Perks,
+}
+
 pub struct Hideout {
     grids: BagUi,
+    tab: Tab,
+    /// A word flashed at the top ("MAKE ROOM IN THE STASH"), and till when.
+    note: Option<(&'static str, f64)>,
 }
 
 impl Default for Hideout {
     fn default() -> Self {
-        Self { grids: BagUi::hideout() }
+        Self { grids: BagUi::hideout(), tab: Tab::Stash, note: None }
     }
 }
 
@@ -54,10 +66,47 @@ impl Hideout {
         let sw = ui.measure(&stash_worth, &st);
         ui.text_at(&stash_worth, &st, Vec2::new(screen.max.x - 80.0 * s - sw, top + 16.0 * s), sw + 4.0, style::DIM);
 
+        // The tabs.
+        let tab_style = TextStyle::new((34.0 * s) as f32).bold().family(style::FONT);
+        let mut tx = left;
+        let tab_y = screen.min.y + screen.height() * 0.105;
+        let points = profile.points_left();
+        for (tab, label) in [(Tab::Stash, "STASH".to_string()), (Tab::Perks, if points > 0 { format!("PERKS ({points})") } else { "PERKS".to_string() })] {
+            let w = ui.measure(&label, &tab_style) + 50.0 * s;
+            let r = Rect::from_min_size(Vec2::new(tx, tab_y), Vec2::new(w, f64::from(tab_style.line_height()) + 18.0 * s));
+            let hit = ui.interact(ui.id(if tab == Tab::Stash { "tab stash" } else { "tab perks" }), r, Sense::CLICK);
+            let on = self.tab == tab;
+            ui.draw.rect(r, if on { Color::rgba(1.0, 1.0, 1.0, 0.14) } else if active && hit.hovered { Color::rgba(1.0, 1.0, 1.0, 0.08) } else { Color::rgba(0.0, 0.0, 0.0, 0.3) });
+            if on {
+                ui.draw.rect(Rect::from_min_size(Vec2::new(r.min.x, r.max.y - 4.0 * s), Vec2::new(r.width(), 4.0 * s)), style::SIGNAL);
+            }
+            ui.text_at(&label, &tab_style, Vec2::new(r.min.x + 25.0 * s, r.min.y + 9.0 * s), w, if on { style::BONE } else { style::DIM });
+            if active && hit.clicked && !on {
+                self.grids.let_go(&mut Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) });
+                self.tab = tab;
+            }
+            tx += w + 16.0 * s;
+        }
+        if let Some((note, until)) = self.note {
+            if ui.now() < until {
+                let nw = ui.measure(note, &tab_style);
+                ui.text_at(note, &tab_style, Vec2::new(screen.max.x - 80.0 * s - nw, tab_y + 9.0 * s), nw + 4.0, style::SIGNAL);
+            } else {
+                self.note = None;
+            }
+        }
+
         let mut leave = None;
-        {
-            let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) };
-            self.grids.frame(ui, &mut shelves, icons);
+        match self.tab {
+            Tab::Stash => {
+                let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) };
+                self.grids.frame(ui, &mut shelves, icons);
+            }
+            Tab::Perks => {
+                if let Some(note) = perks::page(ui, profile, active) {
+                    self.note = Some((note, ui.now() + 2.5));
+                }
+            }
         }
         // The way on: two big buttons, bottom right.
         let item = TextStyle::new((50.0 * s) as f32).bold().family(style::FONT);

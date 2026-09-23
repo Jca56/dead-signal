@@ -72,11 +72,13 @@ pub struct Pistol {
     t: f64,
     /// Until it may fire again.
     gap: f64,
+    /// How fast a reload goes, a multiple of the usual (quick hands).
+    pub reload_speed: f64,
 }
 
 impl Default for Pistol {
     fn default() -> Self {
-        Self { mag: MAG, spare: START_SPARE, clip: Clip::Idle, t: 0.0, gap: 0.0 }
+        Self { mag: MAG, spare: START_SPARE, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0 }
     }
 }
 
@@ -105,7 +107,8 @@ impl Pistol {
     pub fn update(&mut self, input: Trigger, dt: f64) -> Vec<Act> {
         let mut acts = Vec::new();
         let before = self.t;
-        self.t += dt;
+        // A reload runs quicker in quick hands (the animation with it).
+        self.t += if self.clip == Clip::Reload { dt * self.reload_speed } else { dt };
         self.gap = (self.gap - dt).max(0.0);
         let crossed = |at: f64| before < at && self.t >= at;
         match self.clip {
@@ -193,6 +196,20 @@ mod tests {
         assert_eq!(acts, vec![Act::DryFire, Act::MagOut, Act::MagIn, Act::SlideRack]);
         assert_eq!((p.mag, p.spare), (MAG, START_SPARE - MAG));
         assert_eq!(p.clip().0, Clip::Idle);
+    }
+
+    #[test]
+    fn quick_hands_reload_sooner() {
+        let frames = |speed: f64| {
+            let mut p = Pistol { mag: 0, reload_speed: speed, ..Pistol::default() };
+            p.update(Trigger { reload: true, ..Default::default() }, DT);
+            (1..).find(|_| {
+                p.update(Trigger::default(), DT);
+                p.clip().0 == Clip::Idle
+            })
+        };
+        let (usual, quick) = (frames(1.0).unwrap(), frames(1.6).unwrap());
+        assert!(f64::from(quick) < f64::from(usual) * 0.66, "{quick} frames against {usual}");
     }
 
     #[test]

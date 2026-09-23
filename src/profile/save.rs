@@ -9,7 +9,8 @@ use lntrn_core::{log_error, log_info};
 use lntrn_data::{Doc, Map};
 
 use super::{Profile, STASH};
-use crate::loot::bag::{Bag, PACK, POCKETS};
+use super::perks::Perks;
+use crate::loot::bag::Bag;
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
 
@@ -61,6 +62,11 @@ pub fn to_text(p: &Profile) -> String {
     d.set("xp", i64::from(p.xp).into());
     d.set("runs", i64::from(p.runs).into());
     d.set("extractions", i64::from(p.extractions).into());
+    let mut perks = Doc::map();
+    for perk in super::perks::ALL {
+        perks.set(perk.key(), i64::from(p.perks.rank(perk)).into());
+    }
+    d.set("perks", perks);
     d.set("stash", grid_to_doc(&p.stash));
     d.set("pack", grid_to_doc(&p.loadout.pack));
     d.set("pockets", grid_to_doc(&p.loadout.pockets));
@@ -74,9 +80,16 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
         return Err(format!("save version {version} is newer than this game's {VERSION}"));
     }
     let num = |k: &str| d.get(k).and_then(Doc::as_i64).unwrap_or(0).clamp(0, i64::from(u32::MAX)) as u32;
+    // The perks first: they say how big the bag is.
+    let mut perks = Perks::default();
+    for perk in super::perks::ALL {
+        let rank = d.get("perks").and_then(|m| m.get(perk.key())).and_then(Doc::as_i64).unwrap_or(0);
+        perks.set(perk, rank.clamp(0, i64::from(super::perks::RANKS)) as u8);
+    }
     Ok(Profile {
         stash: grid_from_doc(d.get("stash"), STASH),
-        loadout: Bag { pack: grid_from_doc(d.get("pack"), PACK), pockets: grid_from_doc(d.get("pockets"), POCKETS) },
+        loadout: Bag { pack: grid_from_doc(d.get("pack"), perks.pack()), pockets: grid_from_doc(d.get("pockets"), perks.pockets()) },
+        perks,
         xp: num("xp"),
         runs: num("runs"),
         extractions: num("extractions"),
@@ -131,10 +144,12 @@ mod tests {
         p.xp = 1234;
         p.runs = 7;
         p.extractions = 3;
+        p.perks.set(super::super::perks::Perk::DeepPockets, 2);
+        p.loadout = Bag::sized(p.perks.pack(), p.perks.pockets());
         p.stash.put(Stack::one(Kind::Battery), 6, 6, false);
         p.stash.put(Stack::one(Kind::Medkit), 9, 0, true);
         p.loadout.pack.put(Stack::new(Kind::Cash, 4), 1, 2, false);
-        p.loadout.pockets.put(Stack::new(Kind::Rounds, 17), 1, 1, false);
+        p.loadout.pockets.put(Stack::new(Kind::Rounds, 17), 2, 2, false);
         let text = to_text(&p);
         assert_eq!(from_text(&text).unwrap(), p, "{text}");
     }

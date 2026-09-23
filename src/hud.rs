@@ -9,7 +9,7 @@ use lntrn_ui::Ui;
 
 use crate::fx::Marker;
 use crate::style;
-use crate::vitals::{LOW_HP, MAX_HP, MAX_STAMINA};
+use crate::vitals::LOW_HP;
 
 /// Everything the HUD shows.
 pub struct Hud<'a> {
@@ -19,7 +19,9 @@ pub struct Hud<'a> {
     /// A blow's red at the edges, 0–1.
     pub hurt: f64,
     pub hp: f64,
+    pub max_hp: f64,
     pub stamina: f64,
+    pub max_stamina: f64,
     pub winded: bool,
     pub bandages: u32,
     pub medkits: u32,
@@ -94,16 +96,16 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     let health = Rect::from_min_size(Vec2::new(left, health_top), Vec2::new(width, health_h));
     ui.draw.rect(health, TROUGH);
     let fill = if low { mix(HEALTH, HEALTH_LOW, pulse) } else { HEALTH };
-    ui.draw.rect(Rect::from_min_size(health.min, Vec2::new(width * (h.hp / MAX_HP).clamp(0.0, 1.0), health_h)), fill);
+    ui.draw.rect(Rect::from_min_size(health.min, Vec2::new(width * (h.hp / h.max_hp).clamp(0.0, 1.0), health_h)), fill);
     ui.draw.stroke_rect(health, 2.0 * s, 0.0, Color::rgba(0.0, 0.0, 0.0, 0.8));
     let numbers = TextStyle::new((30.0 * s) as f32).bold().family(style::FONT);
-    let text = format!("{:.0} / {:.0}", h.hp.ceil(), MAX_HP);
+    let text = format!("{:.0} / {:.0}", h.hp.ceil(), h.max_hp);
     let tw = ui.measure(&text, &numbers);
     let th = f64::from(numbers.line_height());
     ui.text_at(&text, &numbers, Vec2::new(left + (width - tw) * 0.5, health_top + (health_h - th) * 0.5), width, style::BONE);
     let stamina = Rect::from_min_size(Vec2::new(left, stamina_top), Vec2::new(width, stamina_h));
     ui.draw.rect(stamina, TROUGH);
-    ui.draw.rect(Rect::from_min_size(stamina.min, Vec2::new(width * (h.stamina / MAX_STAMINA).clamp(0.0, 1.0), stamina_h)), if h.winded { WINDED } else { STAMINA });
+    ui.draw.rect(Rect::from_min_size(stamina.min, Vec2::new(width * (h.stamina / h.max_stamina).clamp(0.0, 1.0), stamina_h)), if h.winded { WINDED } else { STAMINA });
 
     // Rounds left, and the spare ones (both red once gone).
     let big = TextStyle::new((60.0 * s) as f32).bold().family(style::FONT);

@@ -106,6 +106,9 @@ pub struct Senses<'a> {
     /// a horde whose quarry moves all want to at once, and the searches
     /// are spread over a few steps instead.
     pub searches: &'a std::cell::Cell<u32>,
+    /// How far it sees, a share of [`SIGHT`] (the player can be hard to
+    /// spot).
+    pub sight: f64,
 }
 
 /// What it wants done this step.
@@ -214,11 +217,12 @@ impl Zombie {
         false
     }
 
-    /// Whether it sees a player standing at `player`.
-    fn sees(&self, body: &Body, player: Vec3, solids: &Solids) -> bool {
+    /// Whether it sees a player standing at `player`, as far as `reach`
+    /// of its sight.
+    fn sees(&self, body: &Body, player: Vec3, solids: &Solids, reach: f64) -> bool {
         let to = Vec2::new(player.x - body.pos.x, player.z - body.pos.z);
         let d = to.length();
-        if d > SIGHT {
+        if d > SIGHT * reach {
             return false;
         }
         if d > CLOSE {
@@ -252,7 +256,7 @@ impl Zombie {
         self.look_in -= dt;
         if self.look_in <= 0.0 {
             self.look_in += LOOK_EVERY;
-            self.in_sight = s.player.is_some_and(|p| self.sees(body, p, s.solids));
+            self.in_sight = s.player.is_some_and(|p| self.sees(body, p, s.solids, s.sight));
         }
         let seen = s.player.filter(|_| self.in_sight);
         if let Some(p) = seen {

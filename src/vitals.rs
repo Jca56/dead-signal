@@ -2,16 +2,17 @@
 //! comes back (but only so far), stamina that sprinting spends, and the
 //! bandages and medkits carried to heal the rest, each taking a while to
 //! apply (kept if the patching is interrupted; the caller takes it out
-//! of the pack once it's done).
+//! of the pack once it's done). How much of each there can be, and how
+//! quick the kits are, is down to the player's perks.
 
-pub const MAX_HP: f64 = 100.0;
-/// Regen: after this long unhurt, this much a second, never past the cap.
+use crate::profile::perks::Perks;
+
+/// Regen: after this long unhurt, this much a second, never past half of
+/// the most there can be.
 const REGEN_DELAY: f64 = 8.0;
 const REGEN_RATE: f64 = 1.0;
-pub const REGEN_CAP: f64 = 50.0;
 /// Below this it's low: the edges pulse, the heart beats.
 pub const LOW_HP: f64 = 25.0;
-pub const MAX_STAMINA: f64 = 100.0;
 /// Stamina: spent a second sprinting, back a second resting (after a
 /// breath), and how much it must come back to once run dry.
 const SPRINT_COST: f64 = 20.0;
@@ -70,15 +71,43 @@ pub struct Vitals {
     since_sprint: f64,
     /// A kit being applied, and for how long so far.
     pub healing: Option<(Kit, f64)>,
+    /// The most health and stamina there can be; how fast stamina comes
+    /// back (a share of the usual); how long kits take and how much they
+    /// heal (shares of the usual).
+    pub max_hp: f64,
+    pub max_stamina: f64,
+    recover: f64,
+    kit_time: f64,
+    kit_heals: f64,
 }
 
 impl Default for Vitals {
     fn default() -> Self {
-        Self { hp: MAX_HP, stamina: MAX_STAMINA, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None }
+        Self::with(&Perks::default())
     }
 }
 
 impl Vitals {
+    /// Whole, as `perks` make the player.
+    pub fn with(perks: &Perks) -> Self {
+        let (max_hp, lungs) = (perks.max_hp(), perks.lungs());
+        let max_stamina = 100.0 * lungs;
+        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), kit_heals: perks.kit_heals() }
+    }
+
+    fn regen_cap(&self) -> f64 {
+        self.max_hp * 0.5
+    }
+
+    /// How long `kit` takes, and heals, for this player.
+    fn takes(&self, kit: Kit) -> f64 {
+        kit.takes() * self.kit_time
+    }
+
+    fn heals(&self, kit: Kit) -> f64 {
+        kit.heals() * self.kit_heals
+    }
+
     pub fn dead(&self) -> bool {
         self.hp <= 0.0
     }
@@ -102,7 +131,7 @@ impl Vitals {
     /// Start applying `kit`, if one is `carried`, health isn't full, and
     /// nothing else is being applied. Whether it started.
     pub fn start_heal(&mut self, kit: Kit, carried: u32) -> bool {
-        if self.healing.is_some() || carried == 0 || self.hp >= MAX_HP || self.dead() {
+        if self.healing.is_some() || carried == 0 || self.hp >= self.max_hp || self.dead() {
             return false;
         }
         self.healing = Some((kit, 0.0));
@@ -116,7 +145,7 @@ impl Vitals {
 
     /// How far through applying a kit, 0–1.
     pub fn heal_progress(&self) -> Option<f64> {
-        self.healing.map(|(kit, t)| (t / kit.takes()).min(1.0))
+        self.healing.map(|(kit, t)| (t / self.takes(kit)).min(1.0))
     }
 
     /// Move on by `dt`, `sprinting` or not.
@@ -135,7 +164,7 @@ impl Vitals {
         } else {
             self.since_sprint += dt;
             if self.since_sprint >= RECOVER_DELAY {
-                self.stamina = (self.stamina + RECOVER_RATE * dt).min(MAX_STAMINA);
+                self.stamina = (self.stamina + RECOVER_RATE * self.recover * dt).min(self.max_stamina);
             }
             if self.stamina >= WINDED_UNTIL {
                 self.winded = false;
@@ -143,17 +172,18 @@ impl Vitals {
         }
         // Health comes back on its own, only so far.
         self.since_hurt += dt;
-        if self.since_hurt >= REGEN_DELAY && self.hp < REGEN_CAP {
+        let cap = self.regen_cap();
+        if self.since_hurt >= REGEN_DELAY && self.hp < cap {
             let before = self.hp;
-            self.hp = (self.hp + REGEN_RATE * dt).min(REGEN_CAP);
+            self.hp = (self.hp + REGEN_RATE * dt).min(cap);
             change.regenerated = self.hp - before;
         }
         // A kit being applied.
         if let Some((kit, t)) = self.healing {
             let t = t + dt;
-            if t >= kit.takes() {
+            if t >= self.takes(kit) {
                 let before = self.hp;
-                self.hp = (self.hp + kit.heals()).min(MAX_HP);
+                self.hp = (self.hp + self.heals(kit)).min(self.max_hp);
                 self.healing = None;
                 change.healed = Some((kit, self.hp - before));
             } else {
@@ -199,10 +229,10 @@ mod tests {
         wait(&mut v, 10.1, false);
         assert!((v.hp - 30.0).abs() < 0.1, "about a point a second: {}", v.hp);
         wait(&mut v, 60.0, false);
-        assert_eq!(v.hp, REGEN_CAP, "never past the cap");
+        assert_eq!(v.hp, 50.0, "never past the cap");
         v.hurt(1.0);
         wait(&mut v, 5.0, false);
-        assert_eq!(v.hp, REGEN_CAP - 1.0, "a blow restarts the wait");
+        assert_eq!(v.hp, 49.0, "a blow restarts the wait");
     }
 
     #[test]
@@ -217,7 +247,7 @@ mod tests {
         wait(&mut v, 1.0, false);
         assert!(v.can_sprint(), "back to sprinting once past 30: {}", v.stamina);
         wait(&mut v, 6.0, false);
-        assert_eq!(v.stamina, MAX_STAMINA, "full within about seven seconds");
+        assert_eq!(v.stamina, 100.0, "full within about seven seconds");
     }
 
     #[test]
@@ -237,7 +267,26 @@ mod tests {
         assert!(v.start_heal(Kit::Medkit, 1));
         let c = wait(&mut v, 4.1, false);
         assert_eq!(c.healed, Some((Kit::Medkit, 35.0)));
-        assert_eq!(v.hp, MAX_HP);
+        assert_eq!(v.hp, v.max_hp);
         assert!(!v.start_heal(Kit::Medkit, 1), "no use at full health");
+    }
+
+    #[test]
+    fn perks_make_a_tougher_quicker_patcher() {
+        use crate::profile::perks::Perk;
+        let mut perks = Perks::default();
+        perks.set(Perk::Tough, 2);
+        perks.set(Perk::Medic, 1);
+        perks.set(Perk::Lungs, 2);
+        let mut v = Vitals::with(&perks);
+        assert_eq!((v.hp, v.max_hp, v.max_stamina), (130.0, 130.0, 150.0));
+        v.hurt(100.0);
+        assert!(v.start_heal(Kit::Bandage, 1));
+        // A bandage takes 1.5 s now, and heals 30.
+        let c = wait(&mut v, 1.55, false);
+        assert_eq!(c.healed, Some((Kit::Bandage, 30.0)));
+        // Regen reaches half the (bigger) most.
+        wait(&mut v, 80.0, false);
+        assert_eq!(v.hp, 65.0);
     }
 }
