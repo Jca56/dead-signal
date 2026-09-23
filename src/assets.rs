@@ -95,7 +95,7 @@ pub struct Rigged<M> {
     pub skin: usize,
 }
 
-/// The arms: drawn in the viewmodel pass.
+/// A viewmodel (the arms and what they hold): drawn in the viewmodel pass.
 pub fn load_viewmodel(renderer: &mut Renderer, name: &str) -> Result<Rigged<SkinnedMeshId>, String> {
     let (vertices, gltf, skin) = load_skinned(name)?;
     Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })

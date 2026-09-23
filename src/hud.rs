@@ -1,7 +1,8 @@
 //! What's drawn over a run: a dot at the middle (the hitmarker round it, a
 //! ring filling while a kit is applied, the name of what's in reach),
-//! health and stamina bottom left, rounds (loaded and spare) and kits
-//! bottom right, and red at the edges when hurt.
+//! health and stamina bottom left, what's in hand (its rounds, loaded and
+//! spare, if it's a gun) and kits bottom right, and red at the edges when
+//! hurt.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -13,8 +14,9 @@ use crate::vitals::LOW_HP;
 
 /// Everything the HUD shows.
 pub struct Hud<'a> {
-    pub mag: u32,
-    pub spare: u32,
+    /// What's in hand, and its rounds (loaded, spare) if it's a gun.
+    pub weapon: &'a str,
+    pub rounds: Option<(u32, u32)>,
     pub marker: Option<Marker>,
     /// A blow's red at the edges, 0–1.
     pub hurt: f64,
@@ -107,26 +109,33 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     ui.draw.rect(stamina, TROUGH);
     ui.draw.rect(Rect::from_min_size(stamina.min, Vec2::new(width * (h.stamina / h.max_stamina).clamp(0.0, 1.0), stamina_h)), if h.winded { WINDED } else { STAMINA });
 
-    // Rounds left, and the spare ones (both red once gone).
+    // Rounds left, and the spare ones (both red once gone); over them,
+    // what's in hand.
     let big = TextStyle::new((60.0 * s) as f32).bold().family(style::FONT);
     let small = TextStyle::new((35.0 * s) as f32).bold().family(style::FONT);
-    let count = h.mag.to_string();
-    let spare = format!(" / {}", h.spare);
-    let spare = spare.as_str();
-    let (w_count, w_spare) = (ui.measure(&count, &big), ui.measure(spare, &small));
     let right = screen.max.x - 60.0 * s;
     let base = screen.max.y - 50.0 * s;
-    let colour = if h.mag == 0 { style::SIGNAL } else { style::BONE };
     let big_h = f64::from(big.line_height());
     let small_h = f64::from(small.line_height());
-    ui.text_at(&count, &big, Vec2::new(right - w_spare - w_count, base - big_h), screen.width(), colour);
-    ui.text_at(spare, &small, Vec2::new(right - w_spare, base - small_h - 5.0 * s), screen.width(), if h.spare == 0 { style::SIGNAL } else { style::DIM });
+    let mut top = base;
+    if let Some((mag, spare)) = h.rounds {
+        let count = mag.to_string();
+        let spare_text = format!(" / {spare}");
+        let (w_count, w_spare) = (ui.measure(&count, &big), ui.measure(&spare_text, &small));
+        let colour = if mag == 0 { style::SIGNAL } else { style::BONE };
+        ui.text_at(&count, &big, Vec2::new(right - w_spare - w_count, base - big_h), screen.width(), colour);
+        ui.text_at(&spare_text, &small, Vec2::new(right - w_spare, base - small_h - 5.0 * s), screen.width(), if spare == 0 { style::SIGNAL } else { style::DIM });
+        top -= big_h;
+    }
+    let ww = ui.measure(h.weapon, &small);
+    top -= small_h + 4.0 * s;
+    ui.text_at(h.weapon, &small, Vec2::new(right - ww, top), ww + 4.0, style::DIM);
 
-    // The kits carried, over the rounds: the key, the name, how many.
+    // The kits carried, over that: the key, the name, how many.
     let kit = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
     let kit_h = f64::from(kit.line_height());
-    let mut y = base - big_h - 20.0 * s - kit_h;
-    for (key, name, n) in [("4", "MEDKIT", h.medkits), ("3", "BANDAGE", h.bandages)] {
+    let mut y = top - 20.0 * s - kit_h;
+    for (key, name, n) in [("5", "MEDKIT", h.medkits), ("4", "BANDAGE", h.bandages)] {
         let line = format!("{name}  ×{n}");
         let lw = ui.measure(&line, &kit);
         let kw = ui.measure(key, &kit);

@@ -2,7 +2,11 @@
 //! of the head and spring back, bob in step with the stride (more at a
 //! sprint, when they also drop and tilt), lift off a jump and dip with the
 //! landing, settle when crouched, and breathe with their idle animation.
-//! All in camera space: x right, y up, -z ahead.
+//! Whatever's in them is its own viewmodel (the arms and that weapon, and
+//! its clips), dropped out of view as it's put away and raised as it's
+//! taken up. All in camera space: x right, y up, -z ahead.
+
+use std::collections::HashMap;
 
 use lntrn_math::{Mat4, Quat, Transform, Vec2, Vec3};
 
@@ -11,6 +15,7 @@ use crate::render::SkinnedMeshId;
 use crate::head::{EYE_CROUCH, EYE_STAND, View};
 use crate::player::Body;
 use crate::render::SkinnedDraw;
+use crate::weapon::Weapon;
 
 /// Seconds of turn the arms lag by, and the most they may lag, radians.
 const LAG: f64 = 0.018;
@@ -21,6 +26,9 @@ const STIFF: f64 = 150.0;
 const DAMP: f64 = 18.0;
 /// Where the arms turn about: low in the chest, just behind the eye.
 const PIVOT: Vec3 = Vec3::new(0.0, -0.25, 0.05);
+/// Put away, how far the arms drop, metres, and tip forward, radians.
+const STOW_DROP: f64 = 0.32;
+const STOW_TIP: f64 = 0.7;
 
 /// How far the arms trail the view: a spring pulled by how fast it turns.
 #[derive(Clone, Copy, Debug, Default)]
@@ -44,15 +52,16 @@ impl Sway {
 }
 
 pub struct Viewmodel {
-    rig: Rigged<SkinnedMeshId>,
+    /// Every weapon's viewmodel.
+    rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>,
     sway: Sway,
     /// Up or down in the air, metres.
     lift: f64,
 }
 
 impl Viewmodel {
-    pub fn new(rig: Rigged<SkinnedMeshId>) -> Self {
-        Self { rig, sway: Sway::default(), lift: 0.0 }
+    pub fn new(rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>) -> Self {
+        Self { rigs, sway: Sway::default(), lift: 0.0 }
     }
 
     /// Forget the last run's motion.
@@ -73,10 +82,13 @@ impl Viewmodel {
         self.lift += (lift - self.lift) * (1.0 - (-12.0 * dt).exp());
     }
 
-    /// The arms as they are drawn this frame, playing `clip` at `t`
-    /// seconds (a looping clip wraps round).
-    pub fn draw(&self, view: &View, clip: &str, t: f64, looping: bool, lowered: f64) -> SkinnedDraw {
-        let gltf = &self.rig.gltf;
+    /// The arms and `weapon` as they are drawn this frame, playing `clip`
+    /// at `t` seconds (a looping clip wraps round); none if that weapon's
+    /// viewmodel didn't load.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw(&self, view: &View, weapon: Weapon, clip: &str, t: f64, looping: bool, lowered: f64, stowed: f64) -> Option<SkinnedDraw> {
+        let rig = self.rigs.get(&weapon)?;
+        let gltf = &rig.gltf;
         let mut pose: Vec<Transform> = gltf.rest_pose();
         if let Some(anim) = gltf.animations.iter().find(|a| a.name.as_deref() == Some(clip)) {
             let length = anim.duration();
@@ -84,24 +96,27 @@ impl Viewmodel {
                 anim.sample(if looping { t.rem_euclid(length) } else { t.min(length) }, &mut pose);
             }
         }
-        let joints = gltf.skins[self.rig.skin].joint_matrices(&gltf.world_matrices(&pose));
-        SkinnedDraw { mesh: self.rig.mesh, model: self.placement(view, lowered), joints }
+        let joints = gltf.skins[rig.skin].joint_matrices(&gltf.world_matrices(&pose));
+        Some(SkinnedDraw { mesh: rig.mesh, model: self.placement(view, lowered, stowed), joints })
     }
 
     /// Where the whole rig sits in front of the eye.
-    /// `lowered` (0–1) drops the gun out of the way (patching up).
-    fn placement(&self, view: &View, lowered: f64) -> Mat4 {
+    /// `lowered` (0–1) drops the gun out of the way (patching up);
+    /// `stowed` (0–1) takes it right down out of view, tipping forward.
+    fn placement(&self, view: &View, lowered: f64, stowed: f64) -> Mat4 {
         let sway = self.sway.angle;
         let sprint = view.sprint_amount.max(lowered);
         let amount = view.bob_amount * (1.0 + 0.6 * sprint);
         let phase = view.bob_phase;
         let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0);
+        let stow = stowed.clamp(0.0, 1.0);
+        let stow = stow * stow * (3.0 - 2.0 * stow);
         let offset = Vec3::new(
-            phase.cos() * 0.012 * amount - sway.x * 0.1,
-            (phase * 2.0).sin() * 0.008 * amount + sway.y * 0.1 - 0.06 * sprint - 0.015 * crouch + self.lift + view.dip * 0.35,
+            phase.cos() * 0.012 * amount - sway.x * 0.1 + 0.04 * stow,
+            (phase * 2.0).sin() * 0.008 * amount + sway.y * 0.1 - 0.06 * sprint - 0.015 * crouch + self.lift + view.dip * 0.35 - STOW_DROP * stow,
             0.02 * sprint,
         );
-        let turn = Quat::from_rotation_y(sway.x) * Quat::from_rotation_x(sway.y - 0.3 * sprint) * Quat::from_rotation_z(phase.cos() * 0.015 * amount - sway.x * 0.3 + 0.1 * sprint);
+        let turn = Quat::from_rotation_y(sway.x) * Quat::from_rotation_x(sway.y - 0.3 * sprint - STOW_TIP * stow) * Quat::from_rotation_z(phase.cos() * 0.015 * amount - sway.x * 0.3 + 0.1 * sprint);
         Mat4::from_translation(offset + PIVOT) * Mat4::from_quat(turn) * Mat4::from_translation(-PIVOT)
     }
 }
@@ -147,44 +162,70 @@ mod model_tests {
     use lntrn_math::{Mat4, Vec3, Vec4};
     use lntrn_model::Gltf;
 
-    fn arms() -> Gltf {
-        Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/arms.glb")).expect("arms.glb")
+    use crate::weapon::Weapon;
+
+    fn viewmodel(weapon: Weapon) -> Gltf {
+        let name = weapon.spec().model;
+        Gltf::load(format!("{}/assets/models/viewmodel_{name}.glb", env!("CARGO_MANIFEST_DIR"))).unwrap_or_else(|e| panic!("{name}: {e}"))
+    }
+
+    fn length(g: &Gltf, name: &str) -> f64 {
+        g.animations.iter().find(|a| a.name.as_deref() == Some(name)).map(|a| a.duration()).unwrap_or(-1.0)
+    }
+
+    /// Where a point is on screen (x right, y up, -1 to 1), at 16:9 and
+    /// 55°; none if it's behind the eye.
+    fn on_screen(p: Vec3) -> Option<(f64, f64)> {
+        let proj = Mat4::perspective_infinite_reverse_z(55f64.to_radians(), 16.0 / 9.0, 0.01);
+        let c = proj * Vec4::from_vec3(p, 1.0);
+        (c.w > 0.0).then(|| (c.x / c.w, c.y / c.w))
     }
 
     #[test]
-    fn the_rest_pose_is_the_modelled_pose() {
-        let g = arms();
-        let skin = &g.skins[0];
-        assert_eq!(skin.joints.len(), 23, "19 for the arms, 4 for the pistol");
-        let joints = skin.joint_matrices(&g.world_matrices(&g.rest_pose()));
-        for (i, m) in joints.iter().enumerate() {
-            assert!(m.approx_eq(&Mat4::IDENTITY, 1e-4), "joint {i} moves the mesh at rest");
+    fn every_viewmodel_rests_as_modelled_with_its_clips() {
+        for weapon in Weapon::ALL {
+            let spec = weapon.spec();
+            let g = viewmodel(weapon);
+            let skin = &g.skins[0];
+            assert!(skin.joints.len() <= crate::render::MAX_JOINTS, "{}: {} bones", spec.name, skin.joints.len());
+            let joints = skin.joint_matrices(&g.world_matrices(&g.rest_pose()));
+            for (i, m) in joints.iter().enumerate() {
+                assert!(m.approx_eq(&Mat4::IDENTITY, 1e-4), "{}: joint {i} moves the mesh at rest", spec.name);
+            }
+            // Every clip the hands play is there, as long as they think.
+            assert!((length(&g, "Idle") - 3.0).abs() < 0.05, "{} idle lasts {}", spec.name, length(&g, "Idle"));
+            assert!((length(&g, "Bash") - spec.bash.time).abs() < 0.05, "{} bash lasts {}", spec.name, length(&g, "Bash"));
+            if let Some(shot) = spec.shot {
+                assert!((length(&g, "Fire") - shot.time).abs() < 0.05, "{} fire lasts {}", spec.name, length(&g, "Fire"));
+            }
+            if let Some(reload) = spec.reload {
+                assert!((length(&g, "Reload") - reload.time).abs() < 0.05, "{} reload lasts {}", spec.name, length(&g, "Reload"));
+            }
         }
-        let idle = g.animations.iter().find(|a| a.name.as_deref() == Some("Idle")).expect("an Idle loop");
-        assert!((idle.duration() - 3.0).abs() < 0.05, "idle lasts {}", idle.duration());
+        assert_eq!(viewmodel(Weapon::Fists).skins[0].joints.len(), 19, "the arms alone");
+        assert_eq!(viewmodel(Weapon::Pistol).skins[0].joints.len(), 23, "19 for the arms, 4 for the pistol");
     }
 
     #[test]
     fn both_hands_are_in_the_lower_frame() {
-        let g = arms();
-        let skin = &g.skins[0];
-        let proj = Mat4::perspective_infinite_reverse_z(55f64.to_radians(), 16.0 / 9.0, 0.01);
-        let prim = &g.meshes[g.nodes.iter().find_map(|n| n.skin.and(n.mesh)).unwrap()].primitives[0];
-        for side in [".R", ".L"] {
-            let hand = skin.joints.iter().position(|&j| g.nodes[j].name.as_deref() == Some(&format!("hand{side}"))).unwrap() as u16;
-            let mut seen = 0;
-            for (p, (j, w)) in prim.positions.iter().zip(prim.joints.iter().zip(&prim.weights)) {
-                if j[0] != hand || w[0] < 0.99 {
-                    continue;
+        for weapon in Weapon::ALL {
+            let g = viewmodel(weapon);
+            let skin = &g.skins[0];
+            let prim = &g.meshes[g.nodes.iter().find_map(|n| n.skin.and(n.mesh)).unwrap()].primitives[0];
+            for side in [".R", ".L"] {
+                let hand = skin.joints.iter().position(|&j| g.nodes[j].name.as_deref() == Some(&format!("hand{side}"))).unwrap() as u16;
+                let mut seen = 0;
+                for (p, (j, w)) in prim.positions.iter().zip(prim.joints.iter().zip(&prim.weights)) {
+                    if j[0] != hand || w[0] < 0.99 {
+                        continue;
+                    }
+                    let (x, y) = on_screen(Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]))).unwrap_or_else(|| panic!("{side} hand behind the eye"));
+                    assert!(x.abs() < 1.0 && y > -1.0 && y < 0.0, "{weapon:?} {side} hand at {x:.2}, {y:.2}: off the lower frame");
+                    assert!(if side == ".R" { x > 0.0 } else { x < 0.0 }, "{weapon:?} {side} hand on the wrong side");
+                    seen += 1;
                 }
-                let c = proj * Vec4::from_vec3(Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2])), 1.0);
-                let (x, y) = (c.x / c.w, c.y / c.w);
-                assert!(c.w > 0.0, "{side} hand behind the eye");
-                assert!(x.abs() < 1.0 && y > -1.0 && y < 0.0, "{side} hand at {x:.2}, {y:.2}: off the lower frame");
-                assert!(if side == ".R" { x > 0.0 } else { x < 0.0 }, "{side} hand on the wrong side");
-                seen += 1;
+                assert!(seen > 10, "{weapon:?} {side}: {seen} hand vertices");
             }
-            assert!(seen > 10, "{side}: {seen} hand vertices");
         }
     }
 
@@ -197,42 +238,49 @@ mod model_tests {
     }
 
     #[test]
+    fn the_jab_lands_ahead_in_view_and_comes_back() {
+        let g = viewmodel(Weapon::Fists);
+        let strike = Weapon::Fists.spec().bash.strike_at;
+        let fist = |t: f64| bone_at(&g, "Bash", t, "hand.R").translation();
+        let (rest, out) = (fist(0.0), fist(strike));
+        // Ahead is -z: the fist goes a good way out.
+        assert!(rest.z - out.z > 0.12, "the fist only reaches {:.3} m", rest.z - out.z);
+        let (x, y) = on_screen(out).expect("in front");
+        assert!(x.abs() < 0.6 && y.abs() < 0.8, "the fist lands at {x:.2}, {y:.2}");
+        assert!((fist(0.5) - rest).length() < 0.005, "and comes home");
+    }
+
+    #[test]
     fn the_pistol_animations_do_what_they_say() {
-        let g = arms();
-        let length = |name: &str| g.animations.iter().find(|a| a.name.as_deref() == Some(name)).map(|a| a.duration()).unwrap_or(-1.0);
-        for (name, want) in [("PistolIdle", 3.0), ("PistolFire", 0.2), ("PistolReload", 1.4), ("PistolMelee", 0.5)] {
-            assert!((length(name) - want).abs() < 0.05, "{name} lasts {}", length(name));
-        }
+        let g = viewmodel(Weapon::Pistol);
         // The gun in the hand where poses.py put it: Blender (0.085, 0.30,
         // -0.165) is the game's (0.085, -0.165, -0.30).
-        let at = bone_at(&g, "PistolIdle", 0.0, "gun").translation();
+        let at = bone_at(&g, "Idle", 0.0, "gun").translation();
         assert!((at - Vec3::new(0.085, -0.165, -0.30)).length() < 0.01, "the gun is held at {at:?}");
         // The flash on the first frame of a shot only.
         let size = |anim: &str, t: f64| bone_at(&g, anim, t, "flash").col(0).length();
-        assert!(size("PistolFire", 0.0) > 0.9 && size("PistolFire", 0.1) < 0.05 && size("PistolIdle", 0.5) < 0.05);
+        assert!(size("Fire", 0.0) > 0.9 && size("Fire", 0.1) < 0.05 && size("Idle", 0.5) < 0.05);
         // The slide back on the shot, home after.
-        let slide = |t: f64| bone_at(&g, "PistolFire", t, "slide").translation() - bone_at(&g, "PistolFire", t, "gun").translation();
+        let slide = |t: f64| bone_at(&g, "Fire", t, "slide").translation() - bone_at(&g, "Fire", t, "gun").translation();
         assert!((slide(1.0 / 30.0) - slide(0.0)).length() > 0.03, "the slide racks back");
         assert!((slide(0.2) - slide(0.0)).length() < 0.005, "and comes home");
         // The magazine well out of the grip halfway through a reload.
-        let mag = |t: f64| (bone_at(&g, "PistolReload", t, "mag").translation() - bone_at(&g, "PistolReload", t, "gun").translation()).length();
+        let mag = |t: f64| (bone_at(&g, "Reload", t, "mag").translation() - bone_at(&g, "Reload", t, "gun").translation()).length();
         assert!(mag(0.5) > mag(0.0) + 0.3, "mag out: {} vs {}", mag(0.5), mag(0.0));
         assert!((mag(1.4) - mag(0.0)).abs() < 0.005, "and back in");
     }
 
     #[test]
     fn both_hands_hold_the_pistol_in_view() {
-        let g = arms();
-        let gun = bone_at(&g, "PistolIdle", 1.0, "gun").translation();
-        let left = bone_at(&g, "PistolIdle", 1.0, "hand.L").translation();
-        let right = bone_at(&g, "PistolIdle", 1.0, "hand.R").translation();
+        let g = viewmodel(Weapon::Pistol);
+        let gun = bone_at(&g, "Idle", 1.0, "gun").translation();
+        let left = bone_at(&g, "Idle", 1.0, "hand.L").translation();
+        let right = bone_at(&g, "Idle", 1.0, "hand.R").translation();
         assert!((left - gun).length() < 0.12, "left hand {:.3} m off the gun", (left - gun).length());
         assert!((right - gun).length() < 0.12, "right hand {:.3} m off the gun", (right - gun).length());
-        // The muzzle on screen: right of middle and low, at 16:9 and 55°.
-        let proj = Mat4::perspective_infinite_reverse_z(55f64.to_radians(), 16.0 / 9.0, 0.01);
-        let muzzle = bone_at(&g, "PistolIdle", 1.0, "flash").translation();
-        let c = proj * Vec4::from_vec3(muzzle, 1.0);
-        let (x, y) = (c.x / c.w, c.y / c.w);
-        assert!(c.w > 0.0 && x > 0.0 && x < 0.7 && y < 0.0 && y > -0.8, "muzzle at {x:.2}, {y:.2}");
+        // The muzzle on screen: right of middle and low.
+        let muzzle = bone_at(&g, "Idle", 1.0, "flash").translation();
+        let (x, y) = on_screen(muzzle).expect("in front");
+        assert!(x > 0.0 && x < 0.7 && y < 0.0 && y > -0.8, "muzzle at {x:.2}, {y:.2}");
     }
 }

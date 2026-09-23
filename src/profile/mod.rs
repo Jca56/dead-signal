@@ -26,13 +26,16 @@ pub struct Profile {
 }
 
 impl Profile {
-    /// Someone new: an empty bag, and a little in the stash to start with.
+    /// Someone new: a loaded pistol in hand, and a little in the stash to
+    /// start with.
     pub fn new_player() -> Self {
         let mut stash = Grid::new(STASH.0, STASH.1);
         for stack in [Stack::new(Kind::Rounds, 60), Stack::new(Kind::Bandage, 2), Stack::one(Kind::Medkit)] {
             stash.place(stack);
         }
-        Self { stash, loadout: Bag::empty(), xp: 0, runs: 0, extractions: 0, perks: Perks::default() }
+        let mut loadout = Bag::empty();
+        loadout.add(starting_pistol());
+        Self { stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default() }
     }
 
     /// Perk points not yet spent.
@@ -73,7 +76,8 @@ impl Profile {
     /// everything found a place (if not, nothing's been lost: the caller
     /// puts things back as they were).
     fn refit(&mut self) -> bool {
-        let old = std::mem::replace(&mut self.loadout, Bag::sized(self.perks.pack(), self.perks.pockets()));
+        let mut old = std::mem::replace(&mut self.loadout, Bag::sized(self.perks.pack(), self.perks.pockets()));
+        self.loadout.slots = std::mem::take(&mut old.slots);
         let mut homeless = Vec::new();
         for (from, to) in [(old.pack, &mut self.loadout.pack), (old.pockets, &mut self.loadout.pockets)] {
             for i in from.items {
@@ -86,8 +90,8 @@ impl Profile {
     }
 
     /// A run is over, `bag` what was carried at its end. Got out: it all
-    /// comes home, and the XP with it. Dead: only the pockets survive, and
-    /// no XP.
+    /// comes home, and the XP with it. Dead: only the pockets survive (not
+    /// the weapons in hand), and no XP.
     pub fn settle(&mut self, got_out: bool, bag: Bag, earned: u32) {
         self.runs += 1;
         if got_out {
@@ -95,7 +99,7 @@ impl Profile {
             self.xp += earned;
             self.extractions += 1;
         } else {
-            self.loadout = Bag { pack: Grid::new(bag.pack.w, bag.pack.h), pockets: bag.pockets };
+            self.loadout = Bag { pack: Grid::new(bag.pack.w, bag.pack.h), pockets: bag.pockets, slots: [None; 3] };
         }
     }
 
@@ -106,9 +110,16 @@ impl Profile {
     }
 }
 
+/// What a new survivor (or one from before there were weapons to carry)
+/// starts with in hand: a pistol, loaded.
+pub fn starting_pistol() -> Stack {
+    Stack::gun(Kind::Pistol, crate::weapon::Weapon::Pistol.spec().mag)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::loot::bag::Slot;
 
     #[test]
     fn points_buy_ranks_and_a_refund_never_loses_a_thing() {
@@ -141,12 +152,13 @@ mod tests {
     }
 
     #[test]
-    fn someone_new_has_a_little_to_start_with_and_nothing_on_them() {
+    fn someone_new_has_a_little_to_start_with_and_a_pistol_in_hand() {
         let p = Profile::new_player();
         assert_eq!(p.stash.count(Kind::Rounds), 60);
         assert_eq!(p.stash.count(Kind::Bandage), 2);
         assert_eq!(p.stash.count(Kind::Medkit), 1);
-        assert_eq!(p.loadout, Bag::empty());
+        assert_eq!(p.loadout.slot(Slot::Sidearm), Some(starting_pistol()));
+        assert!(p.loadout.pack.items.is_empty() && p.loadout.pockets.items.is_empty());
         assert_eq!((p.xp, p.runs), (0, 0));
     }
 
@@ -155,6 +167,7 @@ mod tests {
         let mut bag = Bag::empty();
         bag.pack.place(Stack::one(Kind::GoldBar));
         bag.pockets.place(Stack::one(Kind::Ring));
+        bag.add(Stack::gun(Kind::Pistol, 5));
         let mut p = Profile::new_player();
         p.settle(true, bag.clone(), 120);
         assert_eq!((p.loadout.clone(), p.xp, p.extractions), (bag.clone(), 120, 1));
@@ -162,6 +175,7 @@ mod tests {
         p.settle(false, bag, 500);
         assert_eq!(p.loadout.pack.count(Kind::GoldBar), 0, "the pack is lost");
         assert_eq!(p.loadout.pockets.count(Kind::Ring), 1, "the pockets are safe");
+        assert_eq!(p.loadout.slots, [None; 3], "the weapons in hand are lost");
         assert_eq!((p.xp, p.runs, p.extractions), (0, 1, 0), "no XP for dying");
     }
 }

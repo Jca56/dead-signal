@@ -1,0 +1,102 @@
+use super::*;
+
+#[test]
+fn right_click_sends_things_across_and_keeps_what_wont_fit() {
+    let mut bag = Bag::with_rounds();
+    let mut crate_ = Grid::new(4, 3);
+    crate_.place(Stack::new(Kind::Rounds, 12));
+    crate_.place(Stack::one(Kind::Watch));
+    let mut shelves = Shelves { bag: &mut bag, loot: Some(("CRATE", &mut crate_)) };
+    // Rounds out of the crate top up the pocket's 24 to 30, the rest
+    // take a place of their own.
+    assert_eq!(quick_move(&mut shelves, Which::Loot, 0), 12);
+    assert_eq!(shelves.bag.count(Kind::Rounds), 36);
+    assert_eq!(shelves.bag.pockets.items[0].stack.count, 30);
+    // And back: the pocket's rounds go into the crate.
+    let i = shelves.bag.pockets.items.iter().position(|i| i.stack.kind == Kind::Rounds).unwrap();
+    quick_move(&mut shelves, Which::Pockets, i);
+    assert_eq!(shelves.loot.as_ref().unwrap().1.count(Kind::Rounds), 30);
+    // Nothing searched: the pack and pockets trade.
+    let mut bag = Bag::with_rounds();
+    let mut shelves = Shelves { bag: &mut bag, loot: None };
+    quick_move(&mut shelves, Which::Pockets, 0);
+    assert_eq!((shelves.bag.pack.count(Kind::Rounds), shelves.bag.pockets.count(Kind::Rounds)), (24, 0));
+    // A full pack sends nothing, loses nothing.
+    let mut bag = Bag::with_rounds();
+    for _ in 0..6 {
+        bag.pack.place(Stack::one(Kind::Battery));
+    }
+    let mut shelves = Shelves { bag: &mut bag, loot: None };
+    assert_eq!(quick_move(&mut shelves, Which::Pockets, 0), 0);
+    assert_eq!(shelves.bag.pockets.count(Kind::Rounds), 24);
+}
+
+#[test]
+fn a_stack_dropped_on_its_kind_tops_it_up_and_the_rest_goes_back() {
+    // 28 rounds in the pack; 7 found in a crate, dragged onto them.
+    let mut bag = Bag::with_rounds();
+    bag.pockets.items.clear();
+    bag.pack.put(Stack::new(Kind::Rounds, 28), 2, 1, false);
+    let mut crate_ = Grid::new(4, 3);
+    crate_.put(Stack::new(Kind::Rounds, 7), 1, 1, false);
+    let mut shelves = Shelves { bag: &mut bag, loot: Some(("CRATE", &mut crate_)) };
+    let item = shelves.grid(Which::Loot).unwrap().take(0);
+    let held = Held { item, from: Which::Loot, was: item, grab: Vec2::ZERO };
+    assert_eq!(landing(&shelves.bag.pack, item, (2, 1), (2, 1)), Landing::Merge(0, 2), "green: room for 2");
+    assert_eq!(release(&mut shelves, held, Which::Pack, (2, 1), (2, 1)), 2);
+    assert_eq!(shelves.bag.pack.items[0].stack.count, 30);
+    let back = &shelves.loot.as_ref().unwrap().1.items[0];
+    assert_eq!((back.stack.count, back.x, back.y), (5, 1, 1), "the 5 went back to the crate");
+    // Onto a full stack: red, and nothing moves.
+    let item = shelves.grid(Which::Loot).unwrap().take(0);
+    assert_eq!(landing(&shelves.bag.pack, item, (2, 1), (2, 1)), Landing::Blocked);
+    let held = Held { item, from: Which::Loot, was: item, grab: Vec2::ZERO };
+    assert_eq!(release(&mut shelves, held, Which::Pack, (2, 1), (2, 1)), 0);
+    assert_eq!(shelves.loot.as_ref().unwrap().1.count(Kind::Rounds), 5);
+    // Onto something else: red.
+    assert_eq!(landing(&shelves.bag.pack, Item { stack: Stack::one(Kind::Watch), ..item }, (2, 1), (2, 1)), Landing::Blocked);
+}
+
+#[test]
+fn right_click_puts_a_weapon_in_its_empty_slot_and_takes_it_out() {
+    let mut bag = Bag::empty();
+    bag.pack.put(Stack::gun(Kind::Pistol, 6), 0, 0, false);
+    let mut shelves = Shelves { bag: &mut bag, loot: None };
+    assert_eq!(quick_move(&mut shelves, Which::Pack, 0), 1);
+    assert_eq!(shelves.bag.slot(Slot::Sidearm), Some(Stack::gun(Kind::Pistol, 6)), "in its slot, rounds and all");
+    assert!(shelves.bag.pack.items.is_empty());
+    // And out again, into the pack.
+    assert_eq!(quick_move(&mut shelves, Which::Slot(Slot::Sidearm), 0), 1);
+    assert_eq!((shelves.bag.slot(Slot::Sidearm), shelves.bag.pack.items[0].stack), (None, Stack::gun(Kind::Pistol, 6)));
+    // With something searched, out of the slot goes into it.
+    let mut crate_ = Grid::new(4, 3);
+    bag.slots[Slot::Sidearm.index()] = Some(Stack::gun(Kind::Pistol, 2));
+    let mut shelves = Shelves { bag: &mut bag, loot: Some(("CRATE", &mut crate_)) };
+    assert_eq!(quick_move(&mut shelves, Which::Slot(Slot::Sidearm), 0), 1);
+    assert_eq!(shelves.loot.as_ref().unwrap().1.items[0].stack, Stack::gun(Kind::Pistol, 2));
+}
+
+#[test]
+fn a_weapon_dropped_on_a_full_slot_swaps_and_anything_else_goes_back() {
+    let mut bag = Bag::empty();
+    bag.slots[Slot::Sidearm.index()] = Some(Stack::gun(Kind::Pistol, 12));
+    let mut crate_ = Grid::new(4, 3);
+    crate_.put(Stack::gun(Kind::Pistol, 3), 1, 1, false);
+    crate_.put(Stack::one(Kind::Watch), 3, 2, false);
+    let mut shelves = Shelves { bag: &mut bag, loot: Some(("CRATE", &mut crate_)) };
+    // The crate's pistol onto the sidearm: the full one goes to its place
+    // in the crate.
+    let item = shelves.take(Which::Loot, 0).unwrap();
+    assert_eq!(slots::release(&mut shelves, Held { item, from: Which::Loot, was: item, grab: Vec2::ZERO }, Slot::Sidearm), 1);
+    assert_eq!(shelves.bag.slot(Slot::Sidearm), Some(Stack::gun(Kind::Pistol, 3)));
+    let back = shelves.loot.as_ref().unwrap().1.items.iter().find(|i| i.stack.kind == Kind::Pistol).copied().unwrap();
+    assert_eq!((back.stack.loaded, back.x, back.y), (12, 1, 1));
+    // A watch won't go in a slot; a pistol won't go in the primary.
+    let i = shelves.loot.as_ref().unwrap().1.items.iter().position(|i| i.stack.kind == Kind::Watch).unwrap();
+    let item = shelves.take(Which::Loot, i).unwrap();
+    assert_eq!(slots::release(&mut shelves, Held { item, from: Which::Loot, was: item, grab: Vec2::ZERO }, Slot::Melee), 0);
+    let item = shelves.take(Which::Slot(Slot::Sidearm), 0).unwrap();
+    assert_eq!(slots::release(&mut shelves, Held { item, from: Which::Slot(Slot::Sidearm), was: item, grab: Vec2::ZERO }, Slot::Primary), 0);
+    assert_eq!(shelves.bag.slot(Slot::Sidearm), Some(Stack::gun(Kind::Pistol, 3)), "back in its slot");
+    assert_eq!(shelves.loot.as_ref().unwrap().1.count(Kind::Watch), 1, "back in the crate");
+}

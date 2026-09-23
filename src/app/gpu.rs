@@ -15,7 +15,7 @@ use crate::perf::Phase;
 use crate::render::{Draw, FigureDraw, Renderer};
 use crate::style;
 use crate::viewmodel::Viewmodel;
-use crate::weapon::Clip;
+use crate::weapon::{Clip, Weapon};
 use crate::world::{Bounds, Look, Model, Placed};
 use crate::zombie::{self, figure::Figure};
 
@@ -35,10 +35,17 @@ impl AppHost for DeadSignal {
             Ok(model) => self.game.world.insert_resource(model),
             Err(e) => log_error!("shambler: {e}"),
         }
-        match assets::load_viewmodel(&mut renderer, "arms") {
-            Ok(rig) => self.viewmodel = Some(Viewmodel::new(rig)),
-            Err(e) => log_error!("arms: {e}"),
+        let mut rigs = std::collections::HashMap::new();
+        for weapon in Weapon::ALL {
+            let name = format!("viewmodel_{}", weapon.spec().model);
+            match assets::load_viewmodel(&mut renderer, &name) {
+                Ok(rig) => {
+                    rigs.insert(weapon, rig);
+                }
+                Err(e) => log_error!("{name}: {e}"),
+            }
         }
+        self.viewmodel = Some(Viewmodel::new(rigs));
         self.mark = renderer.mark();
         renderer.upload(gpu);
         self.renderer = Some(renderer);
@@ -67,9 +74,12 @@ impl AppHost for DeadSignal {
             && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
         {
             if self.run.ending.is_none() {
-                let (clip, t) = self.combat.pistol.clip();
-                let (t, looping) = if clip == Clip::Idle { (time, true) } else { (t, false) };
-                renderer.draw_viewmodel(vm.draw(&view, clip.name(), t, looping, self.run.lowered()));
+                let hands = &self.combat.hands;
+                let (clip, t) = hands.clip();
+                let (t, looping) = if clip.name() == Clip::Idle.name() { (time, true) } else { (t, false) };
+                if let Some(draw) = vm.draw(&view, hands.weapon, clip.name(), t, looping, self.run.lowered(), hands.stowed_amount()) {
+                    renderer.draw_viewmodel(draw);
+                }
             }
             self.combat.draw(renderer);
         }

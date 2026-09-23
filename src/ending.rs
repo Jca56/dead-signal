@@ -73,7 +73,7 @@ impl Ending {
             Outcome::Died(_) => SideMenu::new("YOU DIED", &[("TRY AGAIN", After::Again), ("TITLE", After::Title)]),
             Outcome::Extracted(_) => SideMenu::new("EXTRACTED", &[("RUN AGAIN", After::Again), ("TITLE", After::Title)]),
         };
-        let loot = bag.pack.items.iter().chain(&bag.pockets.items).map(|i| i.stack).collect();
+        let loot = bag.everything().collect();
         Self { t: 0.0, outcome, stats, loot, value: bag.value(), earned, xp_before, menu }
     }
 

@@ -1,6 +1,14 @@
 """The pistol, built into the arms' mesh in the right hand: a boxy low poly
 service pistol (slide, frame, grip, trigger guard, magazine) and a muzzle
-flash, each part on a bone of its own under the hand:
+flash, each part on a bone of its own under the hand; and its clips.
+
+    Idle    3 s   a two-handed grip, breathing
+    Fire    0.2 s the kick, the slide back and home, the flash
+    Reload  1.4 s tilt, mag out, left hand away and back with a new one,
+                  seated, slide racked
+    Bash    0.5 s a pistol-whip: wind up, strike (frame 9), recover
+
+The parts' bones:
 
     gun    the frame and grip; follows the hand
     slide  racks back along the barrel when it fires
@@ -16,7 +24,10 @@ the grip runs up towards the index finger, the barrel along the knuckles.
 import math
 
 import bmesh
+import bpy
 from mathutils import Matrix, Vector
+
+import poses
 
 SLIDE = (0.17, 0.17, 0.18)
 FRAME = (0.10, 0.10, 0.10)
@@ -112,3 +123,91 @@ def build(b, wrist, fwd, back, across, hand):
         "flash": (at(MUZZLE), at(MUZZLE) + barrel * 0.04, "gun"),
     }
     return bones, (origin, right, barrel, up)
+
+
+def animate(rig, gun_rest, left_rest):
+    """Every clip, posed and baked; their names."""
+    r = poses.Rig(rig, gun_rest, left_rest)
+    r.add_ik()
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="POSE")
+    finger = poses.trigger_finger(rig)
+
+    # One working action holds the directly keyed bones for every stretch.
+    work = bpy.data.actions.new("work")
+    rig.animation_data.action = work
+
+    def steady(frame, flash=0.0, slide=0.0, mag=0.0, mag_scale=1.0):
+        poses.key_bone(rig, "flash", frame, scale=flash)
+        poses.key_bone(rig, "slide", frame, loc=Vector((0, slide, 0)))
+        poses.key_bone(rig, "mag", frame, loc=Vector((0, mag, 0)), scale=mag_scale)
+        poses.key_bone(rig, "index1.R", frame, rot=finger)
+        poses.key_bone(rig, "gun", frame, scale=1.0)
+
+    spans = {}
+
+    # Idle: frames 1..91, a slow breath.
+    start = 1
+    for f in range(start, start + 91, 5):
+        t = (f - start) / 90.0
+        lift = Vector((0, 0, 0.004 * math.sin(t * math.tau)))
+        g = poses.gun_pose(lift, pitch=0.6 * math.sin(t * math.tau))
+        r.key(f, g, poses.support(g))
+        steady(f)
+    spans["Idle"] = (start, start + 90)
+
+    # Fire: frames 101..107.
+    start = 101
+    base = poses.gun_pose()
+    kick = poses.gun_pose(Vector((0.0, -0.025, 0.012)), pitch=7.0)
+    for f, g, slide, fl in ((0, base, 0.0, 1.0), (1, kick, -0.038, 0.0), (3, poses.gun_pose(Vector((0, -0.01, 0.004)), pitch=2.0), 0.0, 0.0), (6, base, 0.0, 0.0)):
+        r.key(start + f, g, poses.support(g))
+        steady(start + f, flash=fl, slide=slide)
+    spans["Fire"] = (start, start + 6)
+
+    # Reload: frames 201..243.
+    start = 201
+    tilt = poses.gun_pose(Vector((0.01, -0.02, 0.025)), pitch=10.0, roll=25.0)
+    low = Vector((-0.20, 0.10, -0.46))
+    frames = [
+        (0, base, poses.support(base), 0.0, 1.0, 0.0),
+        (5, tilt, poses.away(Vector((-0.12, 0.18, -0.30))), 0.0, 1.0, 0.0),
+        (9, tilt, poses.away(low), -0.18, 1.0, 0.0),
+        (12, tilt, poses.away(low), -0.40, 0.0, 0.0),
+        (18, tilt, poses.away(low), -0.40, 0.0, 0.0),
+        (20, tilt, poses.away(low), -0.16, 1.0, 0.0),
+        (25, tilt, poses.support(tilt, 0.0, 0.0, -0.06), -0.12, 1.0, 0.0),
+        (29, tilt, poses.support(tilt, 0.0, 0.0, -0.02), 0.0, 1.0, 0.0),
+        (32, tilt, poses.support(tilt, 0.02, -0.06, 0.07), 0.0, 1.0, 0.0),
+        (34, tilt, poses.support(tilt, 0.02, -0.12, 0.07), 0.0, 1.0, -0.04),
+        (35, tilt, poses.support(tilt, 0.02, -0.12, 0.05), 0.0, 1.0, 0.0),
+        (42, base, poses.support(base), 0.0, 1.0, 0.0),
+    ]
+    for f, g, left, mag, mag_scale, slide in frames:
+        r.key(start + f, g, left)
+        steady(start + f, slide=slide, mag=mag, mag_scale=mag_scale)
+    spans["Reload"] = (start, start + 42)
+
+    # Bash: frames 301..316, the strike landing on 309.
+    start = 301
+    wind = poses.gun_pose(Vector((0.05, -0.06, 0.08)), pitch=35.0, roll=20.0, yaw=-10.0)
+    strike = poses.gun_pose(Vector((-0.06, 0.12, -0.03)), pitch=-55.0, roll=-10.0, yaw=15.0)
+    guard = poses.away(Vector((-0.20, 0.16, -0.34)))
+    for f, g, left in ((0, base, poses.support(base)), (4, wind, guard), (8, strike, guard), (10, strike, guard), (15, base, poses.support(base))):
+        r.key(start + f, g, left)
+        steady(start + f)
+    spans["Bash"] = (start, start + 15)
+
+    # The flash pops for one frame: no easing into or out of it.
+    for fc in work.fcurves if hasattr(work, "fcurves") else []:
+        if "flash" in fc.data_path:
+            for kp in fc.keyframe_points:
+                kp.interpolation = "CONSTANT"
+
+    for name, (a, b) in spans.items():
+        rig.animation_data.action = work
+        poses.bake(rig, name, a, b)
+    r.clear()
+    bpy.data.actions.remove(work)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return list(spans)

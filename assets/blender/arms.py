@@ -1,11 +1,16 @@
 """The survivor's arms, as the camera sees them: both forearms and hands
-up in a loose guard, in a worn field jacket and fingerless gloves.
+up in a loose guard, in a worn field jacket and fingerless gloves; and in
+them, one weapon at a time.
 
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/arms.py
 
-Writes assets/models/arms.glb: one skinned mesh on an armature, and an
-"Idle" breathing loop. Built in camera space: the eye at the origin,
+Writes one viewmodel a weapon, assets/models/viewmodel_<weapon>.glb: the
+arms and that weapon as one skinned mesh on one armature, and the
+weapon's clips (every one has Idle and Bash; a gun has Fire and Reload
+too). Each weapon is a module (`fists.py`, `pistol.py`) that adds its
+parts and bones to the arms (`build`, none for bare fists) and makes its
+clips (`animate`). Built in camera space: the eye at the origin,
 looking down Blender's +Y (the exporter makes that glTF's -Z), +Z up, +X
 right. The mesh is modelled in the guard pose, which is the rest pose, so
 nothing moves until an animation says so.
@@ -26,13 +31,13 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import fists  # noqa: E402
 import pistol  # noqa: E402
 from kit import Builder, banded, norm, rotate  # noqa: E402
-import poses  # noqa: E402
-OUT = os.path.join(HERE, "..", "models", "arms.glb")
+MODELS = os.path.join(HERE, "..", "models")
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.context.scene.render.fps = 30
+# Every weapon's viewmodel: its name in the file's, and its module.
+WEAPONS = [("fists", fists), ("pistol", pistol)]
 
 # Colours (sRGB, as in the title scene).
 SLEEVE = (0.30, 0.29, 0.20)
@@ -178,15 +183,17 @@ def arm(b, side, suffix):
 
 # ---- armature, mesh, animation -----------------------------------------------------
 
-def build():
+def build(weapon):
+    """The arms with `weapon`'s parts in them; the rig, the weapon's rest
+    frame (what its `build` gave back) and the left hand's."""
     b = Builder()
     bones = {}
     right_bones, (wrist, fwd, back, across) = arm(b, 1.0, ".R")
     bones.update(right_bones)
     left_bones, (l_wrist, l_fwd, l_back, _) = arm(b, -1.0, ".L")
     bones.update(left_bones)
-    gun_bones, gun_rest = pistol.build(b, wrist, fwd, back, across, "hand.R")
-    bones.update(gun_bones)
+    weapon_bones, weapon_rest = weapon.build(b, wrist, fwd, back, across, "hand.R")
+    bones.update(weapon_bones)
 
     # Every ring runs round its axis the same way whichever side it is on,
     # so every face already winds outward.
@@ -236,39 +243,7 @@ def build():
     obj.parent = rig
     mod = obj.modifiers.new("Rig", "ARMATURE")
     mod.object = rig
-    return rig, gun_rest, (l_wrist, l_fwd, l_back)
-
-
-def idle(rig):
-    """A slow breath: the arms rise and settle, the hands ease, over three
-    seconds, back where they began."""
-    action = bpy.data.actions.new("Idle")
-    rig.animation_data_create()
-    rig.animation_data.action = action
-    bpy.context.view_layer.objects.active = rig
-    bpy.ops.object.mode_set(mode="POSE")
-    pose = rig.pose.bones
-    for pb in pose:
-        pb.rotation_mode = "QUATERNION"
-    keys = [(1, 0.0), (46, 1.0), (91, 0.0)]
-    for frame, t in keys:
-        # Bare-handed: the gun is not there.
-        pose["gun"].scale = (0, 0, 0)
-        pose["gun"].keyframe_insert("scale", frame=frame)
-        for suffix, s in ((".R", 1.0), (".L", -1.0)):
-            pb = pose[f"upper_arm{suffix}"]
-            pb.rotation_quaternion = Matrix.Rotation(math.radians(-1.6 * t), 4, "X").to_quaternion()
-            pb.keyframe_insert("rotation_quaternion", frame=frame)
-            pb = pose[f"hand{suffix}"]
-            pb.rotation_quaternion = Matrix.Rotation(math.radians(2.5 * t * s), 4, "Z").to_quaternion()
-            pb.keyframe_insert("rotation_quaternion", frame=frame)
-            for f in ("fingers1", "index1"):
-                pb = pose[f"{f}{suffix}"]
-                pb.rotation_quaternion = Matrix.Rotation(math.radians(4.0 * t), 4, "X").to_quaternion()
-                pb.keyframe_insert("rotation_quaternion", frame=frame)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    rig.animation_data.action = None
-    return action
+    return rig, weapon_rest, (l_wrist, l_fwd, l_back)
 
 
 def stash(rig, actions):
@@ -280,14 +255,18 @@ def stash(rig, actions):
         track.strips.new(action.name, int(action.frame_range[0]), action)
 
 
-def main():
-    rig, gun_rest, left_rest = build()
-    guard = idle(rig)
-    names = poses.build(rig, gun_rest, left_rest)
-    stash(rig, [guard] + [bpy.data.actions[n] for n in names])
+def viewmodel(name, weapon):
+    """Build and write `weapon`'s viewmodel, from an empty scene."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.context.scene.render.fps = 30
+    rig, weapon_rest, left_rest = build(weapon)
+    rig.animation_data_create()
+    names = weapon.animate(rig, weapon_rest, left_rest)
+    stash(rig, [bpy.data.actions[n] for n in names])
     rig.animation_data.action = None
+    out = os.path.abspath(os.path.join(MODELS, f"viewmodel_{name}.glb"))
     bpy.ops.export_scene.gltf(
-        filepath=os.path.abspath(OUT),
+        filepath=out,
         export_format="GLB",
         export_yup=True,
         export_apply=False,
@@ -299,7 +278,14 @@ def main():
         export_normals=True,
     )
     mesh = bpy.data.objects["Arms"].data
-    print(f"arms: {len(mesh.polygons)} faces, {len(rig.data.bones)} bones -> {os.path.abspath(OUT)}")
+    print(f"{name}: {len(mesh.polygons)} faces, {len(rig.data.bones)} bones, clips {names} -> {out}")
+
+
+def main():
+    only = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    for name, weapon in WEAPONS:
+        if not only or name in only:
+            viewmodel(name, weapon)
 
 
 main()

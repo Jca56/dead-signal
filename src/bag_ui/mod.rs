@@ -1,8 +1,11 @@
-//! The inventory screen, over the game while it goes on: the backpack and
-//! the pockets, and beside them whatever is being searched. Things are
-//! dragged from place to place (R turns what's held), right-clicked
-//! straight across (between the bag and what's searched, or pack and
-//! pockets), or dragged out onto the ground.
+//! The inventory screen, over the game while it goes on: the weapons in
+//! their slots (`slots.rs`), the backpack and the pockets, and beside them
+//! whatever is being searched. Things are dragged from place to place (R
+//! turns what's held), right-clicked straight across (between the bag and
+//! what's searched, or pack and pockets; a weapon into its empty slot, or
+//! out of it), or dragged out onto the ground.
+
+mod slots;
 
 use std::collections::HashMap;
 
@@ -11,7 +14,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::{Key, Ui};
 
-use crate::loot::bag::Bag;
+use crate::loot::bag::{Bag, Slot};
 use crate::loot::grid::{Grid, Item};
 use crate::loot::{Kind, Stack};
 use crate::style;
@@ -30,6 +33,7 @@ pub enum Which {
     Pack,
     Pockets,
     Loot,
+    Slot(Slot),
 }
 
 /// Where things are kept while the screen is up: the bag, and what's
@@ -45,6 +49,15 @@ impl Shelves<'_> {
             Which::Pack => Some(&mut self.bag.pack),
             Which::Pockets => Some(&mut self.bag.pockets),
             Which::Loot => self.loot.as_mut().map(|(_, g)| &mut **g),
+            Which::Slot(_) => None,
+        }
+    }
+
+    /// Take the thing at `index` of `which` out (a slot's only thing is 0).
+    fn take(&mut self, which: Which, index: usize) -> Option<Item> {
+        match which {
+            Which::Slot(slot) => self.bag.slot_mut(slot).take().map(|stack| Item { stack, x: 0, y: 0, turned: false }),
+            _ => self.grid(which).map(|g| g.take(index)),
         }
     }
 }
@@ -121,7 +134,7 @@ fn release(shelves: &mut Shelves, h: Held, which: Which, at: (i32, i32), over: (
     };
     let left = h.item.stack.count - landed;
     if left > 0 {
-        put_back(shelves, Held { item: Item { stack: Stack::new(h.item.stack.kind, left), ..h.item }, ..h });
+        put_back(shelves, Held { item: Item { stack: h.item.stack.with_count(left), ..h.item }, ..h });
     }
     landed
 }
@@ -140,9 +153,10 @@ impl BagUi {
         if self.hideout { HIDEOUT_CELL } else { CELL }
     }
 
-    /// The grids' places on screen: which, and its rect. In a run the bag
-    /// on the left, what's searched on the right; in the hideout the stash
-    /// on the left, the bag on the right.
+    /// The grids' and slots' places on screen: which, and its rect. In a
+    /// run the slots on the left, then the bag, what's searched on the
+    /// right; in the hideout the stash on the left, then the bag, the slots
+    /// on the right.
     fn layout(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>) -> Vec<(Which, Rect)> {
         let s = ui.m.scale;
         let screen = ui.clip();
@@ -150,10 +164,12 @@ impl BagUi {
         let (pack_dims, pocket_dims) = ((bag.pack.w, bag.pack.h), (bag.pockets.w, bag.pockets.h));
         let pack_w = f64::from(pack_dims.0) * cell;
         let loot_w = loot.map_or(0.0, |(w, _)| gap + f64::from(w) * cell);
-        let left = screen.center().x - (pack_w + loot_w) * 0.5;
+        let slots_w = slots::WIDTH * cell + gap;
+        let left = screen.center().x - (slots_w + pack_w + loot_w) * 0.5;
         let top = screen.min.y + screen.height() * 0.17 + title;
         let size = |(w, h): (u8, u8)| Vec2::new(f64::from(w) * cell, f64::from(h) * cell);
-        let bag_x = if self.hideout { left + loot_w } else { left };
+        let bag_x = if self.hideout { left + loot_w } else { left + slots_w };
+        let slots_x = if self.hideout { bag_x + pack_w + gap } else { left };
         let pack = Rect::from_min_size(Vec2::new(bag_x, top), size(pack_dims));
         let pockets = Rect::from_min_size(Vec2::new(bag_x, pack.max.y + title + gap * 0.5), size(pocket_dims));
         let mut out = vec![(Which::Pack, pack), (Which::Pockets, pockets)];
@@ -161,6 +177,7 @@ impl BagUi {
             let x = if self.hideout { left } else { pack.max.x + gap };
             out.push((Which::Loot, Rect::from_min_size(Vec2::new(x, top), size(dims))));
         }
+        out.extend(slots::layout(Vec2::new(slots_x, top), cell, s));
         out
     }
 }
@@ -181,31 +198,36 @@ impl BagUi {
         let mut moved = Moved::default();
         let places = self.layout(ui, shelves.bag, shelves.loot.as_ref().map(|(_, g)| (g.w, g.h)));
         let p = ui.state.pointer;
-        let under_item = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| {
-            let (cx, cy) = cell_under(r, p, cell);
-            shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8)).map(|i| (which, i))
+        let under_item = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
+            Which::Slot(slot) => shelves.bag.slot(slot).map(|_| (which, 0)),
+            _ => {
+                let (cx, cy) = cell_under(r, p, cell);
+                shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8)).map(|i| (which, i))
+            }
         });
 
         match self.held {
             None => {
                 if ui.state.pressed
                     && let Some((which, i)) = under_item
-                    && let Some(g) = shelves.grid(which)
+                    && let Some(item) = shelves.take(which, i)
                 {
-                    let item = g.take(i);
                     let r = places.iter().find(|(w, _)| *w == which).map(|(_, r)| *r).unwrap_or(Rect::ZERO);
-                    let at = r.min + Vec2::new(f64::from(item.x), f64::from(item.y)) * cell;
+                    let at = match which {
+                        Which::Slot(_) => slots::tile(r, item.stack, cell).0,
+                        _ => r.min + Vec2::new(f64::from(item.x), f64::from(item.y)) * cell,
+                    };
                     self.held = Some(Held { item, from: which, was: item, grab: p - at });
                 } else if ui.state.right_pressed
                     && let Some((which, i)) = under_item
                 {
-                    let kind = shelves.grid(which).map(|g| g.items[i].stack.kind);
+                    let stack = shelves.grid(which).map(|g| g.items[i].stack);
                     let n = quick_move(shelves, which, i);
                     if which == Which::Loot
                         && n > 0
-                        && let Some(kind) = kind
+                        && let Some(stack) = stack
                     {
-                        moved.taken.push(Stack::new(kind, n));
+                        moved.taken.push(stack.with_count(n));
                     }
                 }
             }
@@ -220,9 +242,12 @@ impl BagUi {
                     let h = self.held.take().expect("held");
                     match places.iter().find(|(_, r)| r.contains(p)) {
                         Some(&(which, r)) => {
-                            let landed = release(shelves, h, which, corner_cell(r, p - h.grab, cell), cell_under(r, p, cell));
+                            let landed = match which {
+                                Which::Slot(slot) => slots::release(shelves, h, slot),
+                                _ => release(shelves, h, which, corner_cell(r, p - h.grab, cell), cell_under(r, p, cell)),
+                            };
                             if h.from == Which::Loot && which != Which::Loot && landed > 0 {
-                                moved.taken.push(Stack::new(h.item.stack.kind, landed));
+                                moved.taken.push(h.item.stack.with_count(landed));
                             }
                         }
                         // Out onto the ground (there's none in the hideout).
@@ -248,6 +273,14 @@ impl BagUi {
                 Which::Pack => "BACKPACK",
                 Which::Pockets => "POCKETS",
                 Which::Loot => loot_name.unwrap_or(""),
+                Which::Slot(slot) => {
+                    // The column's name over the first.
+                    if slot == Slot::ALL[0] {
+                        ui.text_at("WEAPONS", &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, style::BONE);
+                    }
+                    slots::draw(ui, icons, slot, shelves.bag.slot(slot), r, cell);
+                    continue;
+                }
             };
             ui.text_at(name, &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, if which == Which::Loot { style::SIGNAL } else { style::BONE });
             ui.draw.rect(r.expand(6.0 * s), Color::rgba(0.05, 0.05, 0.05, 0.85));
@@ -277,7 +310,10 @@ impl BagUi {
             Some(h) => {
                 // Where it would land, green (fresh, or onto a stack with
                 // room) or red, then the thing itself.
-                if let Some(&(which, r)) = places.iter().find(|(_, r)| r.contains(p))
+                if let Some(&(Which::Slot(slot), r)) = places.iter().find(|(_, r)| r.contains(p)) {
+                    let ok = slots::takes(h.item.stack, slot);
+                    ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
+                } else if let Some(&(which, r)) = places.iter().find(|(_, r)| r.contains(p))
                     && let Some(g) = shelves.grid(which)
                 {
                     let (x, y) = corner_cell(r, p - h.grab, cell);
@@ -291,9 +327,12 @@ impl BagUi {
                 tile(ui, icons, h.item, p - h.grab, cell, 0.85);
             }
             None => {
-                let hovered = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| {
-                    let (cx, cy) = cell_under(r, p, cell);
-                    shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8).map(|i| g.items[i].stack))
+                let hovered = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
+                    Which::Slot(slot) => shelves.bag.slot(slot),
+                    _ => {
+                        let (cx, cy) = cell_under(r, p, cell);
+                        shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8).map(|i| g.items[i].stack))
+                    }
                 });
                 if let Some(stack) = hovered {
                     tooltip(ui, stack, p);
@@ -330,9 +369,13 @@ fn tile(ui: &mut Ui, icons: &Icons, item: Item, at: Vec2, cell: f64, alpha: f64)
     if let Some(&(flat, turned)) = icons.0.get(&item.stack.kind) {
         ui.draw.image(r.shrink(4.0 * s), if item.turned { turned } else { flat }, 0.0, Color::rgba(1.0, 1.0, 1.0, alpha));
     }
-    if item.stack.count > 1 {
+    // How many; for a gun, the rounds in it.
+    let text = match item.stack.magazine() {
+        Some(mag) => Some(format!("{}/{mag}", item.stack.loaded)),
+        None => (item.stack.count > 1).then(|| item.stack.count.to_string()),
+    };
+    if let Some(text) = text {
         let style = TextStyle::new((22.0 * s) as f32).bold().family(style::FONT);
-        let text = item.stack.count.to_string();
         let tw = ui.measure(&text, &style);
         let th = f64::from(style.line_height());
         let at = Vec2::new(r.max.x - tw - 6.0 * s, r.max.y - th - 2.0 * s);
@@ -341,14 +384,20 @@ fn tile(ui: &mut Ui, icons: &Icons, item: Item, at: Vec2, cell: f64, alpha: f64)
     }
 }
 
-/// Name, rarity and worth, beside the pointer.
+/// Name, rarity and worth (and for a weapon, its slot and rounds), beside
+/// the pointer.
 fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2) {
     let s = ui.m.scale;
     let def = stack.kind.def();
     let name = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
     let line = TextStyle::new((22.0 * s) as f32).family(style::FONT);
     let worth = if stack.count > 1 { format!("${} each  ·  ${}", def.value, stack.value()) } else { format!("${}", def.value) };
-    let lines = [(def.name.to_string(), &name, def.rarity.colour()), (def.rarity.name().to_string(), &line, style::DIM), (worth, &line, style::BONE)];
+    let mut lines = vec![(def.name.to_string(), &name, def.rarity.colour()), (def.rarity.name().to_string(), &line, style::DIM)];
+    if let Some(slot) = Slot::of(stack.kind) {
+        let rounds = stack.magazine().map_or(String::new(), |mag| format!("  ·  {}/{mag} ROUNDS", stack.loaded));
+        lines.push((format!("{}{rounds}", slot.name()), &line, style::BONE));
+    }
+    lines.push((worth, &line, style::BONE));
     let pad = 14.0 * s;
     let w = lines.iter().map(|(t, st, _)| ui.measure(t, st)).fold(0.0, f64::max) + pad * 2.0;
     let h: f64 = lines.iter().map(|(_, st, _)| f64::from(st.line_height()) + 4.0 * s).sum::<f64>() + pad * 2.0;
@@ -370,9 +419,21 @@ fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2) {
 /// searched into the bag, into what's searched from the bag, or (nothing
 /// searched) between pack and pockets. What won't fit stays. How many went.
 fn quick_move(shelves: &mut Shelves, from: Which, index: usize) -> u32 {
-    let Some(item) = shelves.grid(from).map(|g| g.take(index)) else { return 0 };
-    let left = match from {
-        Which::Loot => shelves.bag.add(item.stack),
+    let Some(item) = shelves.take(from, index) else { return 0 };
+    let searching = shelves.loot.is_some();
+    let empty_slot = Slot::of(item.stack.kind).filter(|&s| shelves.bag.slot(s).is_none());
+    let left = match (from, empty_slot) {
+        (Which::Loot, _) => shelves.bag.add(item.stack),
+        // Nothing searched: a weapon in the bag to its empty slot, and one
+        // out of its slot into the bag.
+        (Which::Pack | Which::Pockets, Some(slot)) if !searching => {
+            *shelves.bag.slot_mut(slot) = Some(item.stack);
+            item.stack.with_count(0)
+        }
+        (Which::Slot(_), _) if !searching => {
+            let rest = shelves.bag.pack.place(item.stack);
+            shelves.bag.pockets.place(rest)
+        }
         _ => {
             let to = if shelves.loot.is_some() { Which::Loot } else if from == Which::Pack { Which::Pockets } else { Which::Pack };
             let g = shelves.grid(to).expect("somewhere to go");
@@ -389,70 +450,21 @@ fn quick_move(shelves: &mut Shelves, from: Which, index: usize) -> u32 {
 /// `h` back where it was; failing that, anywhere it goes in the bag.
 fn put_back(shelves: &mut Shelves, h: Held) {
     let stack = h.item.stack;
-    let back = shelves.grid(h.from).is_some_and(|g| g.put(stack, i32::from(h.was.x), i32::from(h.was.y), h.was.turned));
+    let back = match h.from {
+        Which::Slot(slot) => {
+            let place = shelves.bag.slot_mut(slot);
+            let empty = place.is_none();
+            if empty {
+                *place = Some(stack);
+            }
+            empty
+        }
+        _ => shelves.grid(h.from).is_some_and(|g| g.put(stack, i32::from(h.was.x), i32::from(h.was.y), h.was.turned)),
+    };
     if !back {
         shelves.bag.add(stack);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn right_click_sends_things_across_and_keeps_what_wont_fit() {
-        let mut bag = Bag::with_rounds();
-        let mut crate_ = Grid::new(4, 3);
-        crate_.place(Stack::new(Kind::Rounds, 12));
-        crate_.place(Stack::one(Kind::Watch));
-        let mut shelves = Shelves { bag: &mut bag, loot: Some(("CRATE", &mut crate_)) };
-        // Rounds out of the crate top up the pocket's 24 to 30, the rest
-        // take a place of their own.
-        assert_eq!(quick_move(&mut shelves, Which::Loot, 0), 12);
-        assert_eq!(shelves.bag.count(Kind::Rounds), 36);
-        assert_eq!(shelves.bag.pockets.items[0].stack.count, 30);
-        // And back: the pocket's rounds go into the crate.
-        let i = shelves.bag.pockets.items.iter().position(|i| i.stack.kind == Kind::Rounds).unwrap();
-        quick_move(&mut shelves, Which::Pockets, i);
-        assert_eq!(shelves.loot.as_ref().unwrap().1.count(Kind::Rounds), 30);
-        // Nothing searched: the pack and pockets trade.
-        let mut bag = Bag::with_rounds();
-        let mut shelves = Shelves { bag: &mut bag, loot: None };
-        quick_move(&mut shelves, Which::Pockets, 0);
-        assert_eq!((shelves.bag.pack.count(Kind::Rounds), shelves.bag.pockets.count(Kind::Rounds)), (24, 0));
-        // A full pack sends nothing, loses nothing.
-        let mut bag = Bag::with_rounds();
-        for _ in 0..6 {
-            bag.pack.place(Stack::one(Kind::Battery));
-        }
-        let mut shelves = Shelves { bag: &mut bag, loot: None };
-        assert_eq!(quick_move(&mut shelves, Which::Pockets, 0), 0);
-        assert_eq!(shelves.bag.pockets.count(Kind::Rounds), 24);
-    }
-
-    #[test]
-    fn a_stack_dropped_on_its_kind_tops_it_up_and_the_rest_goes_back() {
-        // 28 rounds in the pack; 7 found in a crate, dragged onto them.
-        let mut bag = Bag::with_rounds();
-        bag.pockets.items.clear();
-        bag.pack.put(Stack::new(Kind::Rounds, 28), 2, 1, false);
-        let mut crate_ = Grid::new(4, 3);
-        crate_.put(Stack::new(Kind::Rounds, 7), 1, 1, false);
-        let mut shelves = Shelves { bag: &mut bag, loot: Some(("CRATE", &mut crate_)) };
-        let item = shelves.grid(Which::Loot).unwrap().take(0);
-        let held = Held { item, from: Which::Loot, was: item, grab: Vec2::ZERO };
-        assert_eq!(landing(&shelves.bag.pack, item, (2, 1), (2, 1)), Landing::Merge(0, 2), "green: room for 2");
-        assert_eq!(release(&mut shelves, held, Which::Pack, (2, 1), (2, 1)), 2);
-        assert_eq!(shelves.bag.pack.items[0].stack.count, 30);
-        let back = &shelves.loot.as_ref().unwrap().1.items[0];
-        assert_eq!((back.stack.count, back.x, back.y), (5, 1, 1), "the 5 went back to the crate");
-        // Onto a full stack: red, and nothing moves.
-        let item = shelves.grid(Which::Loot).unwrap().take(0);
-        assert_eq!(landing(&shelves.bag.pack, item, (2, 1), (2, 1)), Landing::Blocked);
-        let held = Held { item, from: Which::Loot, was: item, grab: Vec2::ZERO };
-        assert_eq!(release(&mut shelves, held, Which::Pack, (2, 1), (2, 1)), 0);
-        assert_eq!(shelves.loot.as_ref().unwrap().1.count(Kind::Rounds), 5);
-        // Onto something else: red.
-        assert_eq!(landing(&shelves.bag.pack, Item { stack: Stack::one(Kind::Watch), ..item }, (2, 1), (2, 1)), Landing::Blocked);
-    }
-}
+mod tests;

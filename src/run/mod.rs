@@ -1,7 +1,9 @@
 //! A run, from the player's side: the keys turned into movement, shots and
-//! healing; what's carried and found (`loot.rs`); health and stamina; the
-//! count of what happened; and dying, when it comes to that.
+//! healing; what's in hand (`hands.rs`); what's carried and found
+//! (`loot.rs`); health and stamina; the count of what happened; and dying,
+//! when it comes to that.
 
+mod hands;
 mod loot;
 mod out;
 
@@ -60,6 +62,8 @@ pub struct Run {
     result: Option<(bool, u32)>,
     /// The perks the player came in with.
     perks: Perks,
+    /// The wheel's turn not yet stepped through the slots, pixels.
+    wheel: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -77,8 +81,9 @@ impl Run {
         // What the perks make of the player.
         self.perks = perks;
         self.vitals = Vitals::with(&perks);
-        combat.pistol.reload_speed = perks.reload_speed();
+        combat.hands.reload_speed = perks.reload_speed();
         combat.melee = perks.melee();
+        self.take_up(combat, self.first_armed());
         game.world.insert_resource(crate::zombie::Stealth(perks.seen_from()));
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
         crate::items::scatter(&mut game.world, seed, &map.pickups);
@@ -160,9 +165,9 @@ impl Run {
             controls.crouch_toggle ^= crouch;
         }
 
-        // Patching up: 3 a bandage, 4 a medkit, from what's carried. Firing,
+        // Patching up: 4 a bandage, 5 a medkit, from what's carried. Firing,
         // striking or a blow stops it (the kit is kept).
-        for (key, kit) in [('3', Kit::Bandage), ('4', Kit::Medkit)] {
+        for (key, kit) in [('4', Kit::Bandage), ('5', Kit::Medkit)] {
             if pressed(ui, &[key]) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
                 combat.play(Sfx::Heal, 0.8);
             }
@@ -172,16 +177,18 @@ impl Run {
         if self.vitals.healing.is_some() && (firing || striking) {
             self.vitals.interrupt();
         }
-        let trigger = if self.vitals.healing.is_some() || open {
-            Trigger::default()
-        } else {
-            Trigger { fire: firing, reload: pressed(ui, &['r']), melee: striking }
-        };
-        // Reloading draws on the rounds carried.
-        combat.pistol.spare = self.bag.count(Kind::Rounds);
-        let spare = combat.pistol.spare;
+        let busy = self.vitals.healing.is_some() || open;
+        self.switch_hands(ui, combat, !busy);
+        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: pressed(ui, &['r']), melee: striking } };
+        // Reloading draws on the rounds carried, of the kind the gun takes.
+        let ammo = combat.hands.spec().ammo;
+        combat.hands.spare = ammo.map_or(0, |kind| self.bag.count(kind));
+        let spare = combat.hands.spare;
         combat.frame(game, trigger, dt, &mut self.stats);
-        self.bag.remove(Kind::Rounds, spare - combat.pistol.spare);
+        if let Some(kind) = ammo {
+            self.bag.remove(kind, spare - combat.hands.spare);
+        }
+        self.keep_rounds(combat);
 
         // Blows from the dead.
         let blows = combat.answer_the_dead(game, true);
@@ -271,8 +278,8 @@ impl Run {
         hud::draw(
             ui,
             &Hud {
-                mag: combat.pistol.mag,
-                spare: self.bag.count(Kind::Rounds),
+                weapon: combat.hands.spec().name,
+                rounds: combat.hands.spec().ammo.map(|kind| (combat.hands.mag, self.bag.count(kind))),
                 marker: combat.fx.marker,
                 hurt: combat.hurt,
                 hp: v.hp,

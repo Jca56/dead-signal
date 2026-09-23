@@ -49,6 +49,7 @@ const LOCKER: &[Line] = &[
     (Kind::Watch, 8, (1, 1)),
     (Kind::Radio, 8, (1, 1)),
     (Kind::Ring, 2, (1, 1)),
+    (Kind::Pistol, 5, (1, 1)),
 ];
 
 // A map has a score of wrecks: their gold is rare.
@@ -62,6 +63,7 @@ const CAR: &[Line] = &[
     (Kind::Watch, 12, (1, 1)),
     (Kind::Radio, 12, (1, 1)),
     (Kind::Chain, 1, (1, 1)),
+    (Kind::Pistol, 4, (1, 1)),
 ];
 
 const CAGE: &[Line] = &[
@@ -99,6 +101,7 @@ const DESK: &[Line] = &[
     (Kind::Watch, 20, (1, 1)),
     (Kind::Radio, 16, (1, 1)),
     (Kind::Chain, 1, (1, 1)),
+    (Kind::Pistol, 4, (1, 1)),
 ];
 
 const WARDROBE: &[Line] = &[
@@ -109,6 +112,7 @@ const WARDROBE: &[Line] = &[
     (Kind::Medkit, 10, (1, 1)),
     (Kind::Ring, 1, (1, 1)),
     (Kind::Chain, 1, (1, 1)),
+    (Kind::Pistol, 3, (1, 1)),
 ];
 
 const SHELF: &[Line] = &[
@@ -230,14 +234,18 @@ impl Source {
     }
 }
 
-/// One draw from `source`'s table.
+/// One draw from `source`'s table (a gun found with what was left in it).
 pub fn draw(source: Source, dice: &mut Dice) -> Stack {
     let table = source.table();
     let total: u32 = table.iter().map(|(_, w, _)| w).sum();
     let mut pick = dice.next() % total;
     for &(kind, weight, (lo, hi)) in table {
         if pick < weight {
-            return Stack::new(kind, dice.range(lo, hi));
+            let stack = Stack::new(kind, dice.range(lo, hi));
+            return match stack.magazine() {
+                Some(mag) => Stack { loaded: dice.range(0, mag), ..stack },
+                None => stack,
+            };
         }
         pick -= weight;
     }

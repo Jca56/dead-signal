@@ -1,6 +1,6 @@
 # Items
 
-Everything that can be found, carried and (one day) extracted. Size is grid cells across × down, as the item lies (it can be turned with R). Stack is how many share one cell or slot. Value is per item. The test `items_md_matches_the_game` fails if this table and the game disagree, so update both together.
+Everything that can be found, carried and (one day) extracted. Size is grid cells across × down, as the item lies (it can be turned with R). Stack is how many share one cell or slot. Value is per item. Weapons go in their slot (primary, sidearm, melee) when it's free, and a gun keeps the rounds in its magazine wherever it goes; a new survivor starts with a loaded pistol in hand. The test `items_md_matches_the_game` fails if this table and the game disagree, so update both together.
 
 | Item | Size | Stack | Rarity | Value | Found in | Flavor |
 |---|---|---|---|---|---|---|
@@ -19,6 +19,7 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | GOLD CHAIN | 1×1 | 1 | Epic | $350 | car, cage, desk, wardrobe | Off someone who didn't need it anymore. |
 | CAGE KEY | 1×1 | 1 | Rare | $25 | one locker, car, desk or wardrobe each run | Tagged SUPPLY. Someone locked up the good stuff and never came back. |
 | GOLD BAR | 2×1 | 1 | Legendary | $1000 | cage | Useless, heavy, and absolutely coming home with you. |
+| PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
 
 ## Rarity
 

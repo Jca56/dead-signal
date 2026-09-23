@@ -1,17 +1,12 @@
-"""The pistol's animations, posed by where the hands and gun should be and
+"""Posing a weapon's clips by where the hands and the weapon should be,
 solved by Blender's IK, then baked into plain keyframes the game plays.
 
-Each action is laid out on its own stretch of the timeline: two empties
-say where the right hand (carrying the gun) and the left hand go, frame by
-frame; IK on each hand bends its arm to get there; the slide, magazine and
-flash bones and the trigger finger are keyed directly. Baking turns the
-lot into one keyframe per bone per frame, and the IK and empties go away.
-
-    PistolIdle    3 s   a two-handed grip, breathing
-    PistolFire    0.2 s the kick, the slide back and home, the flash
-    PistolReload  1.4 s tilt, mag out, left hand away and back with a new
-                        one, seated, slide racked
-    PistolMelee   0.5 s a pistol-whip: wind up, strike (frame 9), recover
+Each clip is laid out on its own stretch of the timeline: two empties say
+where the right hand (carrying the weapon) and the left hand go, frame by
+frame; IK on each hand bends its arm to get there; the weapon's moving
+parts and the fingers are keyed directly. Baking turns the lot into one
+keyframe per bone per frame, and the IK and empties go away. The clips
+themselves are the weapon's (`pistol.py`'s `animate`).
 """
 
 import math
@@ -175,90 +170,3 @@ def bake(rig, name, start, end):
     action.name = name
     rig.animation_data.action = None
     return action
-
-
-def build(rig, gun_rest, left_rest):
-    r = Rig(rig, gun_rest, left_rest)
-    r.add_ik()
-    bpy.context.view_layer.objects.active = rig
-    bpy.ops.object.mode_set(mode="POSE")
-    finger = trigger_finger(rig)
-
-    # One working action holds the directly keyed bones for every stretch.
-    work = bpy.data.actions.new("work")
-    rig.animation_data.action = work
-
-    def steady(frame, flash=0.0, slide=0.0, mag=0.0, mag_scale=1.0):
-        key_bone(rig, "flash", frame, scale=flash)
-        key_bone(rig, "slide", frame, loc=Vector((0, slide, 0)))
-        key_bone(rig, "mag", frame, loc=Vector((0, mag, 0)), scale=mag_scale)
-        key_bone(rig, "index1.R", frame, rot=finger)
-        key_bone(rig, "gun", frame, scale=1.0)
-
-    spans = {}
-
-    # PistolIdle: frames 1..91, a slow breath.
-    start = 1
-    for f in range(start, start + 91, 5):
-        t = (f - start) / 90.0
-        lift = Vector((0, 0, 0.004 * math.sin(t * math.tau)))
-        g = gun_pose(lift, pitch=0.6 * math.sin(t * math.tau))
-        r.key(f, g, support(g))
-        steady(f)
-    spans["PistolIdle"] = (start, start + 90)
-
-    # PistolFire: frames 101..107.
-    start = 101
-    base = gun_pose()
-    kick = gun_pose(Vector((0.0, -0.025, 0.012)), pitch=7.0)
-    for f, g, slide, fl in ((0, base, 0.0, 1.0), (1, kick, -0.038, 0.0), (3, gun_pose(Vector((0, -0.01, 0.004)), pitch=2.0), 0.0, 0.0), (6, base, 0.0, 0.0)):
-        r.key(start + f, g, support(g))
-        steady(start + f, flash=fl, slide=slide)
-    spans["PistolFire"] = (start, start + 6)
-
-    # PistolReload: frames 201..243.
-    start = 201
-    tilt = gun_pose(Vector((0.01, -0.02, 0.025)), pitch=10.0, roll=25.0)
-    low = Vector((-0.20, 0.10, -0.46))
-    frames = [
-        (0, base, support(base), 0.0, 1.0, 0.0),
-        (5, tilt, away(Vector((-0.12, 0.18, -0.30))), 0.0, 1.0, 0.0),
-        (9, tilt, away(low), -0.18, 1.0, 0.0),
-        (12, tilt, away(low), -0.40, 0.0, 0.0),
-        (18, tilt, away(low), -0.40, 0.0, 0.0),
-        (20, tilt, away(low), -0.16, 1.0, 0.0),
-        (25, tilt, support(tilt, 0.0, 0.0, -0.06), -0.12, 1.0, 0.0),
-        (29, tilt, support(tilt, 0.0, 0.0, -0.02), 0.0, 1.0, 0.0),
-        (32, tilt, support(tilt, 0.02, -0.06, 0.07), 0.0, 1.0, 0.0),
-        (34, tilt, support(tilt, 0.02, -0.12, 0.07), 0.0, 1.0, -0.04),
-        (35, tilt, support(tilt, 0.02, -0.12, 0.05), 0.0, 1.0, 0.0),
-        (42, base, support(base), 0.0, 1.0, 0.0),
-    ]
-    for f, g, left, mag, mag_scale, slide in frames:
-        r.key(start + f, g, left)
-        steady(start + f, slide=slide, mag=mag, mag_scale=mag_scale)
-    spans["PistolReload"] = (start, start + 42)
-
-    # PistolMelee: frames 301..316, the strike landing on 309.
-    start = 301
-    wind = gun_pose(Vector((0.05, -0.06, 0.08)), pitch=35.0, roll=20.0, yaw=-10.0)
-    strike = gun_pose(Vector((-0.06, 0.12, -0.03)), pitch=-55.0, roll=-10.0, yaw=15.0)
-    guard = away(Vector((-0.20, 0.16, -0.34)))
-    for f, g, left in ((0, base, support(base)), (4, wind, guard), (8, strike, guard), (10, strike, guard), (15, base, support(base))):
-        r.key(start + f, g, left)
-        steady(start + f)
-    spans["PistolMelee"] = (start, start + 15)
-
-    # The flash pops for one frame: no easing into or out of it.
-    for fc in work.fcurves if hasattr(work, "fcurves") else []:
-        if "flash" in fc.data_path:
-            for kp in fc.keyframe_points:
-                kp.interpolation = "CONSTANT"
-
-    for name, (a, b) in spans.items():
-        rig.animation_data.action = work
-        bake(rig, name, a, b)
-    r.clear()
-    bpy.data.actions.remove(work)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return list(spans)

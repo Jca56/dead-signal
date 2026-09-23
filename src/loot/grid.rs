@@ -100,7 +100,7 @@ impl Grid {
         while stack.count > 0 {
             let Some((x, y, turned)) = self.space_for(stack.kind) else { break };
             let n = stack.count.min(most);
-            self.put(Stack::new(stack.kind, n), x, y, turned);
+            self.put(stack.with_count(n), x, y, turned);
             stack.count -= n;
         }
         stack

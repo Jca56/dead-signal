@@ -131,7 +131,7 @@ impl Run {
                     if left.count == stack.count {
                         self.note = Some(("NO ROOM", NOTE_FOR));
                     } else {
-                        self.found(Stack::new(stack.kind, stack.count - left.count));
+                        self.found(stack.with_count(stack.count - left.count));
                         combat.play(Sfx::Pickup, 0.8);
                         if left.count == 0 {
                             game.world.despawn(e);

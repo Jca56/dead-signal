@@ -1,7 +1,8 @@
 """Everything that can be carried: supplies (ITEM_Bandage, ITEM_Medkit,
 ITEM_Ammo), food and water (ITEM_Beans, ITEM_Water), valuables (ITEM_Pills,
 ITEM_Cash, ITEM_Watch, ITEM_Ring, ITEM_Chain, ITEM_Radio, ITEM_Battery,
-ITEM_Fuel, ITEM_GoldBar) and the cage's key (ITEM_Key). Each its own object
+ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key) and the weapons
+(ITEM_Pistol). Each its own object
 sitting on its origin, for the game to set down wherever it likes and to
 draw its icon from (seen from the front, +Y, a little above: an item's
 long side runs along X, a tall one stands up Z).
@@ -253,6 +254,26 @@ def key():
     p.finish()
 
 
+def pistol():
+    """A service pistol lying on its side, barrel along X, grip to the
+    front (towards the icon's eye, so it reads as a pistol)."""
+    p = Part("ITEM_Pistol")
+    p.box((0.02, 0.0, 0.017), (0.22, 0.04, 0.03), PLASTIC)
+    p.box((0.03, 0.03, 0.014), (0.16, 0.024, 0.024), BLACK)
+    p.box((-0.07, 0.09, 0.015), (0.048, 0.12, 0.028), HANDLE, turn=-0.26)
+    p.box((-0.082, 0.152, 0.015), (0.056, 0.014, 0.032), BLACK, turn=-0.26)
+    # The trigger guard, and the trigger in it.
+    p.box((0.005, 0.07, 0.014), (0.06, 0.008, 0.018), BLACK)
+    p.box((0.032, 0.055, 0.014), (0.008, 0.03, 0.018), BLACK)
+    p.box((-0.005, 0.052, 0.014), (0.006, 0.02, 0.01), SILVER)
+    # The sights, and the slide's grip lines.
+    p.box((-0.078, -0.024, 0.017), (0.01, 0.01, 0.024), BLACK)
+    p.box((0.12, -0.024, 0.017), (0.008, 0.008, 0.014), SILVER)
+    for k in range(4):
+        p.box((-0.06 + k * 0.012, 0.0, 0.033), (0.004, 0.036, 0.004), BLACK)
+    p.finish()
+
+
 def gold_bar():
     p = Part("ITEM_GoldBar")
     m = Matrix.Translation((0, 0, 0.03)) @ Matrix.Diagonal((0.1, 0.045, 0.03, 1.0))
@@ -281,6 +302,7 @@ def main():
     fuel()
     key()
     gold_bar()
+    pistol()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"items: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")
 

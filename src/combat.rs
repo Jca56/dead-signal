@@ -1,6 +1,7 @@
-//! Fighting: the pistol's events turned into the world's. A shot is a ray
+//! Fighting: what the hands do turned into the world's. A shot is a ray
 //! from the eye (a little wide when moving, more in the air) that stops at
-//! the first solid or target; a blow is three short rays in a fan. What is
+//! the first solid or target; a blow is three short rays in a fan. How
+//! hard and how far is the weapon's (`weapon/spec.rs`). What is
 //! hit takes damage, throws chips, makes its sound where it is; a target
 //! hit flashes the hitmarker. Shots kick the view; blows that land shake it.
 
@@ -17,23 +18,16 @@ use crate::render::Renderer;
 use crate::sound::{Sfx, Sound};
 use crate::stats::Stats;
 use crate::targets::{self, Kind, Target};
-use crate::weapon::{Act, Pistol, Trigger};
+use crate::weapon::{Act, Hands, Trigger, Weapon};
+use crate::loot::bag::Slot;
 use crate::world::{Game, Solid};
 use crate::zombie::{self, Horde};
 
-/// Damage, and how far a bullet and a blow reach, metres.
-const SHOT_DAMAGE: f64 = 25.0;
-const BLOW_DAMAGE: f64 = 50.0;
-const SHOT_RANGE: f64 = 300.0;
-const BLOW_RANGE: f64 = 1.8;
-/// A shot's spread, degrees: moving, and in the air (none standing still).
-const SPREAD_MOVING: f64 = 1.2;
-const SPREAD_AIR: f64 = 3.0;
 /// How long after a shot the player can't sprint, seconds.
 const SPRINT_BLOCK: f64 = 0.3;
 
 pub struct Combat {
-    pub pistol: Pistol,
+    pub hands: Hands,
     pub fx: Fx,
     sound: Sound,
     sprint_block: f64,
@@ -61,7 +55,7 @@ struct Aim {
 
 impl Combat {
     pub fn new() -> Self {
-        Self { pistol: Pistol::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0, melee: 1.0, loot: Dice::default() }
+        Self { hands: Hands::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0, melee: 1.0, loot: Dice::default() }
     }
 
     pub fn init(&mut self, renderer: &mut Renderer) {
@@ -73,9 +67,10 @@ impl Combat {
         self.sprint_block <= 0.0
     }
 
-    /// A fresh run: a full magazine and the spare rounds, nothing in the air.
+    /// A fresh run: empty hands (the run says what to take up), nothing
+    /// in the air.
     pub fn reset(&mut self) {
-        self.pistol = Pistol::default();
+        self.hands = Hands::default();
         self.sprint_block = 0.0;
         self.hurt = 0.0;
     }
@@ -130,12 +125,22 @@ impl Combat {
         f64::from(self.seed) / f64::from(u32::MAX)
     }
 
-    /// One frame of a run: the pistol, what it does, and what flies.
+    /// Take up `weapon` (from `held`, `mag` rounds in it): it comes up
+    /// into view.
+    pub fn take_up(&mut self, held: Option<Slot>, weapon: Weapon, mag: u32) {
+        self.hands.take_up(held, weapon, mag);
+        if weapon != Weapon::Fists {
+            self.sound.play(Sfx::SlideRack, 0.35);
+        }
+    }
+
+    /// One frame of a run: the hands, what they do, and what flies.
     pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64, stats: &mut Stats) {
         self.fx.update(dt);
         self.sprint_block -= dt;
         self.hurt = (self.hurt - dt * 1.6).max(0.0);
-        let acts = self.pistol.update(trigger, dt);
+        let spec = self.hands.spec();
+        let acts = self.hands.update(trigger, dt);
         if acts.is_empty() {
             return;
         }
@@ -144,17 +149,18 @@ impl Combat {
         for act in acts {
             match act {
                 Act::Shoot => {
+                    let Some(shot) = spec.shot else { continue };
                     stats.shots += 1;
                     self.sound.play(Sfx::Shot, 0.9);
                     zombie::noise(&mut game.world, aim.eye, zombie::brain::HEARING);
                     self.sprint_block = SPRINT_BLOCK;
-                    let side = (self.rand() - 0.5) * 0.8;
+                    let side = (self.rand() - 0.5) * shot.kick_side;
                     if let Some(mut v) = game.player_view_mut() {
-                        v.recoil(1.5, side);
+                        v.recoil(shot.kick, side);
                     }
-                    let spread = if !body.grounded { SPREAD_AIR } else if body.speed_flat() > 0.5 { SPREAD_MOVING } else { 0.0 };
+                    let spread = if !body.grounded { shot.spread_air } else if body.speed_flat() > 0.5 { shot.spread_moving } else { 0.0 };
                     let dir = self.scatter(&aim, spread);
-                    self.strike(game, &aim, dir, SHOT_RANGE, SHOT_DAMAGE, false, stats);
+                    self.strike(game, &aim, dir, shot.range, shot.damage, false, stats);
                 }
                 Act::DryFire => self.sound.play(Sfx::DryFire, 0.8),
                 Act::MagOut => self.sound.play(Sfx::MagOut, 0.7),
@@ -169,7 +175,7 @@ impl Combat {
                     for turn in [0.0f64, -8.0, 8.0] {
                         let t = turn.to_radians();
                         let dir = (aim.dir * t.cos() + aim.right * t.sin()).normalize();
-                        if self.strike(game, &aim, dir, BLOW_RANGE, BLOW_DAMAGE * self.melee, true, stats) {
+                        if self.strike(game, &aim, dir, spec.bash.reach, spec.bash.damage * self.melee, true, stats) {
                             break;
                         }
                     }

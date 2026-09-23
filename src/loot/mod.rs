@@ -9,6 +9,8 @@ pub mod tables;
 
 use lntrn_math::Color;
 
+use crate::weapon::Weapon;
+
 /// How rare a thing is: the classic five.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rarity {
@@ -59,9 +61,10 @@ pub enum Kind {
     Chain,
     Key,
     GoldBar,
+    Pistol,
 }
 
-pub const ALL: [Kind; 15] = [
+pub const ALL: [Kind; 16] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -77,6 +80,7 @@ pub const ALL: [Kind; 15] = [
     Kind::Chain,
     Kind::Key,
     Kind::GoldBar,
+    Kind::Pistol,
 ];
 
 impl Kind {
@@ -99,11 +103,20 @@ impl Kind {
             Kind::Chain => "gold_chain",
             Kind::Key => "cage_key",
             Kind::GoldBar => "gold_bar",
+            Kind::Pistol => "pistol",
         }
     }
 
     pub fn from_key(key: &str) -> Option<Kind> {
         ALL.into_iter().find(|k| k.key() == key)
+    }
+
+    /// The weapon it is, if it's one.
+    pub fn weapon(self) -> Option<Weapon> {
+        match self {
+            Kind::Pistol => Some(Weapon::Pistol),
+            _ => None,
+        }
     }
 }
 
@@ -141,6 +154,7 @@ impl Kind {
             Kind::Chain => d("GOLD CHAIN", (1, 1), 1, Epic, 350, "ITEM_Chain"),
             Kind::Key => d("CAGE KEY", (1, 1), 1, Rare, 25, "ITEM_Key"),
             Kind::GoldBar => d("GOLD BAR", (2, 1), 1, Legendary, 1000, "ITEM_GoldBar"),
+            Kind::Pistol => d("PISTOL", (2, 1), 1, Uncommon, 150, "ITEM_Pistol"),
         }
     }
 }
@@ -150,15 +164,32 @@ impl Kind {
 pub struct Stack {
     pub kind: Kind,
     pub count: u32,
+    /// The rounds in it, a gun (it keeps them, whoever carries it).
+    pub loaded: u32,
 }
 
 impl Stack {
     pub fn new(kind: Kind, count: u32) -> Self {
-        Self { kind, count }
+        Self { kind, count, loaded: 0 }
     }
 
     pub fn one(kind: Kind) -> Self {
-        Self { kind, count: 1 }
+        Self::new(kind, 1)
+    }
+
+    /// A gun with `loaded` rounds in it.
+    pub fn gun(kind: Kind, loaded: u32) -> Self {
+        Self { loaded, ..Self::one(kind) }
+    }
+
+    /// As many as `count`, but otherwise the same (a gun's rounds kept).
+    pub fn with_count(self, count: u32) -> Self {
+        Self { count, ..self }
+    }
+
+    /// How many rounds a gun holds, if it's a gun.
+    pub fn magazine(self) -> Option<u32> {
+        self.kind.weapon().map(|w| w.spec().mag).filter(|&m| m > 0)
     }
 
     /// What it all is worth.
@@ -169,7 +200,13 @@ impl Stack {
     /// What it's called, with how many when more than one could be.
     pub fn label(self) -> String {
         let def = self.kind.def();
-        if def.stack > 1 { format!("{}  ×{}", def.name, self.count) } else { def.name.to_string() }
+        if let Some(mag) = self.magazine() {
+            format!("{}  {}/{}", def.name, self.loaded, mag)
+        } else if def.stack > 1 {
+            format!("{}  ×{}", def.name, self.count)
+        } else {
+            def.name.to_string()
+        }
     }
 }
 
