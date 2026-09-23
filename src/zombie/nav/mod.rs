@@ -12,7 +12,10 @@ use std::collections::BinaryHeap;
 
 use lntrn_math::Vec3;
 
+mod regions;
+
 use crate::collide::{Capsule, Solids, WALKABLE};
+use regions::Regions;
 use crate::player::{BOUNDS, STEP_UP};
 
 /// Cell size, metres.
@@ -37,6 +40,9 @@ const PROBE: f64 = 0.1;
 /// a wall, a drop, a ledge) costs over its length, so routes keep to the
 /// middle of a ramp or a pad where there is one.
 const EDGE_COST: f64 = 1.5;
+/// How many cells round an unreachable goal to look for the nearest one
+/// that can be reached.
+const CLOSEST: i64 = 6;
 /// The eight neighbours, in the order their links are kept.
 const AROUND: [(i64, i64); 8] = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)];
 
@@ -53,6 +59,12 @@ pub struct NavGrid {
     /// The cells at an edge: not walkable to every neighbour (beside a
     /// wall, a drop, a ledge; a way down doesn't count).
     edges: Vec<bool>,
+    /// Which ground can get to which.
+    regions: Regions,
+    /// Where in each cell a body best stands, from its middle, in quarter
+    /// metres: off the middle only where that is on a ledge's lip (a stair
+    /// narrower than a cell, a ramp's side).
+    spots: Vec<(i8, i8)>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -89,7 +101,7 @@ impl NavGrid {
                 }
             }
         }
-        let mut grid = Self { side, height, links: vec![0; side * side], drops: vec![0; side * side], edges: vec![false; side * side] };
+        let mut grid = Self { side, height, links: vec![0; side * side], drops: vec![0; side * side], edges: vec![false; side * side], regions: Regions::default(), spots: vec![(0, 0); side * side] };
         for z in 0..side {
             for x in 0..side {
                 let Some(ha) = grid.ground(x, z) else { continue };
@@ -112,7 +124,61 @@ impl NavGrid {
                 grid.edges[i] = walks != 0xFF;
             }
         }
+        grid.regions = Regions::build(&grid);
+        for z in 0..side {
+            for x in 0..side {
+                if grid.edges[z * side + x] {
+                    grid.spots[z * side + x] = grid.best_spot(solids, (x, z), body.radius);
+                }
+            }
+        }
         grid
+    }
+
+    /// Where in the cell a body of `radius` stands on even ground: its
+    /// middle if that will do, else the nearest point (up to half a metre
+    /// off) where the ground all round under it is at one height.
+    fn best_spot(&self, solids: &Solids, (x, z): (usize, usize), radius: f64) -> (i8, i8) {
+        let Some(h) = self.ground(x, z) else { return (0, 0) };
+        let floor = |px: f64, pz: f64| solids.raycast(Vec3::new(px, h + 1.0, pz), Vec3::new(0.0, -1.0, 0.0), 2.0).map(|hit| hit.point.y);
+        let even = |ox: i8, oz: i8| {
+            let (px, pz) = (Self::coord(x) + f64::from(ox) * 0.25, Self::coord(z) + f64::from(oz) * 0.25);
+            let at = floor(px, pz).filter(|y| (y - h).abs() < 0.3);
+            at.is_some_and(|y| [(radius, 0.0), (-radius, 0.0), (0.0, radius), (0.0, -radius)].iter().all(|(dx, dz)| floor(px + dx, pz + dz).is_some_and(|f| (f - y).abs() < STEP_UP * 0.5)))
+        };
+        if even(0, 0) {
+            return (0, 0);
+        }
+        let mut offs: Vec<(i8, i8)> = (-2..=2).flat_map(|ox| (-2..=2).map(move |oz| (ox, oz))).filter(|&o| o != (0, 0)).collect();
+        offs.sort_by_key(|&(ox, oz)| ox * ox + oz * oz);
+        offs.into_iter().find(|&(ox, oz)| even(ox, oz)).unwrap_or((0, 0))
+    }
+
+    /// Whether a body in cell `a` can get to cell `b` at all (by any way,
+    /// drops and all).
+    fn reaches(&self, (ax, az): (usize, usize), (bx, bz): (usize, usize)) -> bool {
+        self.regions.reaches(az * self.side + ax, bz * self.side + bx)
+    }
+
+    /// The cell nearest `to` (a few metres round it, at most) that a body in
+    /// cell `from` can get to: for when `to` itself can't be reached (up on
+    /// a car's roof, say), the dead gather as close as they can.
+    fn nearest_reachable(&self, from: (usize, usize), to: Vec3) -> Option<(usize, usize)> {
+        let centre = self.cell_at(to)?;
+        let mut best: Option<((usize, usize), f64)> = None;
+        for dz in -CLOSEST..=CLOSEST {
+            for dx in -CLOSEST..=CLOSEST {
+                let Some(c) = self.offset(centre, dx, dz) else { continue };
+                if self.ground(c.0, c.1).is_none() || !self.reaches(from, c) {
+                    continue;
+                }
+                let d = (Self::coord(c.0) - to.x).powi(2) + (Self::coord(c.1) - to.z).powi(2);
+                if best.is_none_or(|(_, b)| d < b) {
+                    best = Some((c, d));
+                }
+            }
+        }
+        best.map(|(c, _)| c)
     }
 
     /// The cell `(dx, dz)` from `c`, if on the grid.
@@ -148,8 +214,11 @@ impl NavGrid {
         (!h.is_nan()).then_some(f64::from(h))
     }
 
+    /// Where a body stands in the cell: its middle, or off it (see
+    /// `spots`).
     fn centre(&self, x: usize, z: usize) -> Vec3 {
-        Vec3::new(Self::coord(x), self.ground(x, z).unwrap_or(0.0), Self::coord(z))
+        let (ox, oz) = self.spots[z * self.side + x];
+        Vec3::new(Self::coord(x) + f64::from(ox) * 0.25, self.ground(x, z).unwrap_or(0.0), Self::coord(z) + f64::from(oz) * 0.25)
     }
 
     /// The ground a body stands on in the cell holding `p`, if any.
@@ -218,7 +287,12 @@ impl NavGrid {
     /// find).
     pub fn path(&self, from: Vec3, to: Vec3) -> Option<Vec<Vec3>> {
         let start = self.nearest_open(from)?;
-        let goal = self.nearest_open(to)?;
+        let mut goal = self.nearest_open(to)?;
+        // Known unreachable costs nothing to find out: head as near as can
+        // be got instead of searching the whole grid in vain.
+        if !self.reaches(start, goal) {
+            goal = self.nearest_reachable(start, to)?;
+        }
         let idx = |(x, z): (usize, usize)| z * self.side + x;
         let h = |(x, z): (usize, usize)| {
             let (dx, dz) = ((x as f64 - goal.0 as f64).abs(), (z as f64 - goal.1 as f64).abs());
@@ -324,68 +398,4 @@ fn steps_between(solids: &Solids, a: Vec3, b: Vec3, drop: f64) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::player::capsule;
-
-    #[test]
-    fn the_real_map_has_ground_and_routes_round_the_shack() {
-        let solids = crate::testing::real_world();
-        let started = std::time::Instant::now();
-        let nav = NavGrid::build(&solids, capsule(false));
-        eprintln!("nav: {} open cells in {:.0} ms", nav.open_cells(), started.elapsed().as_secs_f64() * 1000.0);
-        assert!(nav.open_cells() > 30_000, "{} open cells", nav.open_cells());
-        // The spawn is ground. The shack (game x 4, z -40) stands on its
-        // cells: what is there is its roof, a step too tall to reach.
-        let ground = nav.height_at(Vec3::new(0.0, 0.0, 6.0)).expect("the spawn is ground");
-        assert!(nav.height_at(Vec3::new(4.0, 0.0, -40.0)).is_none_or(|h| h > ground + 2.0), "the shack's floor is open");
-        // Round the shack: the route stays down on the ground, and comes out
-        // longer than a straight line through its walls.
-        let (a, b) = (Vec3::new(4.0, 0.0, -35.0), Vec3::new(4.0, 0.0, -45.0));
-        let route = nav.path(a, b).expect("a way round");
-        let mut length = 0.0;
-        let mut prev = a;
-        for p in &route {
-            let mut t = 0.0;
-            while t <= 1.0 {
-                let q = prev + (*p - prev) * t;
-                let h = nav.height_at(q).unwrap_or(f64::NAN);
-                assert!(h < 2.5, "the route goes over the shack near {q:?} at {h}");
-                t += 0.1;
-            }
-            length += (*p - prev).length();
-            prev = *p;
-        }
-        assert!(length > 11.0, "round, not through: {length:.1} m");
-        // Up onto the proving ground by its ramp: the pad is reachable.
-        assert!(nav.path(Vec3::new(0.0, 0.0, 6.0), Vec3::new(0.0, 0.0, 38.0)).is_some(), "no way onto the pad");
-        // And from the grass behind the building, round and up its stairs
-        // onto its roof: the route climbs the stairs' column (x 3–4.2).
-        let roof = Vec3::new(0.0, 4.16, 45.5);
-        let route = nav.path(Vec3::new(0.0, 0.0, 51.0), roof).expect("no way up onto the roof");
-        assert!((route.last().unwrap().y - 4.16).abs() < 0.1, "ends on the roof: {route:?}");
-        let mut prev = Vec3::new(0.0, 0.0, 51.0);
-        let mut climbed = false;
-        for p in &route {
-            let mut t = 0.0;
-            while t <= 1.0 {
-                let q = prev + (*p - prev) * t;
-                if let Some(h) = nav.height_at(q)
-                    && h > 1.5
-                    && h < 4.0
-                {
-                    climbed |= (3.0..=4.6).contains(&q.x);
-                }
-                t += 0.05;
-            }
-            prev = *p;
-        }
-        assert!(climbed, "reached the roof without the stairs: {route:?}");
-        // But no ledge is a step: not up the pad's 1.1 m edge behind the
-        // building, nor straight up onto the roof.
-        let (edge, below) = (nav.cell_at(Vec3::new(8.0, 0.0, 48.0)).unwrap(), nav.cell_at(Vec3::new(8.0, 0.0, 49.0)).unwrap());
-        assert!(!nav.linked(below, edge), "climbed the pad's edge");
-        let (roof_edge, pad) = (nav.cell_at(Vec3::new(-3.0, 0.0, 45.0)).unwrap(), nav.cell_at(Vec3::new(-4.0, 0.0, 45.0)).unwrap());
-        assert!(!nav.linked(pad, roof_edge), "climbed the wall");
-    }
-}
+mod tests;

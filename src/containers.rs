@@ -34,7 +34,7 @@ const SPOTS: [(Source, f64, f64, f64, f64); 8] = [
 ];
 
 /// A kind of container's object name in `containers.glb`, shut; opened,
-/// the same with `_Open` after it.
+/// the same with `_Open` after it; its collision shape, with `_Hull`.
 pub fn model_name(source: Source) -> &'static str {
     match source {
         Source::Crate => "CONTAINER_Crate",
@@ -79,7 +79,7 @@ pub struct Placing {
 
 /// Set each container down on whatever is under its spot (its lowest
 /// corner on the floor, so none floats on a slope) and make it solid.
-/// `shapes` holds each kind's triangles about its own origin.
+/// `shapes` holds each kind's collision hull, about its own origin.
 pub fn set_down(solids: &mut Solids, shapes: &HashMap<Source, Vec<[Vec3; 3]>>) -> Vec<Placing> {
     let mut out = Vec::new();
     for (source, x, z, yaw, hint) in SPOTS {
@@ -181,14 +181,15 @@ pub fn in_view(world: &mut World, eye: Vec3, dir: Vec3) -> Option<Entity> {
     world.query::<(Entity, &Container)>().iter(world).find(|(_, c)| (0..3).all(|k| p[k] >= c.lo.to_array()[k] - near[k] && p[k] <= c.hi.to_array()[k] + near[k])).map(|(e, _)| e)
 }
 
-/// Each kind's triangles, as the game loads them (for tests).
+/// Each kind's collision hull, as the game loads it (for tests).
 #[cfg(test)]
 pub fn shapes() -> HashMap<Source, Vec<[Vec3; 3]>> {
     let path = format!("{}/assets/models/containers.glb", env!("CARGO_MANIFEST_DIR"));
     let g = lntrn_model::Gltf::load(&path).expect("containers");
     let mut out = HashMap::new();
     for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
-        let node = g.nodes.iter().find(|n| n.name.as_deref() == Some(model_name(source))).expect("its model");
+        let hull = format!("{}_Hull", model_name(source));
+        let node = g.nodes.iter().find(|n| n.name.as_deref() == Some(hull.as_str())).expect("its hull");
         let mut tris = Vec::new();
         for p in &g.meshes[node.mesh.unwrap()].primitives {
             let at = |k: u32| {

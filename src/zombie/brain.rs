@@ -14,6 +14,9 @@ use crate::collide::Solids;
 use crate::player::{Body, Controls, Gait};
 use crate::sound::Sfx;
 
+/// How often it looks for the player, seconds (sight is the dearest sense:
+/// a ray through the world).
+const LOOK_EVERY: f64 = 0.1;
 /// How far it sees, and how wide (either side of straight ahead).
 pub const SIGHT: f64 = 25.0;
 const SIGHT_HALF: f64 = 55.0;
@@ -46,8 +49,13 @@ const WANDER_PACE: f64 = 0.45;
 /// How fast it turns, rad/s: hunting, and not.
 const TURN_HUNT: f64 = 3.0;
 const TURN_IDLE: f64 = 1.5;
-/// How often it finds its way again, seconds.
+/// How often it finds its way again, seconds, and how long it waits after
+/// finding none (a search that fails is the dearest there is).
 const REPATH: f64 = 0.6;
+const NO_WAY: f64 = 2.0;
+/// Cut off from what it's after, it comes this near and waits there,
+/// rather than pushing into the crowd at the one nearest spot.
+const GATHER: f64 = 3.0;
 /// Following a route: this near a turning point it has reached it, and it
 /// aims this far ahead along the leg it's on.
 const ARRIVE: f64 = 0.3;
@@ -94,6 +102,10 @@ pub struct Senses<'a> {
     pub noises: &'a [(Vec3, f64)],
     /// Snarls since the last step: where from, and where the player was.
     pub alerts: &'a [(Vec3, Vec3)],
+    /// How many more may find their way this step, shared by the crowd:
+    /// a horde whose quarry moves all want to at once, and the searches
+    /// are spread over a few steps instead.
+    pub searches: &'a std::cell::Cell<u32>,
 }
 
 /// What it wants done this step.
@@ -117,6 +129,12 @@ pub struct Zombie {
     path_goal: Vec3,
     /// Where the leg of the route it's on began.
     leg_from: Vec3,
+    /// Till it next looks, and whether it saw the player when it last did.
+    look_in: f64,
+    in_sight: bool,
+    /// What it's after can't be got to (up on a car, say): the way found
+    /// ends short of it.
+    cut_off: bool,
     repath: f64,
     last_seen: Option<Vec3>,
     unseen: f64,
@@ -134,11 +152,15 @@ pub struct Zombie {
 
 impl Zombie {
     pub fn new(yaw: f64, seed: u32) -> Self {
-        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
         let (lo, hi, lunge) = if z.rand() < FAST_SHARE { FAST } else { SLOW };
         let walk = lo + (hi - lo) * z.rand();
         z.gait = Gait { walk, sprint: lunge, crouch: walk };
+        // Each finds its way and looks about on its own beat: a crowd come
+        // in together never all search at once.
+        z.repath = REPATH * z.rand();
+        z.look_in = LOOK_EVERY * z.rand();
         z
     }
 
@@ -225,7 +247,14 @@ impl Zombie {
         self.groan -= dt;
 
         // What it sees and hears.
-        let seen = s.player.filter(|&p| self.sees(body, p, s.solids));
+        // Looking takes a moment; between looks it goes on what it last saw
+        // (and where the player is now, if that was them).
+        self.look_in -= dt;
+        if self.look_in <= 0.0 {
+            self.look_in += LOOK_EVERY;
+            self.in_sight = s.player.is_some_and(|p| self.sees(body, p, s.solids));
+        }
+        let seen = s.player.filter(|_| self.in_sight);
         if let Some(p) = seen {
             if matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. }) {
                 out.sounds.push((Sfx::Snarl, 1.0));
@@ -335,7 +364,7 @@ impl Zombie {
 
         self.moving = false;
         if let Some((target, pace, lunge, turn)) = goal {
-            out.controls = self.steer(body, target, pace, lunge, turn, s.nav, dt);
+            out.controls = self.steer(body, target, pace, lunge, turn, s.nav, s.searches, dt);
             self.moving = out.controls.walk.y > 0.05;
             if self.moving {
                 self.shuffle -= dt * pace;
@@ -365,21 +394,32 @@ impl Zombie {
     /// The keys that take it toward `target`: along the nav grid when the
     /// way isn't straight, slowed while it turns.
     #[allow(clippy::too_many_arguments)]
-    fn steer(&mut self, body: &Body, target: Vec3, pace: f64, lunge: bool, turn: f64, nav: Option<&NavGrid>, dt: f64) -> Controls {
+    fn steer(&mut self, body: &Body, target: Vec3, pace: f64, lunge: bool, turn: f64, nav: Option<&NavGrid>, searches: &std::cell::Cell<u32>, dt: f64) -> Controls {
         // Close and on its level it just goes; anywhere else the grid
         // decides (up on a roof over it means going round by the stairs).
         let straight = (flat_dist(body.pos, target) < 3.0 && level(body.pos, target)) || nav.is_none_or(|n| n.clear(body.pos, target));
+        if !straight && self.cut_off && flat_dist(body.pos, target) < GATHER {
+            // As near as it gets: it stands and glares up at them.
+            self.face(target, body, turn, dt);
+            return Controls::default();
+        }
         let waypoint = if straight {
+            self.cut_off = false;
             self.path.clear();
             target
         } else {
             // (No way found is remembered until the next repath too: a search
             // that fails looks at the whole grid.)
-            if self.repath <= 0.0 || flat_dist(self.path_goal, target) > 2.0 {
-                self.path = nav.and_then(|n| n.path(body.pos, target)).unwrap_or_default();
+            let wants = self.repath <= 0.0 || flat_dist(self.path_goal, target) > 2.0;
+            if wants && searches.get() > 0 {
+                searches.set(searches.get() - 1);
+                let found = nav.and_then(|n| n.path(body.pos, target));
+                let beat = 0.75 + 0.5 * self.rand();
+                self.repath = if found.is_some() { REPATH } else { NO_WAY } * beat;
+                self.cut_off = found.as_ref().and_then(|p| p.last()).is_some_and(|end| flat_dist(*end, target) > 1.5 || !level(*end, target));
+                self.path = found.unwrap_or_default();
                 self.path_goal = target;
                 self.leg_from = body.pos;
-                self.repath = REPATH;
             }
             // Each leg is walked along its line, not cut across: a turning
             // point counts once it's truly reached (or passed), and it aims

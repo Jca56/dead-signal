@@ -21,7 +21,7 @@ fn run(z: &mut Zombie, body: &mut Body, solids: &Solids, nav: Option<&NavGrid>, 
     let steps = (seconds / STEP) as usize;
     for i in 0..steps {
         let heard = if i == 0 { noises } else { &[] };
-        let senses = Senses { solids, nav, player, noises: heard, alerts: &[] };
+        let senses = Senses { solids, nav, player, noises: heard, alerts: &[], searches: &std::cell::Cell::new(u32::MAX) };
         let mut intent = z.think(body, &senses, STEP);
         blows += usize::from(intent.hit.is_some());
         if !z.dead() {
@@ -112,8 +112,8 @@ fn it_lines_up_with_stairs_it_comes_at_from_the_side() {
     s.add(&box_tris(Vec3::new(-5.0, 0.0, edge - 6.0), Vec3::new(1.2, top, edge)));
     let nav = NavGrid::build(&s, capsule(false));
     let player = Vec3::new(-2.0, top, edge - 3.0);
-    for start in [Vec3::new(6.0, 0.0, -6.0), Vec3::new(5.0, 0.0, -3.5), Vec3::new(-3.0, 0.0, 2.0)] {
-        let mut z = Zombie::new(0.0, 5);
+    for (start, seed) in [Vec3::new(6.0, 0.0, -6.0), Vec3::new(5.0, 0.0, -3.5), Vec3::new(-3.0, 0.0, 2.0)].into_iter().flat_map(|s| (1..=12u32).map(move |k| (s, k * 7919))) {
+        let mut z = Zombie::new(0.0, seed);
         let mut body = Body::at(start);
         z.hurt(1.0, false, false, player);
         let mut up = false;
@@ -121,7 +121,7 @@ fn it_lines_up_with_stairs_it_comes_at_from_the_side() {
             run(&mut z, &mut body, &s, Some(&nav), Some(player), &[], 0.5);
             up |= body.pos.y > top - 0.1;
         }
-        assert!(up, "from {start:?} it never got up: stuck at {:?}", body.pos);
+        assert!(up, "from {start:?}, walking {:.1}, it never got up: stuck at {:?}", z.gait.walk, body.pos);
     }
 }
 
@@ -190,14 +190,16 @@ fn it_does_not_drop_off_what_is_too_high() {
     s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 5.0, 0.0)));
     let nav = NavGrid::build(&s, capsule(false));
     let (top, below) = (Vec3::new(0.0, 5.0, -1.0), Vec3::new(0.0, 0.0, 1.5));
-    assert!(nav.path(top, below).is_none(), "jumped 5 m");
+    // (The way found goes as near as it can: the edge, up top.)
+    let stays = |route: Option<Vec<Vec3>>, y: f64| route.is_some_and(|r| r.iter().all(|p| (p.y - y).abs() < 0.5));
+    assert!(stays(nav.path(top, below), 5.0), "jumped 5 m");
     // Nor climbs back up a drop it would take.
     let mut s = floor();
     s.add(&box_tris(Vec3::new(-3.0, 0.0, -6.0), Vec3::new(3.0, 2.5, 0.0)));
     let nav = NavGrid::build(&s, capsule(false));
     let (top, below) = (Vec3::new(0.0, 2.5, -1.0), Vec3::new(0.0, 0.0, 1.5));
-    assert!(nav.path(top, below).is_some(), "wouldn't drop 2.5 m");
-    assert!(nav.path(below, top).is_none(), "climbed 2.5 m");
+    assert!(nav.path(top, below).is_some_and(|r| r.last().unwrap().y < 0.5), "wouldn't drop 2.5 m");
+    assert!(stays(nav.path(below, top), 0.0), "climbed 2.5 m");
 }
 
 #[test]
@@ -273,14 +275,15 @@ fn a_snarl_brings_the_others_near_it() {
     let mut seer = Zombie::new(0.0, 7);
     let body = Body::at(Vec3::ZERO);
     let player = Vec3::new(0.0, 0.0, -10.0);
-    let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[] };
-    let seen = seer.think(&body, &senses, STEP).alert.expect("a snarl");
+    let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX) };
+    // (It looks about a few times a second: give it a moment.)
+    let seen = (0..10).find_map(|_| seer.think(&body, &senses, STEP).alert).expect("a snarl");
     let snarls = [(body.pos, seen)];
     // One near it, facing away from the player: it comes to look...
     let listen = |at: Vec3| {
         let mut z = Zombie::new(std::f64::consts::PI, 9);
         let b = Body::at(at);
-        let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &snarls };
+        let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &snarls, searches: &std::cell::Cell::new(u32::MAX) };
         z.think(&b, &senses, STEP);
         z.state
     };

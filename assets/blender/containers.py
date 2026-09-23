@@ -4,7 +4,9 @@ CONTAINER_Car, CONTAINER_Cage) standing on its origin with its front (the
 side it's searched from) facing +Y, for the game to set down where it likes;
 and each again as it's left once searched (CONTAINER_*_Open): the crate's
 lid off and leant against it, the locker's door and the cage's swung wide,
-the car's boot up.
+the car's boot up. And each as the game bumps into it (CONTAINER_*_Hull): a
+few plain boxes, never drawn, so a crowd pressing round one, or a look
+across it, meets a dozen faces rather than hundreds.
 Every face is solid to the game: the cage's bars stop bodies but let shots
 through their gaps.
 
@@ -279,12 +281,40 @@ def cage(opened):
     p.finish()
 
 
+def hull(name, boxes, turn=None):
+    """`boxes` (corner pairs) as one object, turned by `turn` if given."""
+    p = Part(name + "_Hull")
+    for lo, hi in boxes:
+        p.box(lo, hi, STEEL_DARK)
+    if turn is not None:
+        for v in p.bm.verts:
+            v.co = turn @ v.co
+    p.finish()
+
+
+def hulls():
+    hull("CONTAINER_Crate", [((-0.5, -0.35, 0.0), (0.5, 0.35, 0.62))])
+    hull("CONTAINER_Locker", [((-0.3, -0.25, 0.0), (0.3, 0.27, 1.92))])
+    lean = Matrix.Rotation(math.radians(-2.5), 4, "X") @ Matrix.Rotation(math.radians(-1.5), 4, "Y")
+    hull("CONTAINER_Car", [((-2.2, -0.875, 0.05), (2.2, 0.875, 0.82)), ((-1.0, -0.78, 0.82), (0.75, 0.78, 1.32))], lean)
+    w, d, h, t = 1.6, 1.0, 2.0, 0.05
+    hull("CONTAINER_Cage", [
+        ((-w / 2, -d / 2, 0.0), (w / 2, d / 2, t)),
+        ((-w / 2, -d / 2, 0.0), (w / 2, -d / 2 + t, h)),
+        ((-w / 2, d / 2 - t, 0.0), (w / 2, d / 2 + 0.03, h)),
+        ((-w / 2, -d / 2, 0.0), (-w / 2 + t, d / 2, h)),
+        ((w / 2 - t, -d / 2, 0.0), (w / 2, d / 2, h)),
+        ((-w / 2, -d / 2, h - t), (w / 2, d / 2, h)),
+    ])
+
+
 def main():
     for opened in (False, True):
         crate(opened)
         locker(opened)
         car(opened)
         cage(opened)
+    hulls()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"containers: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")
 

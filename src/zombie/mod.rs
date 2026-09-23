@@ -24,6 +24,9 @@ const LIE_FOR: f64 = 20.0;
 const SINK_FOR: f64 = 3.0;
 /// It keeps this far from the player's middle (their bodies don't pass).
 const PERSONAL: f64 = 0.65;
+/// How many of the dead may find their way (a search of the grid) in one
+/// step; the rest follow the way they have a step or two longer.
+const SEARCHES: u32 = 8;
 /// How hard the dead keep out of each other's way, per metre too close.
 const ELBOW: f64 = 3.0;
 /// How hard a shot and a blow shove one, m/s (a blow sends it about a
@@ -60,7 +63,8 @@ pub struct Horde {
 fn think(mut dead: Query<(&mut Zombie, &mut Body), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
     let player = players.iter().next().map(|b| b.pos);
     let heard = std::mem::take(&mut *noises);
-    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &heard.shots, alerts: &heard.snarls };
+    let searches = std::cell::Cell::new(SEARCHES);
+    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &heard.shots, alerts: &heard.snarls, searches: &searches };
     for (mut z, mut body) in &mut dead {
         let mut intent = z.think(&body, &senses, STEP);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
@@ -256,6 +260,8 @@ pub fn noise(world: &mut World, at: Vec3, range: f64) {
     world.resource_mut::<Noises>().shots.push((at, range));
 }
 
+#[cfg(test)]
+mod bench;
 #[cfg(test)]
 mod model_tests;
 #[cfg(test)]

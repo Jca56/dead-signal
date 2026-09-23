@@ -9,7 +9,10 @@ use lntrn_core::{log_error, log_info};
 use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
+use std::time::Instant;
+
 use crate::assets;
+use crate::perf::{Perf, Phase};
 use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::death::After;
@@ -76,6 +79,7 @@ pub struct DeadSignal {
     run: Run,
     /// Every kind of thing's picture, for the inventory.
     icons: Icons,
+    perf: Perf,
     screen: Screen,
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
@@ -100,6 +104,7 @@ impl DeadSignal {
             combat: Combat::new(),
             run: Run::default(),
             icons: Icons::default(),
+            perf: Perf::default(),
             screen: Screen::Title,
             title_menu: SideMenu::new("DEAD SIGNAL", &[("PLAY", TitleItem::Play), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
@@ -276,7 +281,10 @@ impl Host for DeadSignal {
         // The world stops for the dead: nothing moves or makes a sound while
         // they fall and read their numbers.
         self.game.simulating = self.screen == Screen::Run && !self.paused && self.run.death.is_none();
+        self.perf.frame(ui.state.now, self.game.simulating);
+        let started = Instant::now();
         self.game.tick(ui.state.now);
+        self.perf.done(Phase::Sim, started);
         let clock = self.game.clock();
 
         if ui.state.take_key(|k| k.key == Key::F(11)).is_some() {
@@ -290,7 +298,12 @@ impl Host for DeadSignal {
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
                 None => {}
             },
-            Screen::Run => self.run_frame(ui, cx, active),
+            Screen::Run => {
+                let started = Instant::now();
+                self.run_frame(ui, cx, active);
+                self.perf.done(Phase::Play, started);
+                self.perf.zombies(zombie::alive(&mut self.game.world));
+            }
         }
         match self.step_fade(clock.dt) {
             Some(Then::Show(screen)) => self.show(screen, cx),
@@ -334,11 +347,11 @@ impl AppHost for DeadSignal {
                     let name = containers::model_name(source);
                     let open = format!("{name}_Open");
                     let find = |n: &str| props.iter().find(|p| p.name == n);
-                    if let Some(p) = find(name) {
-                        shapes.insert(source, p.triangles.clone());
-                        if let (Some(shut), Some(open)) = (p.mesh, find(&open).and_then(|o| o.mesh)) {
-                            meshes.insert(source, (shut, open));
-                        }
+                    if let Some(hull) = find(&format!("{name}_Hull")) {
+                        shapes.insert(source, hull.triangles.clone());
+                    }
+                    if let (Some(shut), Some(open)) = (find(name).and_then(|p| p.mesh), find(&open).and_then(|o| o.mesh)) {
+                        meshes.insert(source, (shut, open));
                     }
                 }
                 let placed = containers::set_down(&mut self.game.world.resource_mut::<Solid>().0, &shapes);
@@ -384,6 +397,7 @@ impl AppHost for DeadSignal {
     }
 
     fn render<'f>(&'f mut self, cx: &mut RenderCx<'f, '_>) {
+        let started = Instant::now();
         let Some(renderer) = self.renderer.as_mut() else { return };
         let mut things = self.game.world.query::<(&Model, &Placed, &Look)>();
         for (model, placed, look) in things.iter(&self.game.world) {
@@ -408,5 +422,6 @@ impl AppHost for DeadSignal {
             }
         }
         renderer.render(cx, &self.camera, &style::AIR, time);
+        self.perf.done(Phase::Render, started);
     }
 }

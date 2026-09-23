@@ -1,22 +1,23 @@
 //! How many of the dead are about: a run starts with a crowd already out
-//! there, and every kill brings another into the budget, up to a horde. Whenever fewer are up than the budget allows, a new one comes in
+//! there, and every kill brings two more into the budget, up to a horde. Whenever fewer are up than the budget allows, a new one comes in
 //! from out of sight, one at a time.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::Vec3;
 
-/// How many a run starts with, and the most there will ever be (each kill
-/// brings one more).
-pub const FIRST: usize = 16;
-pub const MOST: usize = 40;
+/// How many a run starts with, the most there will ever be, and how many
+/// more each kill brings.
+pub const FIRST: usize = 32;
+pub const MOST: usize = 80;
+const PER_KILL: usize = 2;
 /// Seconds between newcomers, and before trying again when there was
 /// nowhere out of sight to put one.
-const TRICKLE: f64 = 1.5;
+const TRICKLE: f64 = 0.75;
 const RETRY: f64 = 0.25;
 
 /// How many may be up at once, `kills` into a run.
 pub fn budget(kills: u32) -> usize {
-    (FIRST + kills as usize).min(MOST)
+    (FIRST + kills as usize * PER_KILL).min(MOST)
 }
 
 #[derive(Default)]
@@ -59,7 +60,7 @@ mod tests {
     #[test]
     fn the_budget_grows_with_kills_and_stops_at_a_crowd() {
         assert_eq!(budget(0), FIRST);
-        assert_eq!(budget(1), FIRST + 1);
+        assert_eq!(budget(1), FIRST + 2);
         assert_eq!(budget(24), MOST);
         assert_eq!(budget(500), MOST);
     }

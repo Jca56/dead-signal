@@ -15,6 +15,7 @@ mod icons;
 mod items;
 mod loot;
 mod menu;
+mod perf;
 mod player;
 mod render;
 mod run;

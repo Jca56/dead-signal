@@ -158,8 +158,9 @@ impl Solids {
     /// The first solid along the ray from `from` in unit direction `dir`,
     /// within `max` metres. Walks the grid cell by cell along the ground
     /// plan and stops at the first cell that holds a hit.
+    /// (A triangle over more than one cell may be tried twice: that costs
+    /// less than keeping count.)
     pub fn raycast(&self, from: Vec3, dir: Vec3, max: f64) -> Option<RayHit> {
-        let mut seen = std::collections::HashSet::new();
         let mut best: Option<RayHit> = None;
         let (mut gx, mut gz) = (cell_of(from.x), cell_of(from.z));
         let step = |d: f64| if d > 0.0 { 1 } else { -1 };
@@ -176,9 +177,6 @@ impl Solids {
         loop {
             if let Some(list) = self.cells.get(&(gx, gz)) {
                 for &i in list {
-                    if !seen.insert(i) {
-                        continue;
-                    }
                     let tri = &self.tris[i as usize];
                     if let Some(t) = ray_triangle(from, dir, tri)
                         && t <= max
