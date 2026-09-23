@@ -11,9 +11,21 @@ pub enum Source {
     Locker,
     Car,
     Cage,
+    Fridge,
+    /// A chest of drawers.
+    Cabinet,
+    Desk,
+    Wardrobe,
+    /// A store's shelving.
+    Shelf,
+    /// A store's till counter.
+    Register,
     /// On one of the dead, sometimes.
     Corpse,
 }
+
+/// Every container there is (not the dead).
+pub const CONTAINERS: [Source; 10] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register];
 
 /// One line of a table: what, how likely against the rest, how many.
 type Line = (Kind, u32, (u32, u32));
@@ -39,16 +51,17 @@ const LOCKER: &[Line] = &[
     (Kind::Ring, 2, (1, 1)),
 ];
 
+// A map has a score of wrecks: their gold is rare.
 const CAR: &[Line] = &[
-    (Kind::Fuel, 18, (1, 1)),
-    (Kind::Battery, 14, (1, 1)),
-    (Kind::Cash, 15, (1, 3)),
-    (Kind::Beans, 10, (1, 1)),
-    (Kind::Water, 10, (1, 1)),
-    (Kind::Rounds, 10, (8, 16)),
-    (Kind::Watch, 6, (1, 1)),
-    (Kind::Radio, 6, (1, 1)),
-    (Kind::Chain, 2, (1, 1)),
+    (Kind::Fuel, 36, (1, 1)),
+    (Kind::Battery, 28, (1, 1)),
+    (Kind::Cash, 30, (1, 3)),
+    (Kind::Beans, 20, (1, 1)),
+    (Kind::Water, 20, (1, 1)),
+    (Kind::Rounds, 20, (8, 16)),
+    (Kind::Watch, 12, (1, 1)),
+    (Kind::Radio, 12, (1, 1)),
+    (Kind::Chain, 1, (1, 1)),
 ];
 
 const CAGE: &[Line] = &[
@@ -60,6 +73,58 @@ const CAGE: &[Line] = &[
     (Kind::Radio, 8, (1, 1)),
     (Kind::Battery, 6, (1, 1)),
     (Kind::GoldBar, 6, (1, 1)),
+];
+
+const FRIDGE: &[Line] = &[
+    (Kind::Water, 35, (1, 1)),
+    (Kind::Beans, 25, (1, 1)),
+    (Kind::Pills, 8, (1, 1)),
+];
+
+const CABINET: &[Line] = &[
+    (Kind::Bandage, 20, (1, 2)),
+    (Kind::Rounds, 15, (6, 12)),
+    (Kind::Pills, 12, (1, 1)),
+    (Kind::Cash, 12, (1, 2)),
+    (Kind::Beans, 10, (1, 1)),
+    (Kind::Watch, 5, (1, 1)),
+];
+
+// Houses are full of desks and wardrobes: their gold is rarer than a
+// locker's.
+const DESK: &[Line] = &[
+    (Kind::Cash, 50, (1, 3)),
+    (Kind::Rounds, 30, (6, 12)),
+    (Kind::Pills, 16, (1, 1)),
+    (Kind::Watch, 20, (1, 1)),
+    (Kind::Radio, 16, (1, 1)),
+    (Kind::Chain, 1, (1, 1)),
+];
+
+const WARDROBE: &[Line] = &[
+    (Kind::Cash, 36, (1, 2)),
+    (Kind::Rounds, 30, (8, 16)),
+    (Kind::Bandage, 24, (1, 2)),
+    (Kind::Watch, 16, (1, 1)),
+    (Kind::Medkit, 10, (1, 1)),
+    (Kind::Ring, 1, (1, 1)),
+    (Kind::Chain, 1, (1, 1)),
+];
+
+const SHELF: &[Line] = &[
+    (Kind::Beans, 30, (1, 1)),
+    (Kind::Water, 25, (1, 1)),
+    (Kind::Bandage, 15, (1, 3)),
+    (Kind::Pills, 8, (1, 1)),
+    (Kind::Rounds, 8, (8, 16)),
+    (Kind::Fuel, 3, (1, 1)),
+    (Kind::Battery, 2, (1, 1)),
+];
+
+const REGISTER: &[Line] = &[
+    (Kind::Cash, 60, (1, 5)),
+    (Kind::Watch, 5, (1, 1)),
+    (Kind::Rounds, 10, (8, 16)),
 ];
 
 const CORPSE: &[Line] = &[
@@ -81,6 +146,12 @@ impl Source {
             Source::Locker => LOCKER,
             Source::Car => CAR,
             Source::Cage => CAGE,
+            Source::Fridge => FRIDGE,
+            Source::Cabinet => CABINET,
+            Source::Desk => DESK,
+            Source::Wardrobe => WARDROBE,
+            Source::Shelf => SHELF,
+            Source::Register => REGISTER,
             Source::Corpse => CORPSE,
         }
     }
@@ -98,6 +169,12 @@ impl Source {
             Source::Locker => (2, 3),
             Source::Car => (2, 4),
             Source::Cage => (3, 4),
+            Source::Fridge => (1, 2),
+            Source::Cabinet => (1, 2),
+            Source::Desk => (1, 2),
+            Source::Wardrobe => (1, 2),
+            Source::Shelf => (1, 3),
+            Source::Register => (1, 1),
             Source::Corpse => (1, 1),
         }
     }
@@ -109,6 +186,12 @@ impl Source {
             Source::Locker => (3, 4),
             Source::Car => (6, 3),
             Source::Cage => (4, 4),
+            Source::Fridge => (3, 4),
+            Source::Cabinet => (4, 2),
+            Source::Desk => (4, 2),
+            Source::Wardrobe => (4, 4),
+            Source::Shelf => (5, 3),
+            Source::Register => (3, 2),
             Source::Corpse => (2, 2),
         }
     }
@@ -119,6 +202,12 @@ impl Source {
             Source::Locker => "LOCKER",
             Source::Car => "CAR TRUNK",
             Source::Cage => "SUPPLY CAGE",
+            Source::Fridge => "FRIDGE",
+            Source::Cabinet => "CHEST OF DRAWERS",
+            Source::Desk => "DESK",
+            Source::Wardrobe => "WARDROBE",
+            Source::Shelf => "STORE SHELF",
+            Source::Register => "CASH REGISTER",
             Source::Corpse => "REMAINS",
         }
     }
@@ -130,6 +219,12 @@ impl Source {
             Source::Locker => 2.0,
             Source::Car => 2.5,
             Source::Cage => 3.0,
+            Source::Fridge => 1.5,
+            Source::Cabinet => 1.5,
+            Source::Desk => 1.5,
+            Source::Wardrobe => 2.0,
+            Source::Shelf => 2.0,
+            Source::Register => 1.5,
             Source::Corpse => 0.0,
         }
     }
@@ -170,7 +265,7 @@ mod tests {
     #[test]
     fn every_table_draws_what_it_lists_and_fills_its_grid() {
         let mut dice = Dice(0x1234_5678);
-        for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Corpse] {
+        for source in CONTAINERS.into_iter().chain([Source::Corpse]) {
             let mut seen = std::collections::HashSet::new();
             for _ in 0..300 {
                 let g = fill(source, &mut dice);
@@ -187,13 +282,17 @@ mod tests {
 
     #[test]
     fn epic_things_are_rare_over_a_whole_run() {
-        // A long run: every container on the map, and 60 kills' drops.
+        // A long run: a town's houses and stores searched through, the
+        // places out of town, and 60 kills' drops.
         let mut dice = Dice(0xBEEF);
         let mut epics = 0u32;
         let runs = 400;
+        let run: Vec<(Source, u32)> = vec![(Source::Crate, 15), (Source::Car, 20), (Source::Cage, 1), (Source::Locker, 4), (Source::Fridge, 12), (Source::Cabinet, 20), (Source::Desk, 10), (Source::Wardrobe, 16), (Source::Shelf, 12), (Source::Register, 3)];
         for _ in 0..runs {
-            for source in [Source::Crate, Source::Crate, Source::Crate, Source::Locker, Source::Locker, Source::Car, Source::Car, Source::Cage] {
-                epics += fill(source, &mut dice).items.iter().filter(|i| i.stack.kind.def().rarity >= super::super::Rarity::Epic).count() as u32;
+            for &(source, n) in &run {
+                for _ in 0..n {
+                    epics += fill(source, &mut dice).items.iter().filter(|i| i.stack.kind.def().rarity >= super::super::Rarity::Epic).count() as u32;
+                }
             }
             for _ in 0..60 {
                 if dice.unit() < CORPSE_CHANCE {
@@ -202,7 +301,7 @@ mod tests {
             }
         }
         let each = f64::from(epics) / f64::from(runs);
-        assert!((0.4..1.8).contains(&each), "{each:.2} epic-or-better things a run");
+        assert!((0.8..2.4).contains(&each), "{each:.2} epic-or-better things a run");
     }
 
     #[test]

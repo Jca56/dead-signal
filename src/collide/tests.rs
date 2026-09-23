@@ -60,7 +60,7 @@ fn a_ceiling_pushes_down() {
 
 #[test]
 fn closest_points_agree_with_brute_force() {
-    let t = Tri { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(2.0, 0.0, 0.0), c: Vec3::new(0.0, 0.0, 2.0), normal: Vec3::Y, surface: Surface::Stone, off: false };
+    let t = Tri { a: Vec3::new(0.0, 0.0, 0.0), b: Vec3::new(2.0, 0.0, 0.0), c: Vec3::new(0.0, 0.0, 2.0), normal: Vec3::Y, surface: Surface::Stone, off: false, ghost: false };
     // Straight above the middle, off past a corner, and crossing.
     for (p, q, want) in [
         (Vec3::new(0.5, 1.0, 0.5), Vec3::new(0.5, 3.0, 0.5), 1.0),
@@ -93,4 +93,18 @@ fn a_ray_finds_the_nearest_solid_across_the_grid() {
     s.add_as(&box_tris(Vec3::new(40.0, 0.0, -41.0), Vec3::new(41.0, 3.0, -40.0)), Surface::Dirt);
     let hit = s.raycast(eye, d, 200.0).expect("the far block");
     assert_eq!(hit.surface, Surface::Dirt);
+}
+
+#[test]
+fn a_window_barrier_stops_a_body_but_not_a_ray() {
+    let mut s = floor();
+    // A pane across -Z, 2 m off, from the floor up.
+    s.add_barrier(&box_tris(Vec3::new(-2.0, 0.0, -2.05), Vec3::new(2.0, 2.5, -1.95)));
+    let eye = Vec3::new(0.0, 1.6, 0.0);
+    assert!(s.raycast(eye, Vec3::new(0.0, 0.0, -1.0), 10.0).is_none(), "seen and shot through");
+    let body = Capsule { radius: 0.35, height: 1.8 };
+    assert!(!s.fits(body, Vec3::new(0.0, 0.0, -2.0)), "stood in it");
+    let mut feet = Vec3::new(0.0, 0.0, -1.8);
+    let touched = s.resolve(body, &mut feet);
+    assert!(touched.wall && feet.z > -1.7, "walked into it: {feet:?}");
 }

@@ -64,9 +64,14 @@ pub struct Site {
 }
 
 impl Site {
+    /// A site's plot, squared to the walking grid (so what's built on it
+    /// lines up with where the dead can walk): turned a whole quarter,
+    /// its middle on a whole metre.
     fn new(kind: Kind, centre: Vec2, yaw: f64) -> Self {
         let (half, shoulder) = kind.size();
-        Self { kind, name: kind.label(), plot: Plot::new(centre, yaw, half, shoulder) }
+        let quarter = (yaw / std::f64::consts::FRAC_PI_2).round();
+        let centre = Vec2::new(centre.x.round(), centre.y.round());
+        Self { kind, name: kind.label(), plot: Plot::new(centre, quarter * std::f64::consts::FRAC_PI_2, half, shoulder) }
     }
 
     /// Where its road comes to it: the middle of its front edge, and a
@@ -132,13 +137,18 @@ pub fn plan(dice: &mut Dice, natural: &mut Natural) -> Plan {
 }
 
 /// The gas station: beside the highway (`line`, its points), well out of
-/// town, facing the road.
+/// town, facing the road (where it runs near enough square to the grid
+/// for a plot squared to it to face it).
 pub fn place_gas(dice: &mut Dice, plan: &mut Plan, line: &[Vec2]) {
     let town = plan.sites[0].plot.centre;
+    let square = |i: usize| {
+        let d = line[i + 1] - line[i - 1];
+        d.x.abs().min(d.y.abs()) < 0.3 * d.x.abs().max(d.y.abs())
+    };
     let spots: Vec<usize> = (2..line.len().saturating_sub(2))
         .filter(|&i| {
             let d = (line[i] - town).length();
-            d > 150.0 && d < 230.0 && line[i].x.abs().max(line[i].y.abs()) < EDGE - 50.0
+            d > 150.0 && d < 230.0 && line[i].x.abs().max(line[i].y.abs()) < EDGE - 50.0 && square(i)
         })
         .collect();
     if spots.is_empty() {
@@ -147,6 +157,8 @@ pub fn place_gas(dice: &mut Dice, plan: &mut Plan, line: &[Vec2]) {
     let i = spots[dice.next() as usize % spots.len()];
     let dir = (line[i + 1] - line[i - 1]) * (1.0 / (line[i + 1] - line[i - 1]).length().max(1e-9));
     let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
+    // Square to the grid: straight out from the road's nearest axis.
+    let dir = if dir.x.abs() > dir.y.abs() { Vec2::new(dir.x.signum(), 0.0) } else { Vec2::new(0.0, dir.y.signum()) };
     let out = Vec2::new(-dir.y, dir.x) * side;
     let (half, _) = Kind::Gas.size();
     let centre = line[i] + out * (super::roads::Kind::Highway.half_width() + 3.0 + half.y);

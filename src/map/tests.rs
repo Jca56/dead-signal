@@ -5,6 +5,7 @@ use lntrn_math::{Vec2, Vec3};
 
 use super::roads::Network;
 use super::scatter::Scenery;
+use super::building;
 use super::sites::Kind as SiteKind;
 use super::*;
 use crate::testing::built_map;
@@ -57,7 +58,7 @@ fn maps_are_laid_out_whole_and_sound() {
             assert!(far > 160.0, "seed {seed}: the {way:?} is only {far:.0} m from the spawn");
         }
         // Nothing grows on a road, a plot, or where a container stands.
-        for p in map.scenery.iter().filter(|p| !matches!(p.what, Scenery::Pole | Scenery::Tower | Scenery::Beacon)) {
+        for p in map.scenery.iter().filter(|p| !matches!(p.what, Scenery::Pole | Scenery::Tower | Scenery::Beacon | Scenery::Furn(_))) {
             let at = Vec2::new(p.at.x, p.at.z);
             assert!(network.off_road(at) > 3.0, "seed {seed}: a {:?} on a road at {at:?}", p.what);
             assert!(map.sites.iter().all(|s| s.plot.outside(at) > 2.0), "seed {seed}: a {:?} on a plot at {at:?}", p.what);
@@ -177,3 +178,53 @@ fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     assert!(walked > 20.0, "walked only {walked:.1} m");
 }
 
+
+#[test]
+fn every_plot_is_square_to_the_walking_grid() {
+    for seed in SEEDS {
+        for site in generate(seed).sites {
+            let q = site.plot.yaw / std::f64::consts::FRAC_PI_2;
+            assert!((q - q.round()).abs() < 1e-9, "seed {seed}: the {:?} is turned {}", site.kind, site.plot.yaw);
+            let c = site.plot.centre;
+            assert!(c.x.fract() == 0.0 && c.y.fract() == 0.0, "seed {seed}: the {:?} is at {c:?}", site.kind);
+        }
+    }
+}
+
+/// Every room of every building the spawn leads to (upstairs too), and
+/// every container beside somewhere it does.
+fn all_reached(b: &build::Built) {
+    let (spawn, _) = b.map.spawn;
+    let mut rooms = 0;
+    for bld in b.map.buildings.iter().filter(|x| x.plan.kind != building::plan::Kind::Shell) {
+        for r in &bld.plan.rooms {
+            let y = f64::from(r.storey) * building::plan::STOREY;
+            let ok = (r.x0..r.x1).any(|x| {
+                (r.z0..r.z1).any(|z| {
+                    let p = bld.world(Vec3::new(f64::from(x) + 0.5, y, f64::from(z) + 0.5));
+                    b.nav.height_at(p).is_some_and(|h| (h - p.y).abs() < 0.3) && b.nav.connects(spawn, p)
+                })
+            });
+            assert!(ok, "seed {}: a {:?} on storey {} of the {:?} at {:?} can't be got to", b.map.seed, r.use_, r.storey, bld.plan.kind, bld.origin);
+            rooms += 1;
+        }
+    }
+    assert!(rooms > 40, "seed {}: {rooms} rooms in town", b.map.seed);
+    for c in &b.containers {
+        let mid = (c.lo + c.hi) * 0.5;
+        let reach = (c.hi - c.lo).length() * 0.5 + 1.2;
+        let ok = (0..16).map(|k| f64::from(k) * std::f64::consts::PI / 8.0).any(|a| {
+            let p = Vec3::new(mid.x + a.cos() * reach, c.lo.y, mid.z + a.sin() * reach);
+            b.nav.height_at(p).is_some_and(|h| (h - p.y).abs() < 0.4) && b.nav.connects(spawn, p)
+        });
+        assert!(ok, "seed {}: the {:?} at {mid:?} can't be got to", b.map.seed, c.source);
+    }
+}
+
+#[test]
+fn every_room_and_container_in_town_can_be_got_to() {
+    all_reached(built_map());
+    for seed in [11, 222, 3333, 44_444] {
+        all_reached(&build::build(seed, &crate::testing::kit(), &|_| {}));
+    }
+}

@@ -200,9 +200,15 @@ pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3) -> bool {
         for _ in 0..200 {
             let a = rand() * std::f64::consts::TAU;
             let r = SPAWN_NEAR + (SPAWN_FAR - SPAWN_NEAR) * rand();
-            let p = Vec3::new(eye.x + a.cos() * r, 0.0, eye.z + a.sin() * r);
+            // Near the player's own level: on the ground, or a floor of a
+            // house.
+            let p = Vec3::new(eye.x + a.cos() * r, eye.y - 1.6, eye.z + a.sin() * r);
             let Some(h) = nav.height_at(p) else { continue };
             let feet = Vec3::new(p.x, h, p.z);
+            // Somewhere the player can be got to from (not a store's roof).
+            if !nav.connects(feet, eye - Vec3::new(0.0, 1.6, 0.0)) {
+                continue;
+            }
             let chest = feet + Vec3::new(0.0, 1.2, 0.0) - eye;
             let dist = chest.length();
             let dir = chest * (1.0 / dist);

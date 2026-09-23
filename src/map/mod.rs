@@ -5,12 +5,14 @@
 //! and drawable, off the main thread, while the loading screen shows.
 
 pub mod build;
+pub mod building;
 pub mod noise;
 pub mod roads;
 pub mod scatter;
 pub mod screen;
 pub mod sites;
 pub mod terrain;
+pub mod town;
 
 use lntrn_math::{Vec2, Vec3};
 
@@ -45,6 +47,7 @@ pub struct Map {
     pub containers: Vec<(Source, Spot)>,
     pub pickups: Vec<crate::items::Spot>,
     pub scenery: Vec<Piece>,
+    pub buildings: Vec<building::Building>,
     /// How thick the forest grows where.
     pub forest: scatter::Forest,
 }
@@ -93,9 +96,15 @@ pub fn generate(seed: u32) -> Map {
     let shaped = Shaped { natural: &natural, plots: &plots };
     let in_plot = |p: Vec2| plots.iter().map(|pl| (pl.weight(p), pl.height)).filter(|(w, _)| *w > 0.0).max_by(|a, b| a.0.total_cmp(&b.0));
 
-    // The side roads, each from the nearest road already laid to its
-    // place's door (the crash has none; the gas station is on the highway).
+    // The town's cross streets; then the side roads, each from the nearest
+    // road already laid to its place's door (the crash has none; the gas
+    // station is on the highway).
     let mut laid = vec![Road { kind: roads::Kind::Highway, points: roads::profile(roads::Kind::Highway, &highway, |x, z| shaped.height(x, z), in_plot, None) }];
+    let town = town::lay_out(&mut dice, &plan.sites[0]);
+    for line in &town.streets {
+        let points = roads::profile(roads::Kind::Paved, line, |x, z| shaped.height(x, z), in_plot, Some(&Network::new(laid.clone())));
+        laid.push(Road { kind: roads::Kind::Paved, points });
+    }
     for site in &plan.sites {
         let kind = match site.kind {
             sites::Kind::Town | sites::Kind::Gas | sites::Kind::Crash => continue,
@@ -151,14 +160,22 @@ pub fn generate(seed: u32) -> Map {
     }
     let spawn = scatter::spawn_point(&mut dice, &field, &network, &plots, &exits);
 
-    // What's lying about, and the forest round it all.
-    let things = scatter::things(&mut dice, &field, &network, &plan.sites, &exits, out_end);
+    // What's lying about (and what's in the buildings), and the forest
+    // round it all.
+    let mut things = scatter::things(&mut dice, &field, &network, &plan.sites, &exits, out_end);
+    things.containers.extend(town.cars);
+    for b in &town.buildings {
+        let inside = building::furnish::furnish(b, &mut Dice(b.seed.rotate_left(9) | 1));
+        scenery.extend(inside.pieces);
+        things.containers.extend(inside.containers);
+        things.pickups.extend(inside.pickups);
+    }
     let mut keep_out: Vec<(Vec2, f64)> = exits.iter().map(|(_, (x, z, _, _), _, r)| (Vec2::new(*x, *z), r.max(6.0) + 3.0)).collect();
     keep_out.push((Vec2::new(spawn.0.x, spawn.0.z), 10.0));
     keep_out.extend(things.containers.iter().map(|(_, (x, z, _, _))| (Vec2::new(*x, *z), 4.0)));
     scenery.extend(scatter::forest(seed, &forest, &field, &network, &plots, &plan.fields, &keep_out));
     scenery.extend(scatter::poles(&field, &network, &plots));
-    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, forest }
+    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings: town.buildings, forest }
 }
 
 /// The nearest point to `p` on any of `roads` (flat).

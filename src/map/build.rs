@@ -14,11 +14,13 @@ use lntrn_math::{Vec2, Vec3};
 use super::roads::{self, Kind as RoadKind, Network, Road};
 use super::scatter::Scenery;
 use super::sites::Kind as SiteKind;
+use super::building::shape::{self, Stuff};
 use super::terrain::hash;
 use super::{HALF, Map};
 use crate::collide::{Solids, Surface};
 use crate::containers::Placing;
 use crate::exits::{self, Exits};
+use crate::loot::Dice;
 use crate::loot::tables::Source;
 use crate::render::Vertex;
 use crate::zombie::nav::NavGrid;
@@ -164,6 +166,33 @@ pub fn build(seed: u32, kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
             bucket(tri, colour);
         }
     }
+    // The buildings, block by block.
+    let mut by_surface: HashMap<Surface, Vec<[Vec3; 3]>> = HashMap::new();
+    let mut barriers = Vec::new();
+    for (k, b) in map.buildings.iter().enumerate() {
+        let shape = shape::shape(&b.plan, &mut Dice(b.seed | 1));
+        for (i, block) in shape.blocks.iter().enumerate() {
+            let (p, q) = (b.world(block.lo), b.world(block.hi));
+            let tris = box_tris(p.min(q), p.max(q));
+            match block.stuff {
+                Stuff::Ghost => barriers.extend(tris),
+                Stuff::Solid(surface) => {
+                    for (f, t) in tris.iter().enumerate() {
+                        // Each face (two triangles) a shade of its own.
+                        bucket(*t, shade(block.colour, 0.93 + 0.14 * hash(seed ^ k as u32, i, f / 2, 21)));
+                    }
+                    by_surface.entry(surface).or_default().extend(tris);
+                }
+            }
+        }
+        for (i, (t, colour)) in shape.roof.iter().enumerate() {
+            let t = t.map(|p| b.world(p));
+            bucket(t, shade(*colour, 0.93 + 0.14 * hash(seed ^ k as u32, i, 0, 22)));
+            by_surface.entry(Surface::Wood).or_default().push(t);
+        }
+    }
+    solids.add_barrier(&barriers);
+
     let chunks = buckets
         .into_values()
         .map(|vertices| {
@@ -178,7 +207,6 @@ pub fn build(seed: u32, kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
         .collect();
 
     stage(Stage::Forest);
-    let mut by_surface: HashMap<Surface, Vec<[Vec3; 3]>> = HashMap::new();
     for piece in &map.scenery {
         if piece.at.x.abs().max(piece.at.z.abs()) > HALF + 10.0 {
             continue;
@@ -289,6 +317,20 @@ fn ground_colour(map: &Map, network: &Network, tri: [Vec3; 3], luck: f64) -> Rgb
         }
     }
     shade(c, 0.9 + 0.2 * luck)
+}
+
+/// A box's twelve triangles, each face outwards, from its corners.
+fn box_tris(lo: Vec3, hi: Vec3) -> Vec<[Vec3; 3]> {
+    let p = |x: bool, y: bool, z: bool| Vec3::new(if x { hi.x } else { lo.x }, if y { hi.y } else { lo.y }, if z { hi.z } else { lo.z });
+    let quads = [
+        [p(false, false, false), p(true, false, false), p(true, false, true), p(false, false, true)],
+        [p(false, true, false), p(false, true, true), p(true, true, true), p(true, true, false)],
+        [p(false, false, false), p(false, true, false), p(true, true, false), p(true, false, false)],
+        [p(false, false, true), p(true, false, true), p(true, true, true), p(false, true, true)],
+        [p(false, false, false), p(false, false, true), p(false, true, true), p(false, true, false)],
+        [p(true, false, false), p(true, true, false), p(true, true, true), p(true, false, true)],
+    ];
+    quads.iter().flat_map(|q| [[q[0], q[1], q[2]], [q[0], q[2], q[3]]]).collect()
 }
 
 /// A road's strip: its top (what's walked on) and the rest (the skirt down

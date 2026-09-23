@@ -32,6 +32,7 @@ const HIGHWAY: Rgb = [0.72, 0.30, 0.18];
 const PAVED: Rgb = [0.93, 0.89, 0.76];
 const TRACK: Rgb = [0.52, 0.40, 0.27];
 const INK: Rgb = [0.20, 0.17, 0.13];
+const ROOF: Rgb = [0.52, 0.40, 0.34];
 
 fn mix(a: Rgb, b: Rgb, t: f64) -> Rgb {
     let t = t.clamp(0.0, 1.0);
@@ -88,6 +89,19 @@ pub fn picture(map: &Map, network: &Network) -> Image {
             })
             .collect()
     });
+    // The buildings, as roofs seen from above.
+    for b in &map.buildings {
+        let f = b.footprint();
+        let (lo, hi) = f.iter().fold((Vec2::splat(f64::INFINITY), Vec2::splat(f64::NEG_INFINITY)), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
+        let (x0, y0) = to_px(lo.x, lo.y);
+        let (x1, y1) = to_px(hi.x, hi.y);
+        for j in (y0.floor().max(0.0) as usize)..(y1.ceil() as usize).min(n) {
+            for i in (x0.floor().max(0.0) as usize)..(x1.ceil() as usize).min(n) {
+                let edge = i as f64 <= x0 + 1.0 || i as f64 >= x1 - 2.0 || j as f64 <= y0 + 1.0 || j as f64 >= y1 - 2.0;
+                px[j * n + i] = if edge { INK } else { ROOF };
+            }
+        }
+    }
     let mut dot = |x: f64, z: f64, r: f64, colour: Rgb| {
         let (cx, cy) = to_px(x, z);
         let (i0, i1) = ((cx - r).floor().max(0.0) as usize, ((cx + r).ceil() as usize).min(n - 1));

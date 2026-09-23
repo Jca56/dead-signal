@@ -1,57 +1,37 @@
-Low poly FPS zombie survival.
-
-
-# Tech Stack:
-- Rust + bevy_ecs + wgpu. A good middle ground I think.
-
----
-
-# Game Feel / Scope:
-- Roguelite mixed with gritty survival and extraction shooter? Spawn as a lone survivor into a procedural map. Kill zombies for XP, collect loot and/or resources, stay alive and extract to save collected loot and XP, or die and lose everything.
-- Zombies: mostly slow shamblers with special types mixed in. Start with the basic "Shambler" then add special typese in later.
-- Weapons: Primarily guns with limited ammo. Not scarce but not overly abundant. Melee just as viable for a more hack and slash feel. 
-- Survival Systems: Start with just Health for now, other systems will come as we figure out what makes sense as we develop as things could change.
-- Solo first.
-
----
-
-# Art Direction:
-- Low poly but not just squares like Minecraft. Moody, distant fog, not enough to need a flashlight though.
-- Models: You have access to Blender on this machine to create low poly but high quality assets.
-
----
-
 # Milestone Ladder:
-  1. Window + title screen (Play / Quit)
-  2. First-person camera, mouse look, WASD, jump, ground plane
-  3. Viewmodel arms with bob and sway while walking
-  4. Simple collision against a test level
-  5. A weapon: melee swing or hitscan gun, with hit feedback
-  6. One zombie: pathing toward the player, attacking, dying
-  7. Health / HUD / death → back to the title
+
+## Phase 1: Core 🧟
+
+- [x]  1. Window + title screen (Play / Quit)
+- [x]  2. First-person camera, mouse look, WASD, jump, ground plane
+- [x]  3. Viewmodel arms with bob and sway while walking
+- [x]  4. Simple collision against a test level
+- [x]  5. A weapon: melee swing or hitscan gun, with hit feedback
+- [x]  6. One zombie: pathing toward the player, attacking, dying
+- [x]  7. Health / HUD / death → back to the title
+
+## Phase 2: Extraction Loop 🎒
+
+- [x] 8. The horde + ammo economy. Several Shamblers at once, with a spawnerthat keeps a population budget and brings them in out of sight. Retune their speed and HP since they're too slow and easy, and that only really shows with a crowd. Make the ammo reserve finite with ammo pickups, so every shot starts to matter.
+     
+- [x] 9. Loot & inventory. Containers to search (hold E on a crate, locker or car trunk), loot tables with rarities, and an inventory with limited space. Ammo, meds, and junk that's only worth something if you get it out.
+     
+- [x] 10. Extraction. Fixed exit points you have to find: a flare, a radio mast, a road out. Hold a zone for a countdown while the dead converge on the noise. The results screen shows EXTRACTED (a victory twin of YOU DIED) or YOU DIED, and what you kept vs lost.
+      
+- [x] 11. XP, stash & saving. XP from kills and extractions, a save file (via lntrn-data), and a stash/hideout screen where you pick your loadout for the next run. Take your good gear in and you can lose it.
+      
+- [x] 12. Perks & stats. Spend XP on perks: stamina, carry space, reload speed, melee damage, and so on
 
 
-Build a solid character controller (step-up, slopes, good-feeling movement) before any combat.
+## Phase 3: World 🌲
+
+  13. Procedural map: a road network, a small town, farms, the forest, points of interest, and randomised exits, with the nav grid
+      built at load.
+  14. More weapons: a shotgun, a rifle, real melee weapons (machete, fire axe), and weapon switching.
+  15. Special zombies: runners, a bloater, and a screamer that calls the horde.
+  16. Settings screen: sensitivity, FOV and volume (deferred since milestone 2), keybinds.
+  17. Atmosphere: wind, distant groans, birds going quiet, music stings, maybe weather or dusk.
 
 
-For an extraction loop, the post-combat part of the ladder might look like: loot pickup → inventory → an extraction point → death/extract result screen → stash. The procedural map can come after that loop works on a hand-built test map.
 ---
 
-
-# Stash/Hideout
-- Classic extracted loot and XP goes into a Stash/Hideout and you choose what to bring into the next run.
-
----
-
-# What is XP for?
-- Perks and stats. We could add a seperate currency for buy/selling/trading later on.
-
----
-
-# How do you extract and Map Size / Run Length
-- Let's do fixed exit points you have to find and 10-15 minute runs.
-
----
-
-# Dependencies
-First check what is in ~/Projects/lantern-ui-2 that you could use, it should cover, math, audio, and model loading I think. If not, let me know what is missing and it'll get added. 

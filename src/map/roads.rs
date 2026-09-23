@@ -160,7 +160,17 @@ impl Network {
     /// How far `p` is from the nearest road's edge (negative on it), within
     /// the reach of any, else infinity.
     pub fn off_road(&self, p: Vec2) -> f64 {
-        self.claim(p).map_or(f64::INFINITY, |(r, d, _, _)| d - self.roads[r].kind.half_width())
+        let key = ((p.x / BUCKET).floor() as i32, (p.y / BUCKET).floor() as i32);
+        let Some(near) = self.buckets.get(&key) else { return f64::INFINITY };
+        near.iter()
+            .map(|&(r, s)| {
+                let road = &self.roads[r as usize];
+                let (a, b) = (road.points[s as usize], road.points[s as usize + 1]);
+                let (a, b) = (Vec2::new(a.x, a.z), Vec2::new(b.x, b.z));
+                let t = ((p - a).dot(b - a) / (b - a).dot(b - a).max(1e-9)).clamp(0.0, 1.0);
+                (a + (b - a) * t - p).length() - road.kind.half_width()
+            })
+            .fold(f64::INFINITY, f64::min)
     }
 }
 

@@ -69,21 +69,23 @@ pub fn real_world() -> Solids {
 
 /// What maps are built from, from the game's own files.
 pub fn kit() -> Kit {
-    let path = format!("{}/assets/models/scenery.glb", env!("CARGO_MANIFEST_DIR"));
-    let g = lntrn_model::Gltf::load(&path).expect("scenery.glb");
     let mut kit = Kit { containers: crate::containers::shapes(), exits: crate::exits::tests::shapes(), ..Kit::default() };
-    for what in crate::map::scatter::Scenery::ALL {
-        let name = format!("{}_Hull", what.name());
-        let Some(node) = g.nodes.iter().find(|n| n.name.as_deref() == Some(name.as_str())) else { continue };
-        let mut tris = Vec::new();
-        for p in &g.meshes[node.mesh.expect("a mesh")].primitives {
-            let at = |k: u32| {
-                let v = p.positions[k as usize];
-                Vec3::new(f64::from(v[0]), f64::from(v[1]), f64::from(v[2]))
-            };
-            tris.extend(p.indices.chunks_exact(3).map(|t| [at(t[0]), at(t[1]), at(t[2])]));
+    for file in ["scenery", "furniture"] {
+        let path = format!("{}/assets/models/{file}.glb", env!("CARGO_MANIFEST_DIR"));
+        let g = lntrn_model::Gltf::load(&path).expect("a model file");
+        for what in crate::map::scatter::Scenery::all() {
+            let name = format!("{}_Hull", what.name());
+            let Some(node) = g.nodes.iter().find(|n| n.name.as_deref() == Some(name.as_str())) else { continue };
+            let mut tris = Vec::new();
+            for p in &g.meshes[node.mesh.expect("a mesh")].primitives {
+                let at = |k: u32| {
+                    let v = p.positions[k as usize];
+                    Vec3::new(f64::from(v[0]), f64::from(v[1]), f64::from(v[2]))
+                };
+                tris.extend(p.indices.chunks_exact(3).map(|t| [at(t[0]), at(t[1]), at(t[2])]));
+            }
+            kit.scenery.insert(what, tris);
         }
-        kit.scenery.insert(what, tris);
     }
     kit
 }

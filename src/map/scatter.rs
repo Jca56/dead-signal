@@ -5,6 +5,7 @@
 
 use lntrn_math::{Vec2, Vec3};
 
+use super::building::furnish::Furn;
 use super::noise::Noise;
 use super::roads::{Kind as RoadKind, Network};
 use super::sites::{Kind as SiteKind, Site};
@@ -25,26 +26,20 @@ pub enum Scenery {
     Pole,
     Tower,
     Beacon,
+    /// Furniture, indoors.
+    Furn(Furn),
 }
 
 impl Scenery {
-    pub const ALL: [Scenery; 15] = [
-        Scenery::Pine(0),
-        Scenery::Pine(1),
-        Scenery::Pine(2),
-        Scenery::Pine(3),
-        Scenery::Dead(0),
-        Scenery::Dead(1),
-        Scenery::Rock(0),
-        Scenery::Rock(1),
-        Scenery::Rock(2),
-        Scenery::Rock(3),
-        Scenery::Log,
-        Scenery::Stump,
-        Scenery::Pole,
-        Scenery::Tower,
-        Scenery::Beacon,
-    ];
+    /// Every piece there is.
+    pub fn all() -> Vec<Scenery> {
+        let mut all = vec![Scenery::Log, Scenery::Stump, Scenery::Pole, Scenery::Tower, Scenery::Beacon];
+        all.extend((0..4).map(Scenery::Pine));
+        all.extend((0..2).map(Scenery::Dead));
+        all.extend((0..4).map(Scenery::Rock));
+        all.extend(Furn::ALL.map(Scenery::Furn));
+        all
+    }
 
     pub fn name(self) -> String {
         match self {
@@ -56,6 +51,7 @@ impl Scenery {
             Scenery::Pole => "SCENE_Pole".into(),
             Scenery::Tower => "SCENE_Tower".into(),
             Scenery::Beacon => "SCENE_Beacon".into(),
+            Scenery::Furn(f) => f.name().into(),
         }
     }
 
@@ -65,6 +61,7 @@ impl Scenery {
         match self {
             Scenery::Rock(_) => Surface::Stone,
             Scenery::Tower | Scenery::Beacon => Surface::Metal,
+            Scenery::Furn(Furn::Bathtub | Furn::Toilet | Furn::Basin | Furn::Stove) => Surface::Stone,
             _ => Surface::Wood,
         }
     }
@@ -213,7 +210,8 @@ pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site],
     let car_yaw = |dir: Vec2| (-dir.y).atan2(dir.x);
     for site in sites {
         let (crates, cars, pick) = match site.kind {
-            SiteKind::Town => (4, 0, 5),
+            // (The town's things are in its buildings.)
+            SiteKind::Town => (0, 0, 1),
             SiteKind::Military => (3, 1, 3),
             SiteKind::Farm => (2, 1, 2),
             SiteKind::Gas => (2, 2, 2),

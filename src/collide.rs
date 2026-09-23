@@ -10,6 +10,8 @@ use std::collections::HashMap;
 
 use lntrn_math::Vec3;
 
+use geometry::{closest_segment_triangle, ray_triangle};
+
 /// A surface this close to level or closer is floor: 46°, so a 45° ramp
 /// is (just) walkable.
 pub const WALKABLE: f64 = 0.6947;
@@ -50,6 +52,9 @@ struct Tri {
     surface: Surface,
     /// Switched off: there, but nothing meets it.
     off: bool,
+    /// Only bodies meet it: an empty window's frame, seen and shot and
+    /// heard through, but not climbed through.
+    ghost: bool,
 }
 
 /// Where a ray met a solid.
@@ -61,6 +66,8 @@ pub struct RayHit {
     /// The surface's normal, turned to face where the ray came from.
     pub normal: Vec3,
     pub surface: Surface,
+    /// Whether it met the face's front (the outside of a solid thing).
+    pub front: bool,
 }
 
 /// An upright capsule standing at `feet`.
@@ -137,6 +144,16 @@ impl Solids {
     /// Make these triangles solid, made of `surface`. Which they are (for
     /// switching them off and on).
     pub fn add_as(&mut self, tris: &[[Vec3; 3]], surface: Surface) -> std::ops::Range<u32> {
+        self.add_tris(tris, surface, false)
+    }
+
+    /// Make these triangles solid to bodies only (rays pass through): what
+    /// fills an empty window.
+    pub fn add_barrier(&mut self, tris: &[[Vec3; 3]]) -> std::ops::Range<u32> {
+        self.add_tris(tris, Surface::Stone, true)
+    }
+
+    fn add_tris(&mut self, tris: &[[Vec3; 3]], surface: Surface, ghost: bool) -> std::ops::Range<u32> {
         let first = self.tris.len() as u32;
         for &[a, b, c] in tris {
             let n = (b - a).cross(c - a);
@@ -144,7 +161,7 @@ impl Solids {
                 continue; // a sliver
             }
             let i = self.tris.len() as u32;
-            self.tris.push(Tri { a, b, c, normal: n.normalize(), surface, off: false });
+            self.tris.push(Tri { a, b, c, normal: n.normalize(), surface, off: false, ghost });
             let (x0, x1) = (a.x.min(b.x).min(c.x), a.x.max(b.x).max(c.x));
             let (z0, z1) = (a.z.min(b.z).min(c.z), a.z.max(b.z).max(c.z));
             for gx in cell_of(x0)..=cell_of(x1) {
@@ -169,8 +186,8 @@ impl Solids {
         self.tris.len()
     }
 
-    /// The first solid along the ray from `from` in unit direction `dir`,
-    /// within `max` metres. Walks the grid cell by cell along the ground
+    /// The first solid along the ray from `from` in unit direction `dir`
+    /// within `max` metres (a window's barrier isn't met). Walks the grid cell by cell along the ground
     /// plan and stops at the first cell that holds a hit.
     /// (A triangle over more than one cell may be tried twice: that costs
     /// less than keeping count.)
@@ -192,15 +209,16 @@ impl Solids {
             if let Some(list) = self.cells.get(&(gx, gz)) {
                 for &i in list {
                     let tri = &self.tris[i as usize];
-                    if tri.off {
+                    if tri.off || tri.ghost {
                         continue;
                     }
                     if let Some(t) = ray_triangle(from, dir, tri)
                         && t <= max
                         && best.is_none_or(|b| t < b.t)
                     {
-                        let normal = if tri.normal.dot(dir) < 0.0 { tri.normal } else { -tri.normal };
-                        best = Some(RayHit { t, point: from + dir * t, normal, surface: tri.surface });
+                        let front = tri.normal.dot(dir) < 0.0;
+                        let normal = if front { tri.normal } else { -tri.normal };
+                        best = Some(RayHit { t, point: from + dir * t, normal, surface: tri.surface, front });
                     }
                 }
             }
@@ -217,6 +235,32 @@ impl Solids {
                 tz += dtz;
             }
         }
+    }
+
+    /// Every solid straight down from `from` (not a window's barrier), in
+    /// order: where two faces meet at one height, one being left before
+    /// one entered (a thing's underside before the floor it stands on);
+    /// where the ray runs down an edge (between a face's two triangles, a
+    /// roof's two slopes at its ridge), the faces there met once.
+    pub fn hits_down(&self, from: Vec3) -> Vec<RayHit> {
+        let down = Vec3::new(0.0, -1.0, 0.0);
+        let mut hits: Vec<RayHit> = Vec::new();
+        for &i in self.cells.get(&(cell_of(from.x), cell_of(from.z))).map_or(&[][..], |v| &v[..]) {
+            let tri = &self.tris[i as usize];
+            if tri.off || tri.ghost {
+                continue;
+            }
+            if let Some(t) = ray_triangle(from, down, tri) {
+                let front = tri.normal.y > 0.0;
+                let normal = if front { tri.normal } else { -tri.normal };
+                let hit = RayHit { t, point: from + down * t, normal, surface: tri.surface, front };
+                if !hits.iter().any(|h| (h.t - t).abs() < 1e-6 && h.front == front) {
+                    hits.push(hit);
+                }
+            }
+        }
+        hits.sort_by(|a, b| a.t.total_cmp(&b.t).then(a.front.cmp(&b.front)));
+        hits
     }
 
     /// The triangles whose cells a box over the ground plan touches.
@@ -317,142 +361,6 @@ impl Solids {
     }
 }
 
-/// How far along a ray (unit `dir`) it meets triangle `t`, from either
-/// side (Möller–Trumbore).
-fn ray_triangle(from: Vec3, dir: Vec3, t: &Tri) -> Option<f64> {
-    let e1 = t.b - t.a;
-    let e2 = t.c - t.a;
-    let p = dir.cross(e2);
-    let det = e1.dot(p);
-    if det.abs() < 1e-12 {
-        return None;
-    }
-    let inv = 1.0 / det;
-    let s = from - t.a;
-    let u = s.dot(p) * inv;
-    if !(0.0..=1.0).contains(&u) {
-        return None;
-    }
-    let q = s.cross(e1);
-    let v = dir.dot(q) * inv;
-    if v < 0.0 || u + v > 1.0 {
-        return None;
-    }
-    let dist = e2.dot(q) * inv;
-    (dist > 1e-6).then_some(dist)
-}
-
-/// The point of triangle `t` closest to `p`.
-fn closest_point_triangle(p: Vec3, t: &Tri) -> Vec3 {
-    // Ericson, Real-Time Collision Detection 5.1.5.
-    let (a, b, c) = (t.a, t.b, t.c);
-    let ab = b - a;
-    let ac = c - a;
-    let ap = p - a;
-    let d1 = ab.dot(ap);
-    let d2 = ac.dot(ap);
-    if d1 <= 0.0 && d2 <= 0.0 {
-        return a;
-    }
-    let bp = p - b;
-    let d3 = ab.dot(bp);
-    let d4 = ac.dot(bp);
-    if d3 >= 0.0 && d4 <= d3 {
-        return b;
-    }
-    let vc = d1 * d4 - d3 * d2;
-    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
-        return a + ab * (d1 / (d1 - d3));
-    }
-    let cp = p - c;
-    let d5 = ab.dot(cp);
-    let d6 = ac.dot(cp);
-    if d6 >= 0.0 && d5 <= d6 {
-        return c;
-    }
-    let vb = d5 * d2 - d1 * d6;
-    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
-        return a + ac * (d2 / (d2 - d6));
-    }
-    let va = d3 * d6 - d5 * d4;
-    if va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0 {
-        return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
-    }
-    let denom = 1.0 / (va + vb + vc);
-    a + ab * (vb * denom) + ac * (vc * denom)
-}
-
-/// The closest points of segments `p1q1` and `p2q2`.
-fn closest_segments(p1: Vec3, q1: Vec3, p2: Vec3, q2: Vec3) -> (Vec3, Vec3) {
-    // Ericson 5.1.9.
-    let d1 = q1 - p1;
-    let d2 = q2 - p2;
-    let r = p1 - p2;
-    let a = d1.dot(d1);
-    let e = d2.dot(d2);
-    let f = d2.dot(r);
-    let (s, t);
-    if a <= 1e-12 && e <= 1e-12 {
-        return (p1, p2);
-    }
-    if a <= 1e-12 {
-        s = 0.0;
-        t = (f / e).clamp(0.0, 1.0);
-    } else {
-        let c = d1.dot(r);
-        if e <= 1e-12 {
-            t = 0.0;
-            s = (-c / a).clamp(0.0, 1.0);
-        } else {
-            let b = d1.dot(d2);
-            let denom = a * e - b * b;
-            let mut s0 = if denom.abs() > 1e-12 { ((b * f - c * e) / denom).clamp(0.0, 1.0) } else { 0.0 };
-            let mut t0 = (b * s0 + f) / e;
-            if t0 < 0.0 {
-                t0 = 0.0;
-                s0 = (-c / a).clamp(0.0, 1.0);
-            } else if t0 > 1.0 {
-                t0 = 1.0;
-                s0 = ((b - c) / a).clamp(0.0, 1.0);
-            }
-            s = s0;
-            t = t0;
-        }
-    }
-    (p1 + d1 * s, p2 + d2 * t)
-}
-
-/// The closest points of a segment and a triangle: (on the segment, on the
-/// triangle). The same point twice when the segment passes through it.
-fn closest_segment_triangle(p: Vec3, q: Vec3, t: &Tri) -> (Vec3, Vec3) {
-    // Through the face?
-    let d = q - p;
-    let denom = t.normal.dot(d);
-    if denom.abs() > 1e-12 {
-        let s = t.normal.dot(t.a - p) / denom;
-        if (0.0..=1.0).contains(&s) {
-            let x = p + d * s;
-            if (closest_point_triangle(x, t) - x).length() < 1e-9 {
-                return (x, x);
-            }
-        }
-    }
-    let mut best = (p, closest_point_triangle(p, t));
-    let mut best_d = (best.0 - best.1).length();
-    let mut consider = |pair: (Vec3, Vec3)| {
-        let dd = (pair.0 - pair.1).length();
-        if dd < best_d {
-            best_d = dd;
-            best = pair;
-        }
-    };
-    consider((q, closest_point_triangle(q, t)));
-    consider(closest_segments(p, q, t.a, t.b));
-    consider(closest_segments(p, q, t.b, t.c));
-    consider(closest_segments(p, q, t.c, t.a));
-    best
-}
-
 /// A box's twelve triangles, from its lower and upper corners.
 #[cfg(test)]
 pub fn box_tris(min: Vec3, max: Vec3) -> Vec<[Vec3; 3]> {
@@ -468,5 +376,6 @@ pub fn box_tris(min: Vec3, max: Vec3) -> Vec<[Vec3; 3]> {
     quads.iter().flat_map(|q| [[q[0], q[1], q[2]], [q[0], q[2], q[3]]]).collect()
 }
 
+mod geometry;
 #[cfg(test)]
 mod tests;

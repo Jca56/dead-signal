@@ -233,7 +233,19 @@ mod tests {
             if kind == Kind::Key {
                 continue;
             }
-            let mut found: Vec<&str> = [(Source::Crate, "crate"), (Source::Locker, "locker"), (Source::Car, "car"), (Source::Cage, "cage"), (Source::Corpse, "zombies")]
+            let mut found: Vec<&str> = [
+                (Source::Crate, "crate"),
+                (Source::Locker, "locker"),
+                (Source::Car, "car"),
+                (Source::Cage, "cage"),
+                (Source::Fridge, "fridge"),
+                (Source::Cabinet, "drawers"),
+                (Source::Desk, "desk"),
+                (Source::Wardrobe, "wardrobe"),
+                (Source::Shelf, "shelf"),
+                (Source::Register, "register"),
+                (Source::Corpse, "zombies"),
+            ]
                 .iter()
                 .filter(|(s, _)| s.holds(kind))
                 .map(|(_, w)| *w)

@@ -9,7 +9,6 @@ use lntrn_math::Vec3;
 use super::DeadSignal;
 use crate::assets;
 use crate::exits::{self, Way};
-use crate::loot::tables::Source;
 use crate::map::scatter::Scenery;
 use crate::render::Renderer;
 use crate::{containers, icons, loot};
@@ -20,35 +19,38 @@ impl DeadSignal {
     /// kit every map is built from); and every kind of thing (its mesh, and
     /// its picture for the inventory).
     pub(super) fn load_things(&mut self, renderer: &mut Renderer, gpu: &Gpu, images: &mut Images) {
-        match assets::load(renderer, "scenery") {
-            Ok(props) => {
-                for what in Scenery::ALL {
-                    let name = what.name();
-                    let find = |n: &str| props.iter().find(|p| p.name == n);
-                    if let Some(hull) = find(&format!("{name}_Hull")) {
-                        self.kit.scenery.insert(what, hull.triangles.clone());
-                    }
-                    let Some(p) = find(&name) else {
-                        log_error!("scenery: no {name}");
-                        continue;
-                    };
-                    if let Some(mesh) = p.mesh {
-                        // The ball it lies in, about its origin (scaled up
-                        // with it).
-                        let (mut lo, mut hi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
-                        for q in p.triangles.iter().flatten() {
-                            lo = lo.min(*q);
-                            hi = hi.max(*q);
-                        }
-                        self.scenery.insert(what, (mesh, (lo + hi) * 0.5, (hi - lo).length() * 0.5));
-                    }
-                }
+        // The scenery and the furniture: each piece's mesh and the ball it
+        // lies in, and what's solid of it.
+        let mut props = Vec::new();
+        for file in ["scenery", "furniture"] {
+            match assets::load(renderer, file) {
+                Ok(p) => props.extend(p),
+                Err(e) => log_error!("{file}: {e}"),
             }
-            Err(e) => log_error!("scenery: {e}"),
+        }
+        for what in Scenery::all() {
+            let name = what.name();
+            let find = |n: &str| props.iter().find(|p| p.name == n);
+            if let Some(hull) = find(&format!("{name}_Hull")) {
+                self.kit.scenery.insert(what, hull.triangles.clone());
+            }
+            let Some(p) = find(&name) else {
+                log_error!("scenery: no {name}");
+                continue;
+            };
+            if let Some(mesh) = p.mesh {
+                // The ball it lies in, about its origin (scaled up with it).
+                let (mut lo, mut hi) = (Vec3::splat(f64::INFINITY), Vec3::splat(f64::NEG_INFINITY));
+                for q in p.triangles.iter().flatten() {
+                    lo = lo.min(*q);
+                    hi = hi.max(*q);
+                }
+                self.scenery.insert(what, (mesh, (lo + hi) * 0.5, (hi - lo).length() * 0.5));
+            }
         }
         match assets::load(renderer, "containers") {
             Ok(props) => {
-                for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
+                for source in crate::loot::tables::CONTAINERS {
                     let name = containers::model_name(source);
                     let open = format!("{name}_Open");
                     let find = |n: &str| props.iter().find(|p| p.name == n);

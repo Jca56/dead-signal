@@ -27,12 +27,26 @@ pub fn model_name(source: Source) -> &'static str {
         Source::Locker => "CONTAINER_Locker",
         Source::Car => "CONTAINER_Car",
         Source::Cage => "CONTAINER_Cage",
+        Source::Fridge => "CONTAINER_Fridge",
+        Source::Cabinet => "CONTAINER_Cabinet",
+        Source::Desk => "CONTAINER_Desk",
+        Source::Wardrobe => "CONTAINER_Wardrobe",
+        Source::Shelf => "CONTAINER_Shelf",
+        Source::Register => "CONTAINER_Register",
         Source::Corpse => "",
     }
 }
 
 fn surface(source: Source) -> Surface {
-    if source == Source::Crate { Surface::Wood } else { Surface::Metal }
+    match source {
+        Source::Crate | Source::Cabinet | Source::Desk | Source::Wardrobe | Source::Register => Surface::Wood,
+        _ => Surface::Metal,
+    }
+}
+
+/// Whether the cage's key can turn up in it.
+pub fn holds_keys(source: Source) -> bool {
+    matches!(source, Source::Locker | Source::Car | Source::Desk | Source::Wardrobe)
 }
 
 #[derive(Component, Clone, Debug)]
@@ -150,7 +164,7 @@ pub fn open_up(world: &mut World, e: Entity) {
 }
 
 /// A fresh run: every container shut and filled anew by `seed`'s luck,
-/// the cage locked, its key in one locker or car.
+/// the cage locked, its key in one locker, car, desk or wardrobe.
 pub fn fill(world: &mut World, seed: u32) {
     let mut dice = Dice(seed | 1);
     let mut holders = Vec::new();
@@ -161,7 +175,7 @@ pub fn fill(world: &mut World, seed: u32) {
         if let (Some((shut, _)), Some(mut model)) = (c.looks, model) {
             model.0 = shut;
         }
-        if matches!(c.source, Source::Locker | Source::Car) {
+        if holds_keys(c.source) {
             holders.push(e);
         }
     }
@@ -192,7 +206,7 @@ pub fn shapes() -> HashMap<Source, Vec<[Vec3; 3]>> {
     let path = format!("{}/assets/models/containers.glb", env!("CARGO_MANIFEST_DIR"));
     let g = lntrn_model::Gltf::load(&path).expect("containers");
     let mut out = HashMap::new();
-    for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
+    for source in crate::loot::tables::CONTAINERS {
         let hull = format!("{}_Hull", model_name(source));
         let node = g.nodes.iter().find(|n| n.name.as_deref() == Some(hull.as_str())).expect("its hull");
         let mut tris = Vec::new();
@@ -268,10 +282,13 @@ mod tests {
             }
             (lo, hi)
         };
-        for source in [Source::Crate, Source::Locker, Source::Car, Source::Cage] {
+        let vertices = |name: &str| g.nodes.iter().find(|n| n.name.as_deref() == Some(name)).map_or(0, |n| g.meshes[n.mesh.unwrap()].primitives.iter().map(|p| p.positions.len()).sum::<usize>());
+        for source in crate::loot::tables::CONTAINERS {
             let (shut, open) = (bounds(model_name(source)), bounds(&format!("{}_Open", model_name(source))));
             assert!(open.0.y > shut.0.y - 0.02, "{source:?} opened sinks into the floor: {:?} vs {:?}", open.0, shut.0);
-            assert!(open != shut, "{source:?} opened looks just the same");
+            // (A shelf searched looks it by what's gone from it.)
+            let other = open != shut || vertices(model_name(source)) != vertices(&format!("{}_Open", model_name(source)));
+            assert!(other, "{source:?} opened looks just the same");
             // What swings open stays near: nothing flung far off.
             assert!((open.1 - shut.1).length() < 1.2 && (open.0 - shut.0).length() < 1.2, "{source:?}: {shut:?} → {open:?}");
         }
@@ -290,7 +307,7 @@ mod tests {
             assert!(all.iter().filter(|c| c.locked).all(|c| c.source == Source::Cage));
             let keys: Vec<Source> = all.iter().filter(|c| c.grid.count(Kind::Key) > 0).map(|c| c.source).collect();
             assert_eq!(keys.len(), 1, "one key, in {keys:?}");
-            assert!(matches!(keys[0], Source::Locker | Source::Car));
+            assert!(holds_keys(keys[0]));
         }
     }
 }
