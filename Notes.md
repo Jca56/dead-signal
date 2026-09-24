@@ -29,6 +29,7 @@
 ## Phase 5: Settings ⚙️
 
 - [ ] 15. Settings screen: sensitivity, FOV, volume, keybinds, save slots.
+  - Background music: "Dusty Resilience" as a WAV, streamed through our own WAV loader, with a music volume slider.
 
 ## Phase 6: Threat 💀
 
