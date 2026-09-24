@@ -248,18 +248,29 @@ fn crash(dice: &mut Dice, f: &Frame) -> Outpost {
     let plane = dice.unit() < 0.5;
     let line = dice.unit() * std::f64::consts::TAU;
     let along = |u: f64, v: f64| turned(Vec2::new(v, u), line);
+    let mut wreck: Vec<(Vec2, f64)> = Vec::new();
     for &(what, u, v, turn) in if plane { PLANE } else { HELI } {
         out.pieces.push(f.piece(what, along(u, v), turned(TO_BACK, line + turn.to_radians())));
+        wreck.push((along(u, v), reach(Scenery::Fixture(what))));
     }
-    // Cases in the torn-open hold, and spilled round it.
+    // Cases in the torn-open hold, and spilled round it: clear of every
+    // piece of the wreck (never on one, nor walled in between them), on
+    // the plot.
     let hold = if plane { [(3.0, 0.0), (6.0, 0.4)] } else { [(1.5, 0.0), (-4.0, 0.8)] };
     for (u, v) in hold {
         out.containers.push(f.container(Source::SupplyCase, along(u, v), turned(TO_FRONT, line + std::f64::consts::FRAC_PI_2), UNDER_ROOF));
     }
+    let half = f.site.plot.half;
     for k in 0..3 {
-        let a = line + 1.3 + f64::from(k) * 2.1 + dice.unit() * 0.6;
-        let r = 7.0 + dice.unit() * 5.0;
-        out.containers.push(f.container(Source::SupplyCase, turned(Vec2::new(0.0, r), a), turned(TO_FRONT, dice.unit() * 6.0), IN_THE_OPEN));
+        for _ in 0..40 {
+            let a = line + 1.3 + f64::from(k) * 2.1 + dice.unit() * 0.9;
+            let at = turned(Vec2::new(0.0, 7.0 + dice.unit() * 10.0), a);
+            let on_plot = at.x.abs() < half.x - 2.0 && at.y.abs() < half.y - 2.0;
+            if on_plot && wreck.iter().all(|(c, r)| (at - *c).length() > r + 1.0) {
+                out.containers.push(f.container(Source::SupplyCase, at, turned(TO_FRONT, dice.unit() * 6.0), IN_THE_OPEN));
+                break;
+            }
+        }
     }
     out
 }

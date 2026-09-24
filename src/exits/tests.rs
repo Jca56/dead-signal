@@ -73,7 +73,7 @@ fn the_barricade_shuts_the_road_only_when_it_is_up() {
     let dir = (to - from).normalize();
     let len = (to - from).length();
     assert!(solids.raycast(from, dir, len).is_none(), "the open road is in the way");
-    solids.switch(exits.barricade.clone().unwrap(), true);
+    solids.switch(road.barricade.clone().unwrap(), true);
     assert!(solids.raycast(from, dir, len).is_some(), "the barricade stops nothing");
 }
 

@@ -77,35 +77,36 @@ fn side(p: Vec3) -> &'static str {
     }
 }
 
-/// What the radio says as a run begins: of two of the ways out (each
-/// `(way, open, where)`), in some order, where they are, the road's word
-/// true to whether it's open; the truck is out by `truck_near`.
-fn chatter(ways: &[(Way, bool, Vec3)], truck_near: &str, dice: &mut Dice) -> Vec<String> {
+/// What the radio says as a run begins: of a few of the ways out (each
+/// `(way, open, where, what it's out by)`), in some order, where they are,
+/// a road's word true to whether it's open.
+fn chatter(ways: &[(Way, bool, Vec3, &str)], dice: &mut Dice) -> Vec<String> {
     let mut lines: Vec<String> = ways
         .iter()
-        .map(|&(way, open, at)| match way {
+        .map(|&(way, open, at, near)| match way {
             Way::Radio => format!("…anyone copy… the old radio tower on the {} hill still has power… call and we'll send a bird…", side(at)),
             Way::Road if open => format!("…the {0} highway is clear past the checkpoint… repeat, {0} road clear…", side(at)),
             Way::Road => format!("…they've barricaded the {0} highway… don't go {0}…", side(at)),
-            Way::Truck => format!("…there's a pickup out by the {truck_near}… needs fuel and a battery…"),
+            Way::Truck => format!("…there's a pickup out by the {near}… needs fuel and a battery…"),
         })
         .collect();
-    if lines.len() > 2 {
-        let drop = dice.next() as usize % lines.len();
-        lines.remove(drop);
+    // Shuffled, and a few of them heard.
+    for i in (1..lines.len()).rev() {
+        lines.swap(i, dice.next() as usize % (i + 1));
     }
-    if lines.len() == 2 && dice.unit() < 0.5 {
-        lines.swap(0, 1);
-    }
+    lines.truncate(HEARD);
     lines
 }
 
+/// How many of the ways out the radio speaks of.
+const HEARD: usize = 3;
+
 impl Run {
     /// A fresh run's ways out and what the radio says of them.
-    pub(super) fn begin_out(&mut self, game: &mut Game, seed: u32, truck_near: &str) {
+    pub(super) fn begin_out(&mut self, game: &mut Game, seed: u32, map: &crate::map::Map) {
         exits::begin(&mut game.world, seed);
-        let ways: Vec<(Way, bool, Vec3)> = game.world.get_resource::<Exits>().map(|x| x.list.iter().map(|e| (e.way, e.open, e.zone)).collect()).unwrap_or_default();
-        self.out = Out { chatter: chatter(&ways, truck_near, &mut self.dice), ..Out::default() };
+        let ways: Vec<(Way, bool, Vec3, &str)> = game.world.get_resource::<Exits>().map(|x| x.list.iter().map(|e| (e.way, e.open, e.zone, map.near(e.zone.x, e.zone.z))).collect()).unwrap_or_default();
+        self.out = Out { chatter: chatter(&ways, &mut self.dice), ..Out::default() };
     }
 
     /// The prompt for the way out `i`, aimed at.
@@ -338,23 +339,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_radio_speaks_of_two_ways_out_where_they_are_and_true_of_the_road() {
+    fn the_radio_speaks_of_a_few_ways_out_where_they_are_and_true_of_each_road() {
         for seed in 1..40u32 {
             let mut dice = Dice(seed * 7919);
-            let open = seed % 2 == 0;
-            let ways = [(Way::Radio, true, Vec3::new(-200.0, 0.0, 30.0)), (Way::Road, open, Vec3::new(10.0, 0.0, 270.0)), (Way::Truck, true, Vec3::new(0.0, 0.0, -100.0))];
-            let lines = chatter(&ways, "farm", &mut dice);
-            assert_eq!(lines.len(), 2);
-            if let Some(road) = lines.iter().find(|l| l.contains("highway")) {
-                assert!(road.contains("south"), "{road}");
+            let (south, north) = (seed % 2 == 0, seed % 3 == 0);
+            let ways = [
+                (Way::Radio, true, Vec3::new(-200.0, 0.0, 30.0), "road"),
+                (Way::Road, south, Vec3::new(10.0, 0.0, 370.0), "road"),
+                (Way::Road, north, Vec3::new(-20.0, 0.0, -370.0), "road"),
+                (Way::Truck, true, Vec3::new(0.0, 0.0, -100.0), "farm"),
+                (Way::Truck, true, Vec3::new(100.0, 0.0, 0.0), "gas station"),
+            ];
+            let lines = chatter(&ways, &mut dice);
+            assert_eq!(lines.len(), HEARD);
+            for road in lines.iter().filter(|l| l.contains("highway")) {
+                let open = if road.contains("south") { south } else { north };
                 assert_eq!(road.contains("clear"), open, "{road}");
             }
             if let Some(radio) = lines.iter().find(|l| l.contains("tower")) {
                 assert!(radio.contains("west hill"), "{radio}");
             }
-            if let Some(truck) = lines.iter().find(|l| l.contains("pickup")) {
-                assert!(truck.contains("by the farm"), "{truck}");
-            }
+            assert!(lines.iter().filter(|l| l.contains("pickup")).all(|t| t.contains("by the farm") || t.contains("by the gas station")), "{lines:?}");
         }
     }
 }

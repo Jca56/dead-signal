@@ -1,13 +1,14 @@
 //! Where things are: the highway's two ends on opposite edges, the town
 //! on it near the middle, and the places out in the country (a gas
-//! station on the highway, farms with their fields, a military camp, a
-//! hunter's cabin, a crash in the woods, the old proving ground, and the
-//! radio mast on the highest hill), each on a plot of its own, well apart.
+//! station on the highway each way out of town, farms with their fields,
+//! a military camp, hunters' cabins, a crash in the woods, the old
+//! proving ground, and the radio mast on the highest hill), each on a plot
+//! of its own, well apart.
 
 use lntrn_math::Vec2;
 
 use super::terrain::{Natural, Plot};
-use super::{EDGE, EXTENT};
+use super::{EDGE, EXTENT, HALF};
 use crate::loot::Dice;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -41,7 +42,7 @@ impl Kind {
     /// eases back into the land.
     pub(crate) fn size(self) -> (Vec2, f64) {
         match self {
-            Kind::Town => (Vec2::new(55.0, 85.0), 26.0),
+            Kind::Town => (Vec2::new(86.0, 125.0), 30.0),
             Kind::Gas => (Vec2::new(22.0, 16.0), 10.0),
             Kind::Farm => (Vec2::new(32.0, 28.0), 12.0),
             Kind::Military => (Vec2::new(30.0, 26.0), 12.0),
@@ -83,14 +84,12 @@ impl Site {
 
 /// The plan before any road is laid: the highway's ends (where it leaves
 /// at the edge, heading in), the town's main street (its ends), the
-/// sites, which end is the way out, and a field or two by each farm.
+/// sites, and a field or two by each farm.
 pub struct Plan {
     pub ends: [(Vec2, Vec2); 2],
     pub street: (Vec2, Vec2),
     pub sites: Vec<Site>,
     pub fields: Vec<Plot>,
-    /// Which of `ends` is the road out (the other is jammed with wrecks).
-    pub out: usize,
 }
 
 /// A point on the edge of the land, `along` from the middle of side
@@ -114,8 +113,8 @@ fn between(dice: &mut Dice, lo: f64, hi: f64) -> f64 {
 /// by [`place_country`], after.
 pub fn plan(dice: &mut Dice, natural: &mut Natural) -> Plan {
     let side = dice.next() % 4;
-    let a = edge_point(side, between(dice, -170.0, 170.0));
-    let b = edge_point(side ^ 1, between(dice, -170.0, 170.0));
+    let a = edge_point(side, between(dice, -0.57 * HALF, 0.57 * HALF));
+    let b = edge_point(side ^ 1, between(dice, -0.57 * HALF, 0.57 * HALF));
     natural.pass(a.0, a.1);
     natural.pass(b.0, b.1);
     // The town straddles the highway near the middle, its main street
@@ -133,38 +132,42 @@ pub fn plan(dice: &mut Dice, natural: &mut Natural) -> Plan {
     // Which way along the street is towards `a`: the street runs from its
     // end nearer `a`.
     let street = if (street.0 - a.0).length() < (street.1 - a.0).length() { street } else { (street.1, street.0) };
-    Plan { ends: [a, b], street, sites: vec![town], fields: Vec::new(), out: (dice.next() % 2) as usize }
+    Plan { ends: [a, b], street, sites: vec![town], fields: Vec::new() }
 }
 
-/// The gas station: beside the highway (`line`, its points), well out of
-/// town, facing the road (where it runs near enough square to the grid
-/// for a plot squared to it to face it).
+/// The gas stations: beside the highway (`line`, its points), well out of
+/// town, one each way along it, facing the road (where it runs near
+/// enough square to the grid for a plot squared to it to face it).
 pub fn place_gas(dice: &mut Dice, plan: &mut Plan, line: &[Vec2]) {
     let town = plan.sites[0].plot.centre;
     let square = |i: usize| {
         let d = line[i + 1] - line[i - 1];
         d.x.abs().min(d.y.abs()) < 0.3 * d.x.abs().max(d.y.abs())
     };
-    let spots: Vec<usize> = (2..line.len().saturating_sub(2))
-        .filter(|&i| {
-            let d = (line[i] - town).length();
-            d > 150.0 && d < 230.0 && line[i].x.abs().max(line[i].y.abs()) < EDGE - 50.0 && square(i)
-        })
-        .collect();
-    if spots.is_empty() {
-        return;
+    // Which way along the highway from the town's middle.
+    let nearest = (0..line.len()).min_by(|&a, &b| (line[a] - town).length().total_cmp(&(line[b] - town).length())).unwrap_or(0);
+    for before in [true, false] {
+        let spots: Vec<usize> = (2..line.len().saturating_sub(2))
+            .filter(|&i| {
+                let d = (line[i] - town).length();
+                (i < nearest) == before && d > 0.5 * HALF && d < 0.77 * HALF && line[i].x.abs().max(line[i].y.abs()) < EDGE - 50.0 && square(i)
+            })
+            .collect();
+        if spots.is_empty() {
+            continue;
+        }
+        let i = spots[dice.next() as usize % spots.len()];
+        let dir = (line[i + 1] - line[i - 1]) * (1.0 / (line[i + 1] - line[i - 1]).length().max(1e-9));
+        let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
+        // Square to the grid: straight out from the road's nearest axis.
+        let dir = if dir.x.abs() > dir.y.abs() { Vec2::new(dir.x.signum(), 0.0) } else { Vec2::new(0.0, dir.y.signum()) };
+        let out = Vec2::new(-dir.y, dir.x) * side;
+        let (half, _) = Kind::Gas.size();
+        let centre = line[i] + out * (super::roads::Kind::Highway.half_width() + 3.0 + half.y);
+        // Its front (-y in its frame) towards the road.
+        let yaw = out.x.atan2(out.y);
+        plan.sites.push(Site::new(Kind::Gas, centre, yaw));
     }
-    let i = spots[dice.next() as usize % spots.len()];
-    let dir = (line[i + 1] - line[i - 1]) * (1.0 / (line[i + 1] - line[i - 1]).length().max(1e-9));
-    let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
-    // Square to the grid: straight out from the road's nearest axis.
-    let dir = if dir.x.abs() > dir.y.abs() { Vec2::new(dir.x.signum(), 0.0) } else { Vec2::new(0.0, dir.y.signum()) };
-    let out = Vec2::new(-dir.y, dir.x) * side;
-    let (half, _) = Kind::Gas.size();
-    let centre = line[i] + out * (super::roads::Kind::Highway.half_width() + 3.0 + half.y);
-    // Its front (-y in its frame) towards the road.
-    let yaw = out.x.atan2(out.y);
-    plan.sites.push(Site::new(Kind::Gas, centre, yaw));
 }
 
 /// The places out in the country, each clear of the others and of the
@@ -189,7 +192,7 @@ pub fn place_country(dice: &mut Dice, plan: &mut Plan, natural: &Natural, highwa
     let mut best: Option<(Vec2, f64)> = None;
     for _ in 0..80 {
         let c = Vec2::new(between(dice, -room, room), between(dice, -room, room));
-        if !fits(plan, Kind::Radio, c) || (c - plan.sites[0].plot.centre).length() < 150.0 {
+        if !fits(plan, Kind::Radio, c) || (c - plan.sites[0].plot.centre).length() < 0.5 * HALF {
             continue;
         }
         let h = natural.height(c.x, c.y);
@@ -200,7 +203,8 @@ pub fn place_country(dice: &mut Dice, plan: &mut Plan, natural: &Natural, highwa
     if let Some((c, _)) = best {
         plan.sites.push(Site::new(Kind::Radio, c, between(dice, 0.0, std::f64::consts::TAU)));
     }
-    let wanted = [Kind::Military, Kind::Farm, Kind::Farm, Kind::Cabin, Kind::Crash, Kind::Pad];
+    // (The last farm and cabin only if there's room left for them.)
+    let wanted = [Kind::Military, Kind::Farm, Kind::Farm, Kind::Crash, Kind::Pad, Kind::Cabin, Kind::Farm, Kind::Cabin, Kind::Farm];
     for kind in wanted {
         for attempt in 0..400 {
             let c = Vec2::new(between(dice, -room, room), between(dice, -room, room));
@@ -208,8 +212,8 @@ pub fn place_country(dice: &mut Dice, plan: &mut Plan, natural: &Natural, highwa
             // Out of town: the camp far out, the farms on gentle ground.
             let from_town = (c - plan.sites[0].plot.centre).length();
             let far_enough = match kind {
-                Kind::Military => from_town > 190.0,
-                _ => from_town > 130.0,
+                Kind::Military => from_town > 0.63 * HALF,
+                _ => from_town > 0.43 * HALF,
             };
             let limit = if kind == Kind::Farm { 5.0 } else { 9.0 } + f64::from(attempt / 100) * 3.0;
             if !far_enough || !fits(plan, kind, c) || steep(c, r) > limit {

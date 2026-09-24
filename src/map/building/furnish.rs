@@ -150,17 +150,24 @@ fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
     }
 }
 
-/// Furnish `b`.
-pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
-    let mut out = Furnished::default();
-    if b.plan.kind == Kind::Shell {
-        return out;
-    }
-    let plan = &b.plan;
-    for (ri, room) in plan.rooms.iter().enumerate() {
+/// A room as it's being furnished: where its floor is, the space inside
+/// its walls, what's to be kept clear (in front of every doorway, the
+/// stairs and their foot), its windows (nothing tall in front of them),
+/// and what's in it so far.
+struct Space {
+    room: usize,
+    floor: f64,
+    inner: Rect,
+    clear: Vec<Rect>,
+    windows: Vec<Rect>,
+    placed: Vec<Rect>,
+}
+
+impl Space {
+    fn of(plan: &super::plan::Plan, ri: usize) -> Self {
+        let room = &plan.rooms[ri];
         let floor = f64::from(room.storey) * STOREY;
         let inner = Rect { lo: Vec2::new(f64::from(room.x0) + 0.1, f64::from(room.z0) + 0.1), hi: Vec2::new(f64::from(room.x1) - 0.1, f64::from(room.z1) - 0.1) };
-        // Kept clear: in front of every doorway, the stairs and their foot.
         let mut clear: Vec<Rect> = Vec::new();
         for o in plan.openings.iter().filter(|o| o.door) {
             let w = plan.walls[o.wall];
@@ -175,7 +182,6 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
             let x = f64::from(st.x);
             clear.push(Rect { lo: Vec2::new(x - 1.2, 0.0), hi: Vec2::new(x + 2.2, st.z1() + 1.0) });
         }
-        // Windows in this room's walls: nothing tall in front of them.
         let windows: Vec<Rect> = plan
             .openings
             .iter()
@@ -187,16 +193,87 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
                 if w.along_x { Rect { lo: Vec2::new(a, at - 1.0), hi: Vec2::new(c, at + 1.0) } } else { Rect { lo: Vec2::new(at - 1.0, a), hi: Vec2::new(at + 1.0, c) } }
             })
             .collect();
-        let mut placed: Vec<Rect> = Vec::new();
-        let put = |thing: Thing, centre: Vec2, facing: Vec2, out: &mut Furnished| {
-            let at = b.world(Vec3::new(centre.x, floor, centre.y));
-            let inward = b.turn(Vec3::new(facing.x, 0.0, facing.y));
-            let yaw = (-inward.x).atan2(-inward.z);
-            match thing {
-                Thing::Furn(f) => out.pieces.push(Piece::new(Scenery::Furn(f), at, yaw, 1.0)),
-                Thing::Box(s) => out.containers.push((s, (at.x, at.z, yaw, at.y + 1.5))),
-            }
+        Self { room: ri, floor, inner, clear, windows, placed: Vec::new() }
+    }
+}
+
+/// How deep the floor kept free in front of something to search.
+const ACCESS: f64 = 1.2;
+
+/// Whether a thing is what its room is looked in for: it's never left
+/// out, going in another room if its own has no wall for it.
+fn needed(thing: Thing) -> bool {
+    matches!(thing, Thing::Box(Source::GunCabinet | Source::HunterCabinet | Source::AmmoCage))
+}
+
+/// `thing` set down in `b` at `centre` (in its frame, on `floor`), facing
+/// `facing`.
+fn put(b: &Building, thing: Thing, floor: f64, centre: Vec2, facing: Vec2, out: &mut Furnished) {
+    let at = b.world(Vec3::new(centre.x, floor, centre.y));
+    let inward = b.turn(Vec3::new(facing.x, 0.0, facing.y));
+    let yaw = (-inward.x).atan2(-inward.z);
+    match thing {
+        Thing::Furn(f) => out.pieces.push(Piece::new(Scenery::Furn(f), at, yaw, 1.0)),
+        Thing::Box(s) => out.containers.push((s, (at.x, at.z, yaw, at.y + 1.5))),
+    }
+}
+
+/// Stand `thing` against one of `space`'s walls, facing into the room: a
+/// few tries (more for what's needed, which at the last may stand across a
+/// window). Whether it went in.
+fn against_wall(b: &Building, space: &mut Space, thing: Thing, dice: &mut Dice, out: &mut Furnished) -> bool {
+    let (w, d, tall) = thing.size();
+    let inner = space.inner;
+    let tries = if needed(thing) { 64 } else { 24 };
+    for k in 0..tries {
+        let tall = tall && k < 40;
+        let side = dice.next() % 4;
+        let (len_lo, len_hi) = if side < 2 { (inner.lo.x, inner.hi.x) } else { (inner.lo.y, inner.hi.y) };
+        if len_hi - len_lo < w + 0.05 {
+            continue;
+        }
+        let u = len_lo + w * 0.5 + dice.unit() * (len_hi - len_lo - w);
+        let (rect, centre, facing) = match side {
+            0 => (Rect { lo: Vec2::new(u - w * 0.5, inner.lo.y), hi: Vec2::new(u + w * 0.5, inner.lo.y + d) }, Vec2::new(u, inner.lo.y + d * 0.5), Vec2::new(0.0, 1.0)),
+            1 => (Rect { lo: Vec2::new(u - w * 0.5, inner.hi.y - d), hi: Vec2::new(u + w * 0.5, inner.hi.y) }, Vec2::new(u, inner.hi.y - d * 0.5), Vec2::new(0.0, -1.0)),
+            2 => (Rect { lo: Vec2::new(inner.lo.x, u - w * 0.5), hi: Vec2::new(inner.lo.x + d, u + w * 0.5) }, Vec2::new(inner.lo.x + d * 0.5, u), Vec2::new(1.0, 0.0)),
+            _ => (Rect { lo: Vec2::new(inner.hi.x - d, u - w * 0.5), hi: Vec2::new(inner.hi.x, u + w * 0.5) }, Vec2::new(inner.hi.x - d * 0.5, u), Vec2::new(-1.0, 0.0)),
         };
+        // The room left walkable: nothing reaching past its middle.
+        let room_w = inner.hi - inner.lo;
+        let deep = if side < 2 { d > room_w.y * 0.5 - 0.5 } else { d > room_w.x * 0.5 - 0.5 };
+        // Something to search has the floor in front of it kept free, to
+        // stand at it.
+        let access = matches!(thing, Thing::Box(_)).then(|| match side {
+            0 => Rect { lo: Vec2::new(rect.lo.x, rect.hi.y), hi: Vec2::new(rect.hi.x, rect.hi.y + ACCESS) },
+            1 => Rect { lo: Vec2::new(rect.lo.x, rect.lo.y - ACCESS), hi: Vec2::new(rect.hi.x, rect.lo.y) },
+            2 => Rect { lo: Vec2::new(rect.hi.x, rect.lo.y), hi: Vec2::new(rect.hi.x + ACCESS, rect.hi.y) },
+            _ => Rect { lo: Vec2::new(rect.lo.x - ACCESS, rect.lo.y), hi: Vec2::new(rect.lo.x, rect.hi.y) },
+        });
+        let blocked = |r: &Rect| space.placed.iter().any(|p| p.overlaps(r, 0.05));
+        if deep || blocked(&rect) || access.as_ref().is_some_and(blocked) || space.clear.iter().any(|c| c.overlaps(&rect, 0.0)) || (tall && space.windows.iter().any(|wn| wn.overlaps(&rect, 0.0))) {
+            continue;
+        }
+        space.placed.push(rect);
+        space.placed.extend(access);
+        put(b, thing, space.floor, centre, facing, out);
+        return true;
+    }
+    false
+}
+
+/// Furnish `b`.
+pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
+    let mut out = Furnished::default();
+    if b.plan.kind == Kind::Shell {
+        return out;
+    }
+    let plan = &b.plan;
+    let mut spaces: Vec<Space> = (0..plan.rooms.len()).map(|ri| Space::of(plan, ri)).collect();
+    let mut homeless: Vec<Thing> = Vec::new();
+    for space in &mut spaces {
+        let room = plan.rooms[space.room];
+        let inner = space.inner;
         if room.use_ == Use::Shop {
             // Rows of shelving down the shop, an aisle between each.
             let mut x = room.x0 + 3;
@@ -204,57 +281,38 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
                 let mut z = f64::from(room.z0) + 3.0;
                 while z + 1.8 <= f64::from(room.z1) - 1.5 {
                     let r = Rect { lo: Vec2::new(f64::from(x) - 0.3, z), hi: Vec2::new(f64::from(x) + 0.3, z + 1.8) };
-                    if !clear.iter().any(|c| c.overlaps(&r, 0.0)) {
-                        placed.push(r);
-                        put(Thing::Box(Source::Shelf), Vec2::new(f64::from(x), z + 0.9), Vec2::new(-1.0, 0.0), &mut out);
+                    if !space.clear.iter().any(|c| c.overlaps(&r, 0.0)) {
+                        space.placed.push(r);
+                        put(b, Thing::Box(Source::Shelf), space.floor, Vec2::new(f64::from(x), z + 0.9), Vec2::new(-1.0, 0.0), &mut out);
                     }
                     z += 1.9;
                 }
                 x += 3;
             }
         }
-        for (thing, chance) in program(room.use_, room, b.plan.kind) {
+        for (thing, chance) in program(room.use_, &room, b.plan.kind) {
             if dice.unit() > chance {
                 continue;
             }
-            let (w, d, tall) = thing.size();
-            // Against a wall, facing into the room: a few tries. The gun
-            // cabinet (a den's reason to be looked in) gets more, and at the
-            // last may stand across a window.
-            let tries = if matches!(thing, Thing::Box(Source::GunCabinet | Source::HunterCabinet | Source::AmmoCage)) { 64 } else { 24 };
-            for k in 0..tries {
-                let tall = tall && k < 40;
-                let side = dice.next() % 4;
-                let (len_lo, len_hi) = if side < 2 { (inner.lo.x, inner.hi.x) } else { (inner.lo.y, inner.hi.y) };
-                if len_hi - len_lo < w + 0.05 {
-                    continue;
-                }
-                let u = len_lo + w * 0.5 + dice.unit() * (len_hi - len_lo - w);
-                let (rect, centre, facing) = match side {
-                    0 => (Rect { lo: Vec2::new(u - w * 0.5, inner.lo.y), hi: Vec2::new(u + w * 0.5, inner.lo.y + d) }, Vec2::new(u, inner.lo.y + d * 0.5), Vec2::new(0.0, 1.0)),
-                    1 => (Rect { lo: Vec2::new(u - w * 0.5, inner.hi.y - d), hi: Vec2::new(u + w * 0.5, inner.hi.y) }, Vec2::new(u, inner.hi.y - d * 0.5), Vec2::new(0.0, -1.0)),
-                    2 => (Rect { lo: Vec2::new(inner.lo.x, u - w * 0.5), hi: Vec2::new(inner.lo.x + d, u + w * 0.5) }, Vec2::new(inner.lo.x + d * 0.5, u), Vec2::new(1.0, 0.0)),
-                    _ => (Rect { lo: Vec2::new(inner.hi.x - d, u - w * 0.5), hi: Vec2::new(inner.hi.x, u + w * 0.5) }, Vec2::new(inner.hi.x - d * 0.5, u), Vec2::new(-1.0, 0.0)),
-                };
-                // The room left walkable: nothing reaching past its middle.
-                let room_w = inner.hi - inner.lo;
-                let deep = if side < 2 { d > room_w.y * 0.5 - 0.5 } else { d > room_w.x * 0.5 - 0.5 };
-                if deep || placed.iter().any(|p| p.overlaps(&rect, 0.05)) || clear.iter().any(|c| c.overlaps(&rect, 0.0)) || (tall && windows.iter().any(|wn| wn.overlaps(&rect, 0.0))) {
-                    continue;
-                }
-                placed.push(rect);
-                put(thing, centre, facing, &mut out);
-                break;
+            if !against_wall(b, space, thing, dice, &mut out) && needed(thing) {
+                homeless.push(thing);
             }
         }
         // Now and then something left lying about.
         if dice.unit() < 0.35 && room.use_ != Use::Hall {
             let p = Vec2::new(inner.lo.x + 0.8 + dice.unit() * (inner.hi.x - inner.lo.x - 1.6).max(0.0), inner.lo.y + 0.8 + dice.unit() * (inner.hi.y - inner.lo.y - 1.6).max(0.0));
-            let at = b.world(Vec3::new(p.x, floor, p.y));
+            let at = b.world(Vec3::new(p.x, space.floor, p.y));
             let roll = dice.unit();
             let (kind, count) = if roll < 0.55 { (ItemKind::Rounds, crate::items::ROUNDS) } else if roll < 0.85 { (ItemKind::Bandage, (1, 1)) } else { (ItemKind::Medkit, (1, 1)) };
             out.pickups.push((kind, count, at.x, at.y + 1.2, at.z, dice.unit() * std::f64::consts::TAU));
         }
+    }
+    // What's needed and found no wall in its own room: in the biggest
+    // other room it fits (never a hall or a bathroom).
+    let mut by_size: Vec<usize> = (0..plan.rooms.len()).filter(|&i| !matches!(plan.rooms[i].use_, Use::Hall | Use::Bath)).collect();
+    by_size.sort_by_key(|&i| (-plan.rooms[i].area(), i));
+    for thing in homeless {
+        by_size.iter().any(|&i| against_wall(b, &mut spaces[i], thing, dice, &mut out));
     }
     out
 }

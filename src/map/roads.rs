@@ -316,9 +316,11 @@ pub fn profile(kind: Kind, line: &[Vec2], height: impl Fn(f64, f64) -> f64, plot
             *y += (h - *y) * w;
             *pin = w > 0.99;
         }
-        if let Some((_, _, h, _)) = laid.and_then(|l| l.claim(*p)).filter(|c| c.3 >= 1.0 - 1e-9) {
-            *y = h;
-            *pin = true;
+        // On a road already laid, level with it; on its shoulder, eased
+        // towards it as the ground there is.
+        if let Some((_, _, h, w)) = laid.and_then(|l| l.claim(*p)) {
+            *y += (h - *y) * w;
+            *pin |= w >= 1.0 - 1e-9;
         }
     }
     limit(&mut ys, &pinned, kind.steepest() * SPACING);
@@ -334,6 +336,44 @@ pub fn profile(kind: Kind, line: &[Vec2], height: impl Fn(f64, f64) -> f64, plot
     }
     line.iter().zip(ys).map(|(p, y)| Vec3::new(p.x, y, p.y)).collect()
 }
+
+/// The ground pressed down under every road where it would come up
+/// through it (at a sharp bend, or where two roads meet at their own
+/// heights, a facet of the ground can span both): all over each road's
+/// width, what's under it kept below its top. (Where another road has the
+/// ground, it's that road's to keep.)
+pub fn press_ground(field: &mut super::terrain::Field, network: &Network) {
+    for (r, road) in network.roads.iter().enumerate() {
+        let hw = road.kind.half_width();
+        for w in road.points.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let flat = Vec2::new(b.x - a.x, b.z - a.z);
+            let len = flat.length();
+            if len < 1e-9 {
+                continue;
+            }
+            let side = Vec2::new(-flat.y, flat.x) * (1.0 / len);
+            let steps = (len / PRESS_EVERY).ceil() as usize;
+            for k in 0..=steps {
+                let t = k as f64 / steps as f64;
+                let (mid, y) = (Vec2::new(a.x, a.z) + flat * t, a.y + (b.y - a.y) * t);
+                let across = (2.0 * hw / PRESS_EVERY).ceil() as usize;
+                for m in 0..=across {
+                    let q = mid + side * (-hw + 2.0 * hw * m as f64 / across as f64);
+                    if network.claim(q).is_some_and(|c| c.0 != r) {
+                        continue;
+                    }
+                    field.press(q.x, q.y, y + road.kind.lift() - PRESS_UNDER);
+                }
+            }
+        }
+    }
+}
+
+/// How far apart the ground is looked at under a road, and how far under
+/// its top the ground is kept.
+const PRESS_EVERY: f64 = 0.5;
+const PRESS_UNDER: f64 = 0.05;
 
 /// Heights evened till none rises more than `most` from the one before,
 /// the `pinned` ones (level with a plot, or a road) left be: back and forth, each

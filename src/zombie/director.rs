@@ -24,12 +24,12 @@ use crate::map::sites::{Kind, Site};
 
 /// How many of the dead the whole map starts with, and the most there may
 /// ever be up at once.
-pub const FIRST: usize = 250;
-const MOST: usize = 300;
+pub const FIRST: usize = 410;
+const MOST: usize = 480;
 /// How many at each kind of place (the rest wander).
 fn at_place(kind: Kind) -> usize {
     match kind {
-        Kind::Town => 80,
+        Kind::Town => 130,
         Kind::Military => 20,
         Kind::Farm | Kind::Gas => 14,
         Kind::Crash => 12,
@@ -46,14 +46,14 @@ fn soldiers(kind: Kind) -> f64 {
     }
 }
 /// Packs of Rippers in the woods, and how many to a pack (at most).
-const RIPPER_PACKS: usize = 3;
+const RIPPER_PACKS: usize = 4;
 const PACK_MOST: usize = 3;
 /// The share of newcomers that are Rippers, and while the dead surge.
 const RIPPER_SHARE: f64 = 0.04;
 const RIPPER_SURGE: f64 = 0.25;
 /// How many Spitters there are at the outposts, fewest and most; and the
 /// share of newcomers that are Spitters, and while the dead surge.
-const SPITTERS: (usize, usize) = (2, 4);
+const SPITTERS: (usize, usize) = (3, 6);
 const SPITTER_SHARE: f64 = 0.03;
 const SPITTER_SURGE: f64 = 0.08;
 
@@ -253,10 +253,10 @@ mod tests {
 
     #[test]
     fn the_places_and_the_wanderers_make_up_the_first() {
-        // A town and one of every other kind: most of the dead are at the
-        // places, the rest wander.
-        let kinds = [Kind::Town, Kind::Military, Kind::Farm, Kind::Farm, Kind::Gas, Kind::Crash, Kind::Cabin, Kind::Pad, Kind::Radio];
+        // A map with all it can have: most of the dead are at the places,
+        // the rest wander.
+        let kinds = [Kind::Town, Kind::Military, Kind::Farm, Kind::Farm, Kind::Farm, Kind::Farm, Kind::Gas, Kind::Gas, Kind::Crash, Kind::Cabin, Kind::Cabin, Kind::Pad, Kind::Radio];
         let placed: usize = kinds.iter().map(|&k| at_place(k)).sum();
-        assert!(placed < FIRST && FIRST - placed >= 40, "{placed} at the places, {} wandering", FIRST - placed);
+        assert!(placed < FIRST && FIRST - placed >= 90, "{placed} at the places, {} wandering", FIRST - placed);
     }
 }

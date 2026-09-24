@@ -1,9 +1,10 @@
 //! The ways out, the first way to win: a call for a chopper from the radio
 //! at the foot of the tower (then holding its ground a minute, the whole
-//! map coming at the noise), the road out past the checkpoint south of the
-//! proving ground (quiet, but blocked about half the time), and the
-//! pickup by the range (fuel and a battery in it, then an engine to crank,
-//! loudly). None is known till it's found. `hud.rs` draws them.
+//! map coming at the noise), the road out past the checkpoint at either
+//! end of the highway (quiet, but each blocked about half the time), and
+//! the pickups at two of the places (fuel and a battery in one, then an
+//! engine to crank, loudly). None is known till it's found. `hud.rs` draws
+//! them.
 
 pub mod hud;
 
@@ -59,6 +60,8 @@ pub const RADIO_WAIT: f64 = 60.0;
 pub const ROAD_WAIT: f64 = 10.0;
 pub const CRANK: f64 = 8.0;
 pub const HANDS: f64 = 2.0;
+/// How likely each road out is to be open, a run.
+const ROAD_OPEN: f64 = 0.55;
 /// Seen within this far (with nothing between), or come this near, and a
 /// way out is found.
 const SEEN_FROM: f64 = 45.0;
@@ -97,6 +100,8 @@ pub struct Exit {
     /// The truck's parts, fitted.
     pub fuel: bool,
     pub battery: bool,
+    /// A road's barricade: what's solid of it, solid only when it's shut.
+    pub barricade: Option<Range<u32>>,
 }
 
 impl Exit {
@@ -125,12 +130,10 @@ impl Exit {
     }
 }
 
-/// Every way out, and the barricade that shuts the road (solid only when
-/// it's shut).
+/// Every way out.
 #[derive(Resource, Default)]
 pub struct Exits {
     pub list: Vec<Exit>,
-    barricade: Option<Range<u32>>,
 }
 
 impl Exits {
@@ -175,32 +178,31 @@ pub struct Shapes {
     pub barricade: Vec<[Vec3; 3]>,
 }
 
-/// The ways out, set down and made solid (the road's barricade too,
-/// switched off till a run shuts the road).
+/// The ways out, set down and made solid (each road's barricade too,
+/// switched off till a run shuts that road).
 pub fn set_down(solids: &mut Solids, shapes: &Shapes, spots: &[Spot]) -> Exits {
     let mut exits = Exits::default();
     for &(way, at, zone, radius) in spots {
         let Some(hull) = shapes.hulls.get(&way) else { continue };
         let Some(s) = seat(solids, hull, at, way == Way::Road) else { continue };
         solids.add_as(&s.tris, if way == Way::Road { Surface::Stone } else { Surface::Metal });
-        if way == Way::Road {
+        let barricade = (way == Way::Road).then(|| {
             let bar: Vec<[Vec3; 3]> = shapes.barricade.iter().map(|t| t.map(|p| s.model.transform_point(p))).collect();
             let range = solids.add_as(&bar, Surface::Stone);
             solids.switch(range.clone(), false);
-            exits.barricade = Some(range);
-        }
+            range
+        });
         let zone = s.model.transform_point(zone);
-        exits.list.push(Exit { way, model: s.model, lo: s.lo, hi: s.hi, zone, radius, looks: shapes.meshes.get(&way).copied(), shown: None, ring: None, ring_shown: None, found: false, open: true, started: false, progress: 0.0, fuel: false, battery: false });
+        exits.list.push(Exit { way, model: s.model, lo: s.lo, hi: s.hi, zone, radius, looks: shapes.meshes.get(&way).copied(), shown: None, ring: None, ring_shown: None, found: false, open: true, started: false, progress: 0.0, fuel: false, battery: false, barricade });
     }
     exits
 }
 
-/// A fresh run: nothing found or started, the road open or shut by
+/// A fresh run: nothing found or started, each road open or shut by
 /// `seed`'s luck; every way out drawn.
 pub fn begin(world: &mut World, seed: u32) {
     hide(world);
     let mut dice = Dice(seed | 1);
-    let road_open = dice.unit() < 0.5;
     world.resource_scope(|world, mut exits: Mut<Exits>| {
         for e in &mut exits.list {
             e.found = false;
@@ -208,10 +210,10 @@ pub fn begin(world: &mut World, seed: u32) {
             e.progress = 0.0;
             e.fuel = false;
             e.battery = false;
-            e.open = e.way != Way::Road || road_open;
-        }
-        if let Some(bar) = exits.barricade.clone() {
-            world.resource_mut::<Solid>().0.switch(bar, !road_open);
+            e.open = e.way != Way::Road || dice.unit() < ROAD_OPEN;
+            if let Some(bar) = e.barricade.clone() {
+                world.resource_mut::<Solid>().0.switch(bar, !e.open);
+            }
         }
         for e in &mut exits.list {
             e.shown = e.looks.map(|(normal, alt)| world.spawn((Placed(e.model), Model(if e.alt() { alt } else { normal }), Look::default())).id());

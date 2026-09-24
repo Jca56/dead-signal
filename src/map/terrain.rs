@@ -183,21 +183,25 @@ impl Field {
         Self { n, corners }
     }
 
-    pub fn corner(&self, i: usize, j: usize) -> Vec3 {
-        self.corners[j * self.n + i]
-    }
-
     /// Cell `(i, j)`'s two triangles, wound to face up; the diagonal
     /// alternates, so the facets don't run in stripes.
     pub fn cell(&self, i: usize, j: usize) -> [[Vec3; 3]; 2] {
-        let (a, b, c, d) = (self.corner(i, j), self.corner(i + 1, j), self.corner(i + 1, j + 1), self.corner(i, j + 1));
+        self.cell_corners(i, j).map(|t| t.map(|c| self.corners[c]))
+    }
+
+    /// Cell `(i, j)`'s two triangles, as their corners' places in
+    /// `corners`.
+    fn cell_corners(&self, i: usize, j: usize) -> [[usize; 3]; 2] {
+        let n = self.n;
+        let (a, b, c, d) = (j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i);
         // Seen from above, x right and z down the page: a b / d c, wound
         // a d c (anticlockwise from above, with +z towards the viewer).
         if (i + j) % 2 == 1 { [[a, d, c], [a, c, b]] } else { [[a, d, b], [b, d, c]] }
     }
 
-    /// The ground's height at `(x, z)`, if it's on the land.
-    pub fn height_at(&self, x: f64, z: f64) -> Option<f64> {
+    /// The triangle over `(x, z)` (its corners' places), and the ground's
+    /// height there, if it's on the land.
+    fn under(&self, x: f64, z: f64) -> Option<([usize; 3], f64)> {
         let fi = ((x + EXTENT) / STEP).floor() as i64;
         let fj = ((z + EXTENT) / STEP).floor() as i64;
         let cells = self.n as i64 - 1;
@@ -209,14 +213,31 @@ impl Field {
                 if i < 0 || j < 0 || i >= cells || j >= cells {
                     continue;
                 }
-                for t in self.cell(i as usize, j as usize) {
-                    if let Some(y) = on_triangle(t, x, z) {
-                        return Some(y);
+                for k in self.cell_corners(i as usize, j as usize) {
+                    if let Some(y) = on_triangle(k.map(|c| self.corners[c]), x, z) {
+                        return Some((k, y));
                     }
                 }
             }
         }
         None
+    }
+
+    /// The ground's height at `(x, z)`, if it's on the land.
+    pub fn height_at(&self, x: f64, z: f64) -> Option<f64> {
+        self.under(x, z).map(|(_, y)| y)
+    }
+
+    /// The ground at `(x, z)` pressed down to `most` if it's over it (the
+    /// corners of the triangle there that stand over it lowered).
+    pub fn press(&mut self, x: f64, z: f64, most: f64) {
+        if let Some((k, y)) = self.under(x, z)
+            && y > most
+        {
+            for c in k {
+                self.corners[c].y = self.corners[c].y.min(most);
+            }
+        }
     }
 }
 

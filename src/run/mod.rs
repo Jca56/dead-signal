@@ -104,7 +104,7 @@ impl Run {
         crate::items::scatter(&mut game.world, seed, &map.pickups);
         crate::containers::fill(&mut game.world, seed.rotate_left(13));
         self.dice = Dice(seed.rotate_left(7) | 1);
-        self.begin_out(game, seed.rotate_left(21), map.truck_near());
+        self.begin_out(game, seed.rotate_left(21), map);
         if let Some((eye, _)) = Self::watching(game) {
             self.director.begin(&mut game.world, &map.sites, &|x, z| map.field.height_at(x, z), eye, seed.rotate_left(3));
         }

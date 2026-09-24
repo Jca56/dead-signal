@@ -3,7 +3,7 @@
 
 use lntrn_math::{Vec2, Vec3};
 
-use super::roads::Network;
+use super::roads::{self, Network};
 use super::scatter::Scenery;
 use super::building;
 use super::sites::Kind as SiteKind;
@@ -47,9 +47,11 @@ fn maps_are_laid_out_whole_and_sound() {
             let door = site.door();
             assert!(network.off_road(door) < 1.0, "seed {seed}: no road to the {:?}", site.kind);
         }
-        // Three ways out, each on the map; the player far from them all.
+        // The radio, a road out at each end, a truck or two; each on the
+        // map, the player far from them all.
         let ways: Vec<crate::exits::Way> = map.exits.iter().map(|e| e.0).collect();
-        assert_eq!(ways.len(), 3, "seed {seed}: {ways:?}");
+        let count = |w: crate::exits::Way| ways.iter().filter(|&&x| x == w).count();
+        assert!(count(crate::exits::Way::Radio) == 1 && count(crate::exits::Way::Road) == 2 && (1..=2).contains(&count(crate::exits::Way::Truck)), "seed {seed}: {ways:?}");
         let (spawn, _) = map.spawn;
         assert!(spawn.x.abs().max(spawn.z.abs()) < HALF - 10.0, "seed {seed}: spawn {spawn:?}");
         for (way, (x, z, _, _), _, _) in &map.exits {
@@ -96,7 +98,7 @@ fn a_built_map_can_be_played_through() {
     let spawn = Vec3::new(spawn.x, floor, spawn.z);
     assert!((floor - b.map.field.height_at(spawn.x, spawn.z).unwrap()).abs() < 0.5, "the spawn is on the ground");
     // Every way out can be got to from the spawn: its zone, or beside it.
-    assert_eq!(b.exits.list.len(), 3);
+    assert_eq!(b.exits.list.len(), b.map.exits.len(), "every way out set down");
     for e in &b.exits.list {
         let goal = if e.radius > 0.0 { e.zone } else { e.zone + Vec3::new(0.0, 0.0, 3.2) };
         let near = [Vec3::ZERO, Vec3::new(2.0, 0.0, 0.0), Vec3::new(-2.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, -2.0)];
@@ -120,10 +122,12 @@ fn a_built_map_can_be_played_through() {
     assert_eq!((b.picture.width, b.picture.height), (screen::PICTURE, screen::PICTURE));
 }
 
-#[test]
-fn the_ground_under_a_road_never_pokes_through_it() {
-    let map = &built_map().map;
-    for road in &map.roads {
+/// Where on `map` the ground comes up through a road: how far over, and
+/// where, of every such spot.
+fn pokes(map: &Map) -> Vec<(f64, Vec2, roads::Kind)> {
+    let network = Network::new(map.roads.clone());
+    let mut out = Vec::new();
+    for (r, road) in map.roads.iter().enumerate() {
         let hw = road.kind.half_width();
         for (i, p) in road.points.iter().enumerate() {
             if p.x.abs().max(p.z.abs()) > HALF {
@@ -133,13 +137,26 @@ fn the_ground_under_a_road_never_pokes_through_it() {
             let side = Vec2::new(-d.y, d.x);
             for off in [-hw + 0.2, 0.0, hw - 0.2] {
                 let q = Vec2::new(p.x, p.z) + side * off;
+                // (Where it meets another road, the ground there is that
+                // road's, and that road is over it.)
+                if network.claim(q).is_some_and(|c| c.0 != r) {
+                    continue;
+                }
                 let ground = map.field.height_at(q.x, q.y).unwrap();
-                assert!(ground < p.y + road.kind.lift() - 0.01, "the ground is {:.2} over the {:?} road at {q:?}", ground - p.y, road.kind);
+                if ground >= p.y + road.kind.lift() - 0.01 {
+                    out.push((ground - p.y, q, road.kind));
+                }
             }
         }
     }
+    out
 }
 
+#[test]
+fn the_ground_under_a_road_never_pokes_through_it() {
+    let pokes = pokes(&built_map().map);
+    assert!(pokes.is_empty(), "the ground comes up through the road: {pokes:?}");
+}
 
 #[test]
 fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {

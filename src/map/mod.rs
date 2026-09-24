@@ -26,12 +26,15 @@ use scatter::Piece;
 use sites::Site;
 use terrain::{Field, Natural, Plot, Shaped};
 
-/// How far one can go from the middle of the map, each way.
-pub const HALF: f64 = 300.0;
+/// How far one can go from the middle of the map, each way. (Distances
+/// across the map are said as shares of it, so they grow with it.)
+pub const HALF: f64 = 424.0;
 /// How far the land is drawn (the ridges past the edge, into the fog).
-pub const EXTENT: f64 = 360.0;
+pub const EXTENT: f64 = HALF + 60.0;
 /// Where the land starts rising into the ridges that close the map in.
-pub const EDGE: f64 = 272.0;
+pub const EDGE: f64 = HALF - 28.0;
+// The land's grid (and the roads') meets the far edge exactly.
+const _: () = assert!(EXTENT % terrain::STEP == 0.0);
 
 /// Where a thing is set down: game x and z, which way it's turned, and a
 /// height to look down from for its floor.
@@ -57,9 +60,9 @@ pub struct Map {
 }
 
 impl Map {
-    /// What the truck is out by, in words (for the radio).
-    pub fn truck_near(&self) -> &'static str {
-        let Some(&(_, (x, z, _, _), _, _)) = self.exits.iter().find(|e| e.0 == Way::Truck) else { return "road" };
+    /// What a spot is out by, in words (for the radio): the place it's at,
+    /// or the road.
+    pub fn near(&self, x: f64, z: f64) -> &'static str {
         let at = Vec2::new(x, z);
         self.sites.iter().find(|s| s.plot.outside(at) < 2.0).map_or("road", |s| match s.kind {
             sites::Kind::Farm => "farm",
@@ -69,6 +72,9 @@ impl Map {
         })
     }
 }
+
+/// How many trucks there are, at most.
+const TRUCKS: usize = 2;
 
 /// Make the map for `seed`.
 pub fn generate(seed: u32) -> Map {
@@ -119,16 +125,38 @@ pub fn generate(seed: u32) -> Map {
         let points = roads::profile(roads::Kind::Paved, line, |x, z| shaped.height(x, z), in_plot, Some(&Network::new(laid.clone())));
         laid.push(Road { kind: roads::Kind::Paved, points });
     }
-    for site in &plan.sites {
+    for (own, site) in plan.sites.iter().enumerate() {
         let kind = match site.kind {
             sites::Kind::Town | sites::Kind::Gas | sites::Kind::Crash => continue,
             sites::Kind::Military => roads::Kind::Paved,
             _ => roads::Kind::Dirt,
         };
         let door = site.door();
-        let Some(from) = nearest_on(&laid, door) else { continue };
-        let blocked = |p: Vec2| plots.iter().any(|pl| pl.outside(p) < 3.0) || plan.fields.iter().any(|f| f.outside(p) < 2.0);
-        let line = roads::route(&|x, z| shaped.height(x, z), &blocked, from, door);
+        // (Never off a road right by another place.)
+        let apart = |q: Vec2| plots.iter().enumerate().all(|(k, pl)| k == own || pl.outside(q) > PLOT_BERTH);
+        let Some((from, tangent)) = nearest_on(&laid, door, apart) else { continue };
+        // It leaves square to the road it branches from, straight out a
+        // little way (towards its door), before it finds its own way:
+        // well clear of the other places (their own roads to come have
+        // room to leave from), and never alongside a road already laid (two
+        // roads side by side at their own heights leave the land between
+        // them no way to lie).
+        let square = Vec2::new(-tangent.y, tangent.x);
+        let square = if square.dot(door - from) < 0.0 { square * -1.0 } else { square };
+        let leave = from + square * LEAVE;
+        let alongside = Network::new(laid.clone());
+        let blocked = |p: Vec2| {
+            plots.iter().enumerate().any(|(k, pl)| pl.outside(p) < if k == own { 3.0 } else { PLOT_BERTH })
+                || plan.fields.iter().any(|f| f.outside(p) < 2.0)
+                || alongside.off_road(p) < ROADS_APART
+        };
+        let line = if (door - from).length() > 2.0 * LEAVE {
+            let mut line = roads::resample(&[from, leave], roads::SPACING);
+            line.extend(roads::route(&|x, z| shaped.height(x, z), &blocked, leave, door).into_iter().skip(1));
+            roads::resample(&roads::curve(&line, 1), roads::SPACING)
+        } else {
+            roads::route(&|x, z| shaped.height(x, z), &blocked, from, door)
+        };
         // As far as its shoulder reaches into a plot, the road comes up (or
         // down) to the plot's level first: the land it claims round its end
         // is then the plot's own, and stays flat for what's built on it.
@@ -147,20 +175,23 @@ pub fn generate(seed: u32) -> Map {
             None => h,
         }
     };
-    let field = Field::new(seed, height);
+    let mut field = Field::new(seed, height);
+    roads::press_ground(&mut field, &network);
     let forest = scatter::Forest::new(seed);
 
-    // The ways out, then the player as far from them all as can be.
+    // The ways out, then the player as far from them all as can be: the
+    // road out at both ends of the highway, a way in from each edge.
     let mut exits = Vec::new();
     let hw = &network.roads[0];
-    let out_end = plan.out;
-    let order: Vec<usize> = if out_end == 0 { (0..hw.points.len()).collect() } else { (0..hw.points.len()).rev().collect() };
-    if let Some(&i) = order.iter().find(|&&i| hw.points[i].x.abs().max(hw.points[i].z.abs()) <= HALF - 32.0) {
-        let p = hw.points[i];
-        // Heading out: towards the end it leaves by.
-        let h = hw.heading(i) * if out_end == 0 { -1.0 } else { 1.0 };
-        let yaw = h.x.atan2(h.y);
-        exits.push((Way::Road, (p.x, p.z, yaw, p.y + 6.0), Vec3::new(0.0, 0.0, 7.0), 3.5));
+    for from_start in [true, false] {
+        let order: Vec<usize> = if from_start { (0..hw.points.len()).collect() } else { (0..hw.points.len()).rev().collect() };
+        if let Some(&i) = order.iter().find(|&&i| hw.points[i].x.abs().max(hw.points[i].z.abs()) <= HALF - 32.0) {
+            let p = hw.points[i];
+            // Heading out: towards the end it leaves by.
+            let h = hw.heading(i) * if from_start { -1.0 } else { 1.0 };
+            let yaw = h.x.atan2(h.y);
+            exits.push((Way::Road, (p.x, p.z, yaw, p.y + 6.0), Vec3::new(0.0, 0.0, 7.0), 3.5));
+        }
     }
     let mut scenery = Vec::new();
     if let Some(radio) = plan.sites.iter().find(|s| s.kind == sites::Kind::Radio) {
@@ -173,10 +204,14 @@ pub fn generate(seed: u32) -> Map {
         let yaw = (-front.x).atan2(-front.y);
         exits.push((Way::Radio, (at.x, at.y, yaw, y + 3.0), Vec3::new(1.0, 0.0, -4.0), 11.0));
     }
-    let truck_site = [sites::Kind::Farm, sites::Kind::Gas, sites::Kind::Military].iter().find_map(|k| plan.sites.iter().find(|s| s.kind == *k));
-    if let Some(site) = truck_site {
-        // In a farm's yard, clear of its house and barn; at a gas
-        // station's front corner, clear of its canopy and garage.
+    // A truck at two of the places, never two of one kind: in a farm's
+    // yard, clear of its house and barn; at a gas station's front corner,
+    // clear of its canopy and garage; in the camp.
+    let mut kinds = [sites::Kind::Farm, sites::Kind::Gas, sites::Kind::Military];
+    let first = dice.next() as usize % kinds.len();
+    kinds.swap(0, first);
+    let truck_sites: Vec<&Site> = kinds.iter().filter_map(|k| plan.sites.iter().find(|s| s.kind == *k)).take(TRUCKS).collect();
+    for site in truck_sites {
         let spot = match site.kind {
             sites::Kind::Farm => homestead::FARM_YARD,
             sites::Kind::Gas => Vec2::new(0.75, -0.55),
@@ -196,7 +231,7 @@ pub fn generate(seed: u32) -> Map {
         p.at.y = field.height_at(p.at.x, p.at.z).unwrap_or(p.at.y);
     }
     let fixtures: Vec<(Vec2, f64)> = fitted.pieces.iter().map(|p| (Vec2::new(p.at.x, p.at.z), outposts::reach(p.what))).collect();
-    let mut things = scatter::things(&mut dice, &field, &network, &plan.sites, &exits, &buildings, &fixtures, out_end);
+    let mut things = scatter::things(&mut dice, &field, &network, &plan.sites, &exits, &buildings, &fixtures);
     things.containers.extend(town.cars);
     things.containers.extend(fitted.containers);
     scenery.extend(fitted.pieces);
@@ -214,21 +249,38 @@ pub fn generate(seed: u32) -> Map {
     Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings, targets: fitted.targets, forest }
 }
 
-/// The nearest point to `p` on any of `roads` (flat).
-fn nearest_on(roads: &[Road], p: Vec2) -> Option<Vec2> {
-    let mut best: Option<(Vec2, f64)> = None;
+/// Where a road to `p` best leaves `roads` from (flat; only where `may`
+/// says), and which way the road it leaves runs there: the nearest point
+/// on any, but a stretch the steeper the farther it counts (a road
+/// branching off up a hillside leaves the land between them no way to
+/// lie).
+fn nearest_on(roads: &[Road], p: Vec2, may: impl Fn(Vec2) -> bool) -> Option<(Vec2, Vec2)> {
+    let mut best: Option<(Vec2, Vec2, f64)> = None;
     for road in roads {
         for w in road.points.windows(2) {
             let (a, b) = (Vec2::new(w[0].x, w[0].z), Vec2::new(w[1].x, w[1].z));
             let q = a + (b - a) * ((p - a).dot(b - a) / (b - a).dot(b - a).max(1e-9)).clamp(0.0, 1.0);
-            let d = (q - p).length();
-            if best.is_none_or(|(_, bd)| d < bd) {
-                best = Some((q, d));
+            let grade = (w[1].y - w[0].y).abs() / (b - a).length().max(1e-9);
+            let d = (q - p).length() * (1.0 + JUNCTION_GRADE * grade);
+            if may(q) && best.is_none_or(|(_, _, bd)| d < bd) {
+                best = Some((q, (b - a) * (1.0 / (b - a).length().max(1e-9)), d));
             }
         }
     }
-    best.map(|(q, _)| q)
+    best.map(|(q, t, _)| (q, t))
 }
+
+/// How far a side road runs straight out from the road it leaves.
+const LEAVE: f64 = 16.0;
+
+/// How far a road keeps from the places it isn't going to.
+const PLOT_BERTH: f64 = 14.0;
+
+/// How far a road keeps from another's edge, but where it leaves it.
+const ROADS_APART: f64 = 9.0;
+
+/// How much farther a junction on a slope counts, per unit of grade.
+const JUNCTION_GRADE: f64 = 12.0;
 
 fn distance_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f64 {
     let ab = b - a;

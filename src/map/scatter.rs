@@ -198,6 +198,9 @@ pub fn poles(field: &Field, network: &Network, plots: &[Plot]) -> Vec<Piece> {
     out
 }
 
+/// How many wrecks are left down the highway.
+const WRECKS: usize = 10;
+
 /// What's lying about: containers, and boxes and kits to pick up.
 pub struct Things {
     pub containers: Vec<(Source, Spot)>,
@@ -205,10 +208,9 @@ pub struct Things {
 }
 
 /// Containers at every place (the cage at the camp), wrecks along the
-/// highway and jammed across its far end (`jammed` is the end that isn't
-/// the way out), and boxes of rounds and kits about the places.
+/// highway, and boxes of rounds and kits about the places.
 #[allow(clippy::too_many_arguments)]
-pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site], exits: &[exits::Spot], buildings: &[Building], fixtures: &[(Vec2, f64)], out_end: usize) -> Things {
+pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site], exits: &[exits::Spot], buildings: &[Building], fixtures: &[(Vec2, f64)]) -> Things {
     let mut containers: Vec<(Source, Spot)> = Vec::new();
     let mut pickups: Vec<crate::items::Spot> = Vec::new();
     // (Nothing left out where a building stands, or its porch or steps.)
@@ -268,15 +270,14 @@ pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site],
             pickups.push(pickup(dice, p, floor(p)));
         }
     }
-    // Wrecks down the highway, and the jam across the end that isn't the
-    // way out.
+    // Wrecks down the highway.
     let hw = &network.roads[0];
     let n = hw.points.len();
     let in_town = |p: Vec2| sites.iter().any(|s| s.kind == SiteKind::Town && s.plot.outside(p) < 10.0);
     let edgeward = |i: usize| hw.points[i].x.abs().max(hw.points[i].z.abs());
     let mut wrecks = 0;
-    for _ in 0..200 {
-        if wrecks >= 7 {
+    for _ in 0..300 {
+        if wrecks >= WRECKS {
             break;
         }
         let i = 2 + dice.next() as usize % (n - 4);
@@ -292,13 +293,6 @@ pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site],
             pickups.push(pickup(dice, q, floor(q)));
         }
         wrecks += 1;
-    }
-    let jam: Vec<usize> = (0..n).filter(|&i| edgeward(i) > HALF - 42.0 && edgeward(i) < HALF - 14.0 && (if out_end == 0 { i > n / 2 } else { i < n / 2 })).collect();
-    for (k, &i) in jam.iter().enumerate().step_by(2) {
-        let dir = hw.heading(i);
-        let lateral = if k % 4 == 0 { -2.2 } else { 2.2 };
-        let at = Vec2::new(hw.points[i].x, hw.points[i].z) + Vec2::new(-dir.y, dir.x) * (lateral + (dice.unit() - 0.5));
-        containers.push((Source::Car, (at.x, at.y, car_yaw(dir) + (dice.unit() - 0.5) * 2.2, floor(at))));
     }
     Things { containers, pickups }
 }
