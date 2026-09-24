@@ -9,6 +9,10 @@ from shambler_body import NECK, SKULL
 from shambler_kit import BONE, FWD, GORE, J, MOUTH, SOCKET, UP, bottom, limb, skin, stained, top, v
 
 CLAW = (0.62, 0.58, 0.46)
+PLATE = (0.44, 0.44, 0.42)
+PLATE_DARK = (0.30, 0.30, 0.29)
+RUST = (0.46, 0.25, 0.12)
+STRAP = (0.17, 0.13, 0.10)
 BILE = (0.52, 0.72, 0.14)
 BILE_DARK = (0.30, 0.44, 0.08)
 
@@ -76,9 +80,64 @@ def head_spitter(b):
     limb(b, [(v(0, 0.39, 1.62), 0.018, {"head": 1.0}), (v(0.01, 0.40, 1.56), 0.012, {"head": 1.0}), (v(0.0, 0.395, 1.50), 0.007, {"head": 1.0})], [BILE, BILE], cap_start=True, ref=FWD)
 
 
+def torso_plated(b):
+    """A barrel of a body, scrap plate strapped over the front of it."""
+    limb(b, [
+        (v(0, 0.02, 0.86), (0.17, 0.12), {"hips": 1.0}),
+        (v(0, 0.03, 1.00), (0.19, 0.13), {"hips": 1.0}),
+        (v(0, 0.06, 1.15), (0.19, 0.13), {"hips": 0.5, "spine": 0.5}),
+        (v(0, 0.10, 1.30), (0.23, 0.15), {"spine": 0.5, "chest": 0.5}),
+        (v(0, 0.14, 1.44), (0.25, 0.14), {"chest": 1.0}),
+        (v(0, 0.19, 1.50), (0.09, 0.08), {"chest": 0.4, "neck": 0.6}),
+    ], [bottom(), bottom(0.8), stained(skin(), top(), "00011000"), skin(), skin(0.9)], cap_start=True, cap_end=False)
+    # The plates: a slab over the chest, another over the belly, rusted.
+    limb(b, [
+        (v(0, 0.215, 1.27), (0.20, 0.035), {"spine": 0.6, "chest": 0.4}),
+        (v(0, 0.265, 1.38), (0.22, 0.04), {"chest": 1.0}),
+        (v(0, 0.27, 1.47), (0.19, 0.035), {"chest": 1.0}),
+    ], [stained(PLATE, RUST, "00100100"), stained(PLATE_DARK, RUST, "01000010")], cap_start=True, ref=FWD)
+    limb(b, [
+        (v(0, 0.15, 1.02), (0.17, 0.03), {"hips": 1.0}),
+        (v(0, 0.17, 1.12), (0.18, 0.035), {"hips": 0.4, "spine": 0.6}),
+        (v(0, 0.19, 1.21), (0.18, 0.03), {"spine": 1.0}),
+    ], [stained(PLATE_DARK, RUST, "10000001"), PLATE], cap_start=True, ref=FWD)
+    # Straps round it.
+    for z, w in ((1.20, {"spine": 1.0}), (1.36, {"spine": 0.3, "chest": 0.7})):
+        limb(b, [(v(0, 0.09 + (z - 1.2) * 0.3, z - 0.015), (0.235, 0.215), w), (v(0, 0.09 + (z - 1.2) * 0.3, z + 0.015), (0.235, 0.215), w)], [STRAP], cap_end=False)
+
+
+def head_juggernaut(b):
+    """A head under a mask of welded plate, slits to see out of."""
+    limb(b, NECK + SKULL, [skin(), skin(0.8), skin(), skin()], ref=FWD)
+    limb(b, [
+        (v(0, 0.36, 1.55), (0.10, 0.03), {"head": 1.0}),
+        (v(0, 0.395, 1.64), (0.115, 0.035), {"head": 1.0}),
+        (v(0, 0.40, 1.70), (0.115, 0.035), {"head": 1.0}),
+        (v(0, 0.37, 1.80), (0.09, 0.03), {"head": 1.0}),
+    ], [stained(PLATE_DARK, RUST, "01000000"), stained(PLATE, SOCKET, "11000011"), stained(PLATE, RUST, "00010000")], cap_start=True, ref=FWD)
+    # Rivets down the middle.
+    for z in (1.58, 1.75):
+        limb(b, [(v(0, 0.425, z - 0.01), 0.012, {"head": 1.0}), (v(0, 0.43, z + 0.01), 0.012, {"head": 1.0})], [PLATE_DARK], cap_start=True)
+
+
+def pauldron(b, side):
+    """A plate over the shoulder."""
+    up = J[f"upper_arm{side}"]
+    u = f"upper_arm{side}"
+    limb(b, [
+        (up[0] + v(0, 0, 0.06), 0.085, {"chest": 0.3, u: 0.7}),
+        (up[0].lerp(up[1], 0.2), 0.095, {u: 1.0}),
+        (up[0].lerp(up[1], 0.42), 0.08, {u: 1.0}),
+    ], [stained(PLATE, RUST, "00100010"), PLATE_DARK], cap_start=True)
+
+
 def parts():
     """Every special part by the name the game knows it."""
     return {
+        "torso_plated": torso_plated,
+        "head_juggernaut": head_juggernaut,
+        "pauldron.L": lambda b: pauldron(b, ".L"),
+        "pauldron.R": lambda b: pauldron(b, ".R"),
         "torso_bloated": torso_bloated,
         "head_spitter": head_spitter,
         "head_ripper": head_ripper,

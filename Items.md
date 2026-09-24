@@ -6,11 +6,11 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 |---|---|---|---|---|---|---|
 | 9MM ROUNDS | 1×1 | 30 | Common | $2 | crate, locker, car, cage, drawers, desk, wardrobe, shelf, register, gun cabinet, tool locker, supply case, ammo cage, zombies, soldiers, lying about | Brass, for the only conversation the dead still understand. |
 | BANDAGE | 1×1 | 3 | Common | $15 | crate, locker, drawers, wardrobe, shelf, supply case, zombies, soldiers, lying about | Clean-ish. Wrap it tight and don't look. |
-| MEDKIT | 2×1 | 1 | Uncommon | $60 | locker, cage, wardrobe, supply case, ammo cage, soldiers, lying about | Somebody packed this for a bad day. Today qualifies. |
+| MEDKIT | 2×1 | 1 | Uncommon | $60 | locker, cage, wardrobe, supply case, ammo cage, soldiers, juggernaut, lying about | Somebody packed this for a bad day. Today qualifies. |
 | CANNED BEANS | 1×1 | 1 | Common | $10 | crate, car, fridge, drawers, shelf | Best before the end of the world. Still fine. |
 | WATER | 1×2 | 1 | Common | $12 | crate, car, fridge, shelf | Sealed. Worth more than it used to be. |
 | ANTIBIOTICS | 1×1 | 1 | Uncommon | $45 | crate, locker, fridge, drawers, desk, shelf, supply case, zombies | Half a bottle. Someone never finished the course. |
-| CASH | 1×1 | 50 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, hunter's cabinet, supply case, zombies, soldiers | Nobody takes it anymore. Everybody still wants it. |
+| CASH | 1×1 | 50 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, hunter's cabinet, supply case, zombies, soldiers, juggernaut | Nobody takes it anymore. Everybody still wants it. |
 | WATCH | 1×1 | 1 | Rare | $120 | locker, car, cage, drawers, desk, wardrobe, register, zombies | Still ticking. Doesn't know what it's counting down to. |
 | RADIO | 1×2 | 1 | Rare | $150 | locker, car, cage, desk, supply case | Static on every channel. Every channel but one. |
 | CAR BATTERY | 2×2 | 1 | Rare | $180 | car, cage, shelf, tool locker, supply case | Heavy, leaking, and the closest thing left to electricity. |
@@ -18,12 +18,12 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | GOLD RING | 1×1 | 1 | Epic | $300 | locker, cage, wardrobe, zombies | Engraved inside: "forever." Well. |
 | GOLD CHAIN | 1×1 | 1 | Epic | $350 | car, cage, desk, wardrobe | Off someone who didn't need it anymore. |
 | CAGE KEY | 1×1 | 1 | Rare | $25 | one locker, car, desk or wardrobe each run | Tagged SUPPLY. Someone locked up the good stuff and never came back. |
-| GOLD BAR | 2×1 | 1 | Legendary | $1000 | cage | Useless, heavy, and absolutely coming home with you. |
+| GOLD BAR | 2×1 | 1 | Legendary | $1000 | cage, juggernaut | Useless, heavy, and absolutely coming home with you. |
 | PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe, gun cabinet, ammo cage | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
-| SHOTGUN | 4×1 | 1 | Rare | $320 | car, cage, wardrobe, gun cabinet, hunter's cabinet, ammo cage | Five shells and a very loud opinion. Rack it and they all come running. |
-| 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, hunter's cabinet, tool locker, ammo cage, zombies, soldiers | Red paper, brass base, a fistful of lead. Loaded one at a time. |
-| HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage | Bolt-action, 4× glass. One round, one less of them, and often the one behind it. |
-| .308 ROUNDS | 1×1 | 20 | Uncommon | $8 | cage, gun cabinet, hunter's cabinet, supply case, ammo cage, soldiers | Heavy brass. Every one of them should count. |
+| SHOTGUN | 4×1 | 1 | Rare | $320 | car, cage, wardrobe, gun cabinet, hunter's cabinet, ammo cage, juggernaut | Five shells and a very loud opinion. Rack it and they all come running. |
+| 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, hunter's cabinet, tool locker, ammo cage, zombies, soldiers, juggernaut | Red paper, brass base, a fistful of lead. Loaded one at a time. |
+| HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage, juggernaut | Bolt-action, 4× glass. One round, one less of them, and often the one behind it. |
+| .308 ROUNDS | 1×1 | 20 | Uncommon | $8 | cage, gun cabinet, hunter's cabinet, supply case, ammo cage, soldiers, juggernaut | Heavy brass. Every one of them should count. |
 | TACTICAL KNIFE | 2×1 | 1 | Uncommon | $90 | locker, cage, tool locker, supply case, ammo cage, zombies, soldiers | Quiet work. One that never saw you coming never will. |
 | MACHETE | 3×1 | 1 | Uncommon | $110 | car, tool locker | For brush, once. Swing it again and it comes back the other way. |
 | FIRE AXE | 4×1 | 1 | Rare | $160 | hunter's cabinet, tool locker | Break glass in case of emergency. Everything is the emergency now. |

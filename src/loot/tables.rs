@@ -35,6 +35,8 @@ pub enum Source {
     /// better.
     Corpse,
     Soldier,
+    /// What a Juggernaut had on it: always something, and good.
+    Juggernaut,
 }
 
 /// Every container there is (not the dead).
@@ -236,6 +238,20 @@ const SOLDIER: &[Line] = &[
     (Kind::ArmoryKey, 2, (1, 1)),
 ];
 
+const JUGGERNAUT: &[Line] = &[
+    (Kind::GoldBar, 10, (1, 1)),
+    (Kind::Rifle, 6, (1, 1)),
+    (Kind::Shotgun, 6, (1, 1)),
+    (Kind::RifleRounds, 12, (8, 15)),
+    (Kind::Shells, 10, (6, 12)),
+    (Kind::Medkit, 12, (1, 1)),
+    (Kind::Cash, 12, (3, 6)),
+    (Kind::ArmoryKey, 4, (1, 1)),
+];
+
+/// How many things a Juggernaut had on it, fewest and most.
+pub const JUGGERNAUT_DROPS: (u32, u32) = (2, 3);
+
 /// How one of the dead carries something at all; one of the soldiers.
 pub const CORPSE_CHANCE: f64 = 0.2;
 pub const SOLDIER_CHANCE: f64 = 0.35;
@@ -259,6 +275,7 @@ impl Source {
             Source::SupplyCase => SUPPLY_CASE,
             Source::AmmoCage => AMMO_CAGE,
             Source::Soldier => SOLDIER,
+            Source::Juggernaut => JUGGERNAUT,
             Source::Corpse => CORPSE,
         }
     }
@@ -286,7 +303,7 @@ impl Source {
             Source::ToolLocker => (2, 3),
             Source::SupplyCase => (2, 3),
             Source::AmmoCage => (3, 5),
-            Source::Soldier => (1, 1),
+            Source::Soldier | Source::Juggernaut => (1, 1),
             Source::Corpse => (1, 1),
         }
     }
@@ -309,6 +326,7 @@ impl Source {
             Source::SupplyCase => (4, 3),
             Source::AmmoCage => (5, 4),
             Source::Soldier => (2, 2),
+            Source::Juggernaut => (5, 3),
             Source::Corpse => (2, 2),
         }
     }
@@ -330,7 +348,7 @@ impl Source {
             Source::ToolLocker => "TOOL LOCKER",
             Source::SupplyCase => "SUPPLY CASE",
             Source::AmmoCage => "AMMO CAGE",
-            Source::Soldier => "REMAINS",
+            Source::Soldier | Source::Juggernaut => "REMAINS",
             Source::Corpse => "REMAINS",
         }
     }
@@ -351,7 +369,7 @@ impl Source {
             Source::GunCabinet | Source::HunterCabinet | Source::ToolLocker => 2.0,
             Source::SupplyCase => 1.5,
             Source::AmmoCage => 3.0,
-            Source::Soldier => 0.0,
+            Source::Soldier | Source::Juggernaut => 0.0,
             Source::Corpse => 0.0,
         }
     }
@@ -396,7 +414,7 @@ mod tests {
     #[test]
     fn every_table_draws_what_it_lists_and_fills_its_grid() {
         let mut dice = Dice(0x1234_5678);
-        for source in CONTAINERS.into_iter().chain([Source::Corpse, Source::Soldier]) {
+        for source in CONTAINERS.into_iter().chain([Source::Corpse, Source::Soldier, Source::Juggernaut]) {
             let mut seen = std::collections::HashSet::new();
             for _ in 0..300 {
                 let g = fill(source, &mut dice);

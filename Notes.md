@@ -33,7 +33,7 @@
 
 ## Phase 6: Threat 💀
 
-- [ ] 16. Special zombies. I'm not sure how many yet. Maybe 1-3 of each type per map? More? Less? More or less random?
+- [x] 16. Special zombies. I'm not sure how many yet. Maybe 1-3 of each type per map? More? Less? More or less random?
   - **Spitter:** ranged attack that poisons. Blows up a few seconds after death, which can hurt and kill other zombies around it.
   - **Juggernaut:** big, lots of health, lots of damage. The scary one. Has a charge attack where it stops moving, aims towards the player, then charges quickly in a straight line towards the player.
   - **Slicer?:** very fast and agile yet frail. Has razor sharp claws that cause instant bleeding and attacks very fast. Very deadly, but dies easily as well.

@@ -19,6 +19,10 @@ game picks the parts, and the colours of their regions (`shambler_kit.py`).
     Run     0.5 s  a Ripper's: bent double, flat out, claws trailing (loops)
     Slash   0.45 s a Ripper's rake, right claw across; lands at 0.18 s
     Spit    0.9 s  a Spitter's: rears back, then heaves; the glob's off at 0.55 s
+    Roar    1.0 s  a Juggernaut's, before it charges: arms flung wide, head back
+    Charge  0.6 s  its charge: bent low, shoulder first, pounding (loops)
+    Dazed   1.2 s  run into something: reeling, head lolling (loops)
+    Smash   1.3 s  both fists up and down; lands at 0.65 s
 
 Built facing Blender's +Y (the game's -Z, the way a yaw of 0 looks), feet
 on the ground at the origin. Bones: root > hips > spine > chest > neck >
@@ -259,6 +263,13 @@ def actions(rig):
     rear = with_(rest, spine=(8, 0, 0), chest=(22, 0, 0), neck=(5, 0, 0), head=(30, 0, 0), upper_arm__R=(20, 0, -35), upper_arm__L=(20, 0, 35), forearm__R=(20, 0, 0), forearm__L=(20, 0, 0), hips=(0, 0, 0, (0, -0.05, 0)))
     heave = with_(rest, spine=(-20, 0, 0), chest=(-30, 0, 0), neck=(-15, 0, 0), head=(-25, 0, 0), upper_arm__R=(50, 0, -25), upper_arm__L=(50, 0, 25), forearm__R=(10, 0, 0), forearm__L=(10, 0, 0), hips=(0, 0, 0, (0, 0.08, -0.02)))
     action("Spit", [(0, rest), (9, rear), (14, rear), (17, heave), (22, heave), (27, rest)])
+    roar = with_(rest, spine=(12, 0, 0), chest=(20, 0, 0), neck=(10, 0, 0), head=(28, 0, 0), upper_arm__R=(40, 0, -70), upper_arm__L=(40, 0, 70), forearm__R=(30, 0, 0), forearm__L=(30, 0, 0))
+    action("Roar", [(0, rest), (8, roar), (24, with_(roar, head=(22, 6, 0))), (30, rest)])
+    action("Charge", [(f, with_(run_pose(f / 18), spine=(-35, 0, 0), chest=(-15, 0, -10), neck=(20, 0, 0), head=(10, 0, 0), upper_arm__R=(-20, 0, -30), upper_arm__L=(25, 0, 35), forearm__R=(60, 0, 0), forearm__L=(50, 0, 0))) for f in range(0, 19)])
+    action("Dazed", [(f, with_(stand(math.sin(f / 36 * math.tau) * 2.0), head=(-25, 25 * math.sin(f / 36 * math.tau), 0), neck=(-20, 0, 0), upper_arm__R=(5, 0, -10), upper_arm__L=(5, 0, 10))) for f in range(0, 37, 4)])
+    overhead = with_(rest, upper_arm__R=(170, 0, -15), upper_arm__L=(170, 0, 15), forearm__R=(20, 0, 0), forearm__L=(20, 0, 0), chest=(15, 0, 0), spine=(8, 0, 0), head=(10, 0, 0))
+    slammed = with_(rest, upper_arm__R=(70, 0, 10), upper_arm__L=(70, 0, -10), forearm__R=(5, 0, 0), forearm__L=(5, 0, 0), chest=(-35, 0, 0), spine=(-20, 0, 0), hips=(0, 0, 0, (0, 0.15, -0.12)), thigh__R=(35, 0, 0), shin__R=(-40, 0, 0), thigh__L=(25, 0, 0), shin__L=(-30, 0, 0))
+    action("Smash", [(0, rest), (12, overhead), (16, overhead), (20, slammed), (28, slammed), (39, rest)])
     bpy.ops.object.mode_set(mode="OBJECT")
     return made
 

@@ -57,6 +57,12 @@ pub enum Sfx {
     Splat,
     Swell,
     Burst,
+    /// A Juggernaut: its roar before it charges, its footfalls charging,
+    /// running into something, and a round turned by its plate.
+    Bellow,
+    Stomp,
+    Slam,
+    Clank,
     Flesh,
     Gurgle,
     Shuffle,
@@ -83,7 +89,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 41] = [
+const ALL: [Sfx; 45] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -108,6 +114,10 @@ const ALL: [Sfx; 41] = [
     Sfx::Splat,
     Sfx::Swell,
     Sfx::Burst,
+    Sfx::Bellow,
+    Sfx::Stomp,
+    Sfx::Slam,
+    Sfx::Clank,
     Sfx::Flesh,
     Sfx::Gurgle,
     Sfx::Shuffle,
@@ -130,7 +140,7 @@ const ALL: [Sfx; 41] = [
 impl Sfx {
     /// Whether it's the dead's (their own volume), not the world's.
     fn of_the_dead(self) -> bool {
-        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Retch | Sfx::Swell | Sfx::Gurgle | Sfx::Shuffle)
+        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Retch | Sfx::Swell | Sfx::Bellow | Sfx::Stomp | Sfx::Gurgle | Sfx::Shuffle)
     }
 }
 

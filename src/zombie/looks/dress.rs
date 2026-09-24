@@ -76,6 +76,7 @@ impl Looks {
             Top::Hoodie | Top::Jacket => weighted(dice, &[(0.8, Sleeve::Long), (0.2, Sleeve::Torn)]),
             Top::Overalls => weighted(dice, &[(0.4, Sleeve::Short), (0.3, Sleeve::Torn), (0.3, Sleeve::Long)]),
             Top::Bloated => Sleeve::Torn,
+            Top::Plated => Sleeve::Bare,
             Top::Collar | Top::Flannel => weighted(dice, &[(0.5, Sleeve::Long), (0.5, Sleeve::Torn)]),
         };
         l.maim(dice);
@@ -119,6 +120,22 @@ impl Looks {
         l.height = 0.96 + 0.06 * dice.unit();
         l.bulk = 1.05 + 0.1 * dice.unit();
         l
+    }
+
+    /// A Juggernaut: a head taller and half again as broad, grey with
+    /// grime, in fatigues, plated in scrap.
+    pub fn juggernaut(dice: &mut Dice) -> Self {
+        Looks {
+            head: Head::Juggernaut,
+            top: Top::Plated,
+            sleeve: Sleeve::Bare,
+            legs: Legs::Boots,
+            pauldrons: true,
+            colors: [[0.40, 0.42, 0.40], [0.29, 0.31, 0.22], pick(dice, &[[0.29, 0.31, 0.22], [0.24, 0.28, 0.20], [0.20, 0.20, 0.22]]), [0.10, 0.09, 0.08], [0.29, 0.31, 0.22]],
+            height: 1.28 + 0.06 * dice.unit(),
+            bulk: 1.45 + 0.08 * dice.unit(),
+            ..Looks::default()
+        }
     }
 
     /// Put a hat on it, `chance` of the time: one of `kinds` in one of

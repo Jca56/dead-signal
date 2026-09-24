@@ -325,7 +325,7 @@ fn a_crowd_spreads_round_you_instead_of_stacking() {
         world.spawn((z, Body::at(Vec3::new(0.0, 0.0, -8.0)), super::Beat::new(i)));
     }
     let mut schedule = Schedule::default();
-    schedule.add_systems(super::think);
+    schedule.add_systems(super::step::think);
     for _ in 0..(8.0 / STEP) as usize {
         schedule.run(&mut world);
     }
@@ -386,7 +386,7 @@ fn a_round_goes_on_past_the_ones_already_hit() {
         world.spawn((Zombie::new(0.0, k as u32 + 1), Body::at(Vec3::new(0.0, 0.0, z)), Figure::default(), super::Beat::new(0)));
     }
     let mut schedule = Schedule::default();
-    schedule.add_systems(super::pose);
+    schedule.add_systems(super::step::pose);
     schedule.run(&mut world);
     let (from, dir) = (Vec3::new(0.0, 1.2, 0.0), Vec3::new(0.0, 0.0, -1.0));
     let (a, ta, _) = super::raycast(&mut world, from, dir, 50.0).expect("the first");
@@ -407,7 +407,7 @@ fn a_takedown_kills_only_one_that_never_saw_it_coming() {
         let mut z = Zombie::new(0.0, 5);
         z.state = state;
         let e = world.spawn((z, Body::at(Vec3::ZERO))).id();
-        let hit = super::Impact { damage: 45.0, head: false, blow: true, shove: 3.0, stumble: true, takedown: true };
+        let hit = super::Impact { damage: 45.0, head: false, limb: false, blow: true, shove: 3.0, stumble: true, takedown: true };
         super::hurt(&mut world, e, Vec3::new(0.0, 0.0, -1.0), Vec3::new(0.0, 1.6, 2.0), hit)
     };
     assert!(knife(State::Wander { goal: None, rest: 1.0 }), "wandering: dead");

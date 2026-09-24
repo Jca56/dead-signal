@@ -41,6 +41,10 @@ impl Sfx {
             Sfx::Splat => 25.0,
             Sfx::Swell => 30.0,
             Sfx::Burst => 70.0,
+            Sfx::Bellow => 90.0,
+            Sfx::Stomp => 50.0,
+            Sfx::Slam => 60.0,
+            Sfx::Clank => 45.0,
             Sfx::Flesh => 40.0,
             _ => 60.0,
         }

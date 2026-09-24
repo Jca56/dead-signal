@@ -335,6 +335,7 @@ mod tests {
                 (Source::AmmoCage, "ammo cage"),
                 (Source::Corpse, "zombies"),
                 (Source::Soldier, "soldiers"),
+                (Source::Juggernaut, "juggernaut"),
             ]
                 .iter()
                 .filter(|(s, _)| s.holds(kind))

@@ -8,7 +8,8 @@
 //! (the way out is being worked), they come fast and many. The special
 //! dead: packs of Rippers hunt the woods from the start, Spitters haunt a
 //! few of the outposts, and now and then one of either comes in with the
-//! rest (more often, in a surge).
+//! rest (more often, in a surge); on half the maps, a Juggernaut guards the
+//! military camp or the crash.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
@@ -53,6 +54,9 @@ const RIPPER_SURGE: f64 = 0.25;
 const SPITTERS: (usize, usize) = (2, 4);
 const SPITTER_SHARE: f64 = 0.03;
 const SPITTER_SURGE: f64 = 0.08;
+
+/// How likely a map is to have a Juggernaut.
+const JUGGERNAUT_CHANCE: f64 = 0.5;
 
 /// Whether a Spitter might be found at a `kind` of place.
 fn outpost(kind: Kind) -> bool {
@@ -124,6 +128,9 @@ impl Director {
             while haunted.len() < spitters && !outposts.is_empty() {
                 haunted.push(outposts.swap_remove(dice.next() as usize % outposts.len()));
             }
+            // Where the Juggernaut is, if there is one.
+            let guardable: Vec<usize> = (0..sites.len()).filter(|&i| matches!(sites[i].kind, Kind::Military | Kind::Crash)).collect();
+            let guarded = (!guardable.is_empty() && dice.unit() < JUGGERNAUT_CHANCE).then(|| guardable[dice.next() as usize % guardable.len()]);
             for (i, site) in sites.iter().enumerate() {
                 let want = at_place(site.kind);
                 let mut placed = 0;
@@ -134,7 +141,16 @@ impl Director {
                     let local = Vec2::new((dice.unit() * 2.0 - 1.0) * site.plot.half.x, (dice.unit() * 2.0 - 1.0) * site.plot.half.y);
                     let p = site.plot.world(local);
                     if let Some(at) = stand(&mut dice, p.x, p.y, site.plot.height) {
-                        let kind = if placed == 0 && haunted.contains(&i) { Dead::Spitter } else { Dead::Shambler };
+                        // The first placed is the guard, if it's guarded; the
+                        // next (or first) the Spitter, if it's haunted.
+                        let spitter_at = usize::from(guarded == Some(i));
+                        let kind = if placed == 0 && guarded == Some(i) {
+                            Dead::Juggernaut
+                        } else if placed == spitter_at && haunted.contains(&i) {
+                            Dead::Spitter
+                        } else {
+                            Dead::Shambler
+                        };
                         spots.push((at, kind, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
                         placed += 1;
                     }

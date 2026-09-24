@@ -37,6 +37,8 @@ pub enum Head {
     Ripper,
     /// A Spitter's: over a throat swollen into a sac.
     Spitter,
+    /// A Juggernaut's: masked in welded plate.
+    Juggernaut,
 }
 
 /// What's on its head.
@@ -63,12 +65,14 @@ pub enum Top {
     Overalls,
     /// A Spitter's belly, blown out through what's left of its shirt.
     Bloated,
+    /// A Juggernaut's barrel of a body, plated in scrap.
+    Plated,
 }
 
 impl Top {
     /// Thick enough that nothing fits over it.
     fn bulky(self) -> bool {
-        matches!(self, Top::Hoodie | Top::Jacket | Top::Bloated)
+        matches!(self, Top::Hoodie | Top::Jacket | Top::Bloated | Top::Plated)
     }
 }
 
@@ -155,8 +159,10 @@ pub struct Looks {
     pub wounds: Vec<Wound>,
     pub vest: bool,
     pub pack: bool,
-    /// A Ripper's claws, on what hands it has.
+    /// A Ripper's claws, on what hands it has; a Juggernaut's shoulder
+    /// plates.
     pub claws: bool,
+    pub pauldrons: bool,
     /// Each region's colour, as authored (sRGB).
     pub colors: [Rgb; PALETTE],
     /// How tall and how broad, times the model.
@@ -180,6 +186,7 @@ impl Default for Looks {
             vest: false,
             pack: false,
             claws: false,
+            pauldrons: false,
             colors: [SKINS[0], [0.31, 0.34, 0.37], [0.27, 0.23, 0.18], HAIR[0], SHIRTS[2]],
             height: 1.0,
             bulk: 1.0,
@@ -198,6 +205,7 @@ impl Looks {
                 Head::Gone => "neck_stump",
                 Head::Ripper => "head_ripper",
                 Head::Spitter => "head_spitter",
+                Head::Juggernaut => "head_juggernaut",
             }
             .into(),
         );
@@ -223,6 +231,7 @@ impl Looks {
                 Top::Jacket => "torso_jacket",
                 Top::Overalls => "torso_overalls",
                 Top::Bloated => "torso_bloated",
+                Top::Plated => "torso_plated",
             }
             .into(),
         );
@@ -266,6 +275,9 @@ impl Looks {
         }
         if self.pack {
             parts.push("pack".into());
+        }
+        if self.pauldrons {
+            parts.extend(["pauldron.L".to_string(), "pauldron.R".to_string()]);
         }
         if self.claws {
             for (arm, side) in self.arms.iter().zip([".L", ".R"]) {

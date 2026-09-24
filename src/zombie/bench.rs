@@ -57,8 +57,8 @@ fn bench() {
     for (n, on) in [(40, None), (80, None), (80, Some(car_roof)), (160, None), (160, Some(car_roof))] {
         let mut world = crowd(n, on);
         let (mut fixed, mut frame) = (Schedule::default(), Schedule::default());
-        fixed.add_systems(super::think);
-        frame.add_systems(super::pose);
+        fixed.add_systems(super::step::think);
+        frame.add_systems(super::step::pose);
         // The player walks a slow circle, so the dead keep finding their way.
         let seconds = 20.0;
         let frames = (seconds / STEP) as usize;

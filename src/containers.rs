@@ -35,7 +35,7 @@ pub fn model_name(source: Source) -> &'static str {
         Source::Register => "CONTAINER_Register",
         Source::GunCabinet | Source::HunterCabinet => "CONTAINER_GunCabinet",
         Source::SupplyCase => "CONTAINER_SupplyCase",
-        Source::Corpse | Source::Soldier => "",
+        Source::Corpse | Source::Soldier | Source::Juggernaut => "",
     }
 }
 

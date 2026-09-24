@@ -15,6 +15,9 @@ pub enum Kind {
     /// Bloated with bile: keeps its distance and lobs it at you, and dead,
     /// swells and bursts over everything near.
     Spitter,
+    /// Huge and plated in scrap: roars, then charges; turn it into a wall
+    /// and it's dazed. Its front shrugs off shots; its back doesn't.
+    Juggernaut,
 }
 
 /// Its swipe: seconds it takes, when in it the blow lands, the rest after,
@@ -92,12 +95,27 @@ const SPITTER: Traits = Traits {
     loot: 1.5,
 };
 
+const JUGGERNAUT: Traits = Traits {
+    hp: 900.0,
+    // (Its lunge is its charge: it never lunges otherwise.)
+    pace: (2.0, 2.4, 11.0),
+    fast: (2.0, 2.4, 11.0),
+    fast_share: 0.0,
+    sight: 1.2,
+    turn: 1.8,
+    lunge: 0.0,
+    swipe: Swipe { time: 1.3, strike_at: 0.65, cooldown: 1.2, range: 2.1, reach: 2.8, damage: 40.0, leaves: None },
+    snarl: Sfx::Bellow,
+    loot: 1.0,
+};
+
 impl Kind {
     pub fn traits(self) -> &'static Traits {
         match self {
             Kind::Shambler => &SHAMBLER,
             Kind::Ripper => &RIPPER,
             Kind::Spitter => &SPITTER,
+            Kind::Juggernaut => &JUGGERNAUT,
         }
     }
 }
@@ -114,7 +132,7 @@ mod tests {
         // Quicker blows, each less, but they cut.
         let (s, rs) = (Kind::Shambler.traits().swipe, r.swipe);
         assert!(rs.time + rs.cooldown < s.time + s.cooldown && rs.damage < s.damage && rs.leaves == Some(Affliction::Bleed));
-        for k in [Kind::Shambler, Kind::Ripper, Kind::Spitter] {
+        for k in [Kind::Shambler, Kind::Ripper, Kind::Spitter, Kind::Juggernaut] {
             let w = k.traits().swipe;
             assert!(w.strike_at < w.time && w.range < w.reach, "{k:?}");
         }

@@ -265,6 +265,50 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 boom * 1.2 + wet + rain
             })
         }
+        Sfx::Bellow => {
+            // A roar from a chest like a barrel: a low buzz, rising to
+            // its worst, rough with breath, a growl under it.
+            let (mut a, mut b) = (Svf::default(), Svf::default());
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(1.3, 1.0, move |t, n| {
+                let freq = 62.0 + 38.0 * (t / 0.5).min(1.0) - 20.0 * ((t - 0.8).max(0.0) / 0.5) + 6.0 * sine(t, 23.0);
+                phase = (phase + freq * dt).fract();
+                let buzz = if phase < 0.35 { 1.0 } else { -0.54 };
+                let x = buzz + n.next() * 0.9;
+                let shape = env(t, 0.12, 0.6) * (0.8 + 0.2 * sine(t, 5.0));
+                (a.run(x, 380.0, 0.35).1 * 1.3 + b.run(x, 820.0, 0.4).1 * 0.8 + sine(t, freq * 0.5) * 0.35) * shape
+            })
+        }
+        Sfx::Stomp => {
+            // A great weight coming down: a thump you feel, and grit.
+            let mut f = Svf::default();
+            render(0.35, 1.0, |t, n| {
+                (std::f32::consts::TAU * sweep_phase(t, 90.0, 38.0, 0.05)).sin() * env(t, 0.002, 0.09) + f.run(n.next(), 700.0, 0.7).1 * env(t, 0.001, 0.03) * 0.8
+            })
+        }
+        Sfx::Slam => {
+            // Running full tilt into something: a crash, splinters and
+            // clatter after.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(1.1, 1.0, |t, n| {
+                let x = n.next();
+                let boom = (std::f32::consts::TAU * sweep_phase(t, 110.0, 30.0, 0.06)).sin() * env(t, 0.002, 0.2) * 1.3;
+                let crack = f.run(x, 1600.0, 0.4).1 * env(t, 0.001, 0.05) * 1.6;
+                let clatter = g.run(x, 3000.0, 0.6).1 * env((t - 0.08).max(0.0), 0.02, 0.25) * (0.4 + 0.6 * sine(t, 31.0).abs()) * 0.6;
+                boom + crack + clatter
+            })
+        }
+        Sfx::Clank => {
+            // A round off scrap plate: a dull ring, a few partials, soon
+            // gone.
+            let partials = [(430.0, 0.22, 1.0), (1130.0, 0.14, 0.6), (2270.0, 0.08, 0.4)];
+            let mut f = Svf::default();
+            render(0.5, 0.7, |t, n| {
+                let ring: f32 = partials.iter().map(|&(freq, decay, amp)| sine(t, freq) * env(t, 0.0005, decay) * amp).sum();
+                ring + f.run(n.next(), 5000.0, 0.5).2 * env(t, 0.0002, 0.006) * 0.8
+            })
+        }
         Sfx::Shriek => {
             // A torn, rising scream: a buzz climbing through high, narrow
             // throat shapes, choked with breath.

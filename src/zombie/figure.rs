@@ -24,6 +24,12 @@ pub enum Clip {
     Slash,
     /// A Spitter's heave.
     Spit,
+    /// A Juggernaut's: its roar, its charge, dazed, and its two-fisted
+    /// smash.
+    Roar,
+    Charge,
+    Dazed,
+    Smash,
 }
 
 impl Clip {
@@ -38,11 +44,15 @@ impl Clip {
             Clip::Run => "Run",
             Clip::Slash => "Slash",
             Clip::Spit => "Spit",
+            Clip::Roar => "Roar",
+            Clip::Charge => "Charge",
+            Clip::Dazed => "Dazed",
+            Clip::Smash => "Smash",
         }
     }
 
     fn loops(self) -> bool {
-        matches!(self, Clip::Walk | Clip::Idle | Clip::Run)
+        matches!(self, Clip::Walk | Clip::Idle | Clip::Run | Clip::Charge | Clip::Dazed)
     }
 }
 
@@ -97,13 +107,25 @@ impl Model {
     }
 }
 
+/// Where on one of the dead a shot finds it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Zone {
+    Head,
+    /// Hips to neck.
+    Body,
+    /// An arm or a leg.
+    Limb,
+}
+
 /// A Shambler as drawn and hit this frame.
 #[derive(Component, Clone, Debug, Default)]
 pub struct Figure {
     /// Its parts' meshes (found once it's first posed).
     pub parts: Vec<FigureMeshId>,
-    /// No head to hit, and which of [`LIMBS`] are gone.
+    /// No head to hit, and which of [`LIMBS`] are gone; how much thicker
+    /// than a Shambler it is to hit (its bulk).
     headless: bool,
+    girth: f64,
     lost: [bool; 8],
     /// Where it stands and faces (and how far it has sunk).
     pub model: Mat4,
@@ -123,7 +145,7 @@ impl Figure {
             lost[side * 2] = *arm == Arm::Shoulder;
             lost[side * 2 + 1] = *arm != Arm::Whole;
         }
-        Self { headless: looks.headless(), lost, ..Self::default() }
+        Self { headless: looks.headless(), lost, girth: looks.bulk, ..Self::default() }
     }
 
     pub fn set(&mut self, model: Mat4, joints: Vec<Mat4>, local: [Vec3; 15], solid: bool) {
@@ -140,24 +162,31 @@ impl Figure {
     }
 
     /// How far along a ray (unit `dir`) it is hit, and whether in the head.
+    #[cfg(test)]
     pub fn ray(&self, from: Vec3, dir: Vec3, max: f64) -> Option<(f64, bool)> {
+        self.ray_zone(from, dir, max).map(|(t, z)| (t, z == Zone::Head))
+    }
+
+    /// How far along a ray (unit `dir`) it is hit, and where.
+    pub fn ray_zone(&self, from: Vec3, dir: Vec3, max: f64) -> Option<(f64, Zone)> {
         if !self.solid {
             return None;
         }
         let p = &self.points;
+        let g = if self.girth > 0.0 { self.girth } else { 1.0 };
         // The head: a ball over the head bone, up along it.
         let crown = p[HEAD] + (p[HEAD] - p[NECK]).normalize() * 0.08;
-        let mut best = if self.headless { None } else { ray_capsule(from, dir, crown, crown, HEAD_RADIUS).filter(|&t| t <= max).map(|t| (t, true)) };
-        let mut take = |hit: Option<f64>| {
+        let mut best = if self.headless { None } else { ray_capsule(from, dir, crown, crown, HEAD_RADIUS * g).filter(|&t| t <= max).map(|t| (t, Zone::Head)) };
+        let mut take = |hit: Option<f64>, zone: Zone| {
             if let Some(t) = hit.filter(|&t| t <= max)
                 && best.is_none_or(|(b, _)| t < b)
             {
-                best = Some((t, false));
+                best = Some((t, zone));
             }
         };
-        take(ray_capsule(from, dir, p[HIPS], p[NECK], BODY_RADIUS));
+        take(ray_capsule(from, dir, p[HIPS], p[NECK], BODY_RADIUS * g), Zone::Body);
         for (&(a, b, r), _) in LIMBS.iter().zip(self.lost).filter(|(_, lost)| !lost) {
-            take(ray_capsule(from, dir, p[a], p[b], r));
+            take(ray_capsule(from, dir, p[a], p[b], r * g), Zone::Limb);
         }
         best
     }
