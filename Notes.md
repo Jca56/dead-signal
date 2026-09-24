@@ -41,7 +41,7 @@
 
 ## Phase 7: Threat Response
 
-- [ ] 17. More guns. Explosions. Balance pass.
+- [x] 17. More guns. Explosions. Balance pass.
   - SMG
   - Assault rifle
   - Molotov

@@ -3,6 +3,8 @@
 mod app;
 mod assets;
 mod bag_ui;
+#[cfg(test)]
+mod balance_md;
 mod camera;
 mod collide;
 mod exits;

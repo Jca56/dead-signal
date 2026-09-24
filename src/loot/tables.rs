@@ -224,7 +224,7 @@ const SUPPLY_CASE: &[Line] = &[
     (Kind::Battery, 4, (1, 1)),
     (Kind::Knife, 4, (1, 1)),
     (Kind::Smg, 3, (1, 1)),
-    (Kind::Rounds556, 14, (10, 20)),
+    (Kind::Rounds556, 18, (12, 24)),
     (Kind::PipeBomb, 5, (1, 1)),
 ];
 
@@ -248,7 +248,7 @@ const AMMO_CAGE: &[Line] = &[
 const SOLDIER: &[Line] = &[
     (Kind::Rounds, 25, (6, 12)),
     (Kind::RifleRounds, 12, (3, 8)),
-    (Kind::Rounds556, 18, (8, 20)),
+    (Kind::Rounds556, 22, (10, 24)),
     (Kind::Bandage, 15, (1, 2)),
     (Kind::Shells, 8, (3, 6)),
     (Kind::Cash, 6, (1, 3)),

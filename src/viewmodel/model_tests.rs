@@ -241,14 +241,17 @@ fn the_shotgun_is_held_in_both_hands_and_pumped() {
 fn a_shell_is_only_in_hand_to_load_it_and_goes_in_the_port() {
     let g = viewmodel(Weapon::Shotgun);
     let size = |anim: &str, t: f64| bone_at(&g, anim, t, "shell").col(0).length();
-    for (anim, t) in [("Idle", 1.0), ("Fire", 0.3), ("Aim", 0.5), ("ReloadEnd", 0.4), ("ReloadShell", 0.36)] {
+    // (It's thumbed in on frame 8, and the next is in hand on frame 13.)
+    let spec = Weapon::Shotgun.spec().reload;
+    let Some(crate::weapon::Reload::Rounds { insert_at, each, .. }) = spec else { panic!("a round at a time") };
+    for (anim, t) in [("Idle", 1.0), ("Fire", 0.3), ("Aim", 0.5), ("ReloadEnd", 0.4), ("ReloadShell", insert_at + 0.04)] {
         assert!(size(anim, t) < 0.05, "a shell in hand in {anim} at {t}");
     }
-    assert!(size("ReloadShell", 0.0) > 0.9 && size("ReloadShell", 0.29) > 0.9, "a shell in hand to load");
+    assert!(size("ReloadShell", 0.0) > 0.9 && size("ReloadShell", insert_at - 0.04) > 0.9 && size("ReloadShell", each) > 0.9, "a shell in hand to load");
     // Just before it's thumbed in, it's at the loading port: under the
     // receiver, a little ahead of the grip.
-    let port = bone_at(&g, "ReloadShell", 0.3, "gun").transform_point(Vec3::ZERO);
-    let shell = bone_at(&g, "ReloadShell", 0.3, "shell").translation();
+    let port = bone_at(&g, "ReloadShell", insert_at - 0.03, "gun").transform_point(Vec3::ZERO);
+    let shell = bone_at(&g, "ReloadShell", insert_at - 0.03, "shell").translation();
     assert!((shell - port).length() < 0.25, "the shell {:.3} m off the gun", (shell - port).length());
 }
 

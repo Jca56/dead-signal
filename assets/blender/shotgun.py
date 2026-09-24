@@ -14,8 +14,8 @@ reach it: the arms were made for a pistol's guard):
     Idle         3 s    held low at the hip, breathing
     Fire         0.8 s  the kick, then the pump racked back and home
     ReloadStart  0.4 s  tipped over, the left hand down for a shell
-    ReloadShell  0.55 s a shell up into the loading port and thumbed in
-                        (frame 10), and down for the next (it loops)
+    ReloadShell  0.43 s a shell up into the loading port and thumbed in
+                        (frame 8), and down for the next (it loops)
     ReloadEnd    0.5 s  the left hand back on the forend, racked
     Bash         0.6 s  a shove with the side of the gun, landing on
                         frame 8
@@ -187,20 +187,20 @@ def animate(rig, gun_rest, left_rest):
         steady(start + f, shell=shell)
     spans["ReloadStart"] = (start, start + 12)
 
-    # ReloadShell: frames 301..317: up to the port, in, and down again.
+    # ReloadShell: frames 301..314: up to the port, in, and down again.
     start = 301
     for f, left, shell in (
         (0, low, 1.0),
-        (7, loading(tipped, dz=-0.03), 1.0),
-        (9, loading(tipped), 1.0),
-        (10, loading(tipped), 0.0),
-        (11, loading(tipped, dz=0.01), 0.0),
-        (15, low, 0.0),
-        (16, low, 1.0),
+        (5, loading(tipped, dz=-0.03), 1.0),
+        (7, loading(tipped), 1.0),
+        (8, loading(tipped), 0.0),
+        (9, loading(tipped, dz=0.01), 0.0),
+        (12, low, 0.0),
+        (13, low, 1.0),
     ):
         r.key(start + f, tipped, left)
         steady(start + f, shell=shell)
-    spans["ReloadShell"] = (start, start + 16)
+    spans["ReloadShell"] = (start, start + 13)
 
     # ReloadEnd: frames 401..416, back on the forend and racked.
     start = 401
