@@ -164,6 +164,11 @@ impl Combat {
     }
 
     /// Play a sound at the listener.
+    /// Set how loud everything is.
+    pub fn set_mix(&self, mix: crate::sound::Mix) {
+        self.sound.set_mix(mix);
+    }
+
     pub fn play(&self, sfx: Sfx, gain: f32) {
         self.sound.play(sfx, gain);
     }

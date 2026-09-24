@@ -7,7 +7,7 @@ mod place;
 mod synth;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use lntrn_audio::{Audio, Mixer, Output, Source, Spec, VoiceId};
@@ -103,6 +103,43 @@ const ALL: [Sfx; 33] = [
     Sfx::Safe,
 ];
 
+impl Sfx {
+    /// Whether it's the dead's (their own volume), not the world's.
+    fn of_the_dead(self) -> bool {
+        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Gurgle | Sfx::Shuffle)
+    }
+}
+
+/// How loud each part of the sound is, 0–1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mix {
+    pub master: f32,
+    pub music: f32,
+    pub effects: f32,
+    pub zombies: f32,
+}
+
+/// The mix as the stream reads it, while the game sets it.
+#[derive(Default)]
+struct Levels {
+    master: AtomicU32,
+    music: AtomicU32,
+    effects: AtomicU32,
+    zombies: AtomicU32,
+}
+
+impl Levels {
+    fn set(&self, mix: Mix) {
+        for (at, v) in [(&self.master, mix.master), (&self.music, mix.music), (&self.effects, mix.effects), (&self.zombies, mix.zombies)] {
+            at.store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        }
+    }
+
+    fn get(at: &AtomicU32) -> f32 {
+        f32::from_bits(at.load(Ordering::Relaxed))
+    }
+}
+
 struct Play {
     sfx: Sfx,
     heard: Heard,
@@ -112,6 +149,7 @@ struct Play {
 /// so once) when there is no device to play on.
 pub struct Sound {
     tx: Option<Sender<Play>>,
+    levels: Arc<Levels>,
     _out: Option<Output>,
 }
 
@@ -120,7 +158,9 @@ impl Sound {
         let bank: Arc<Vec<Arc<Audio>>> = Arc::new(ALL.iter().map(|&s| Arc::new(Audio::new(RATE, 1, synth::synth(s)))).collect());
         let (tx, rx): (Sender<Play>, Receiver<Play>) = channel();
         let mut mixer = Mixer::new(Spec::STEREO_48K);
-        mixer.set_master(0.8);
+        let levels = Arc::new(Levels::default());
+        levels.set(Mix { master: 0.8, music: 0.6, effects: 1.0, zombies: 1.0 });
+        let heard_levels = Arc::clone(&levels);
         let mut crowds: Crowds<(VoiceId, Arc<AtomicBool>)> = Crowds::default();
         let render = move |out: &mut [f32]| {
             while let Ok(p) = rx.try_recv() {
@@ -134,23 +174,29 @@ impl Sound {
                 }
                 let i = ALL.iter().position(|&s| s == p.sfx).unwrap_or(0);
                 let fade = Arc::new(AtomicBool::new(false));
-                let id = mixer.play(Panned::new(Arc::clone(&bank[i]), p.heard, Arc::clone(&fade)));
+                let id = mixer.play(Panned::new(Arc::clone(&bank[i]), p.heard, Arc::clone(&fade), Arc::clone(&heard_levels), p.sfx.of_the_dead()));
                 if let Some(c) = crowd {
                     crowds.add(c, (id, fade), p.heard.distance);
                 }
             }
+            mixer.set_master(Levels::get(&heard_levels.master));
             mixer.render(out);
         };
         match Output::open(Spec::STEREO_48K, render) {
             Ok(out) => {
                 log_info!("sound: {} effects, {:.0} ms latency", ALL.len(), out.latency() * 1000.0);
-                Self { tx: Some(tx), _out: Some(out) }
+                Self { tx: Some(tx), levels, _out: Some(out) }
             }
             Err(e) => {
                 log_error!("sound: no output ({e}); the game is silent");
-                Self { tx: None, _out: None }
+                Self { tx: None, levels, _out: None }
             }
         }
+    }
+
+    /// Set how loud everything is (at once, even what's playing).
+    pub fn set_mix(&self, mix: Mix) {
+        self.levels.set(mix);
     }
 
     /// Play a sound at the listener (the gun in hand, a click).
@@ -188,12 +234,16 @@ struct Panned {
     lp: [f32; 2],
     fade: Arc<AtomicBool>,
     fading: f32,
+    /// The mix, and whether it's the dead's volume or the effects' that
+    /// it plays at.
+    levels: Arc<Levels>,
+    dead: bool,
 }
 
 impl Panned {
-    fn new(audio: Arc<Audio>, heard: Heard, fade: Arc<AtomicBool>) -> Self {
+    fn new(audio: Arc<Audio>, heard: Heard, fade: Arc<AtomicBool>, levels: Arc<Levels>, dead: bool) -> Self {
         let a = 1.0 - (-std::f32::consts::TAU * heard.cutoff / RATE as f32).exp();
-        Self { audio, pos: 0, left: heard.left, right: heard.right, a, lp: [0.0; 2], fade, fading: 1.0 }
+        Self { audio, pos: 0, left: heard.left, right: heard.right, a, lp: [0.0; 2], fade, fading: 1.0, levels, dead }
     }
 }
 
@@ -206,6 +256,7 @@ impl Source for Panned {
         let mut frames = (out.len() / 2).min(self.audio.samples.len() - self.pos);
         let letting_go = self.fade.load(Ordering::Relaxed);
         let step = 1.0 / (LET_GO * RATE as f32);
+        let level = Levels::get(if self.dead { &self.levels.zombies } else { &self.levels.effects });
         for (i, frame) in out.chunks_exact_mut(2).take(frames).enumerate() {
             let s = self.audio.samples[self.pos + i];
             self.lp[0] += self.a * (s - self.lp[0]);
@@ -217,7 +268,7 @@ impl Source for Panned {
                     break;
                 }
             }
-            let s = self.lp[1] * self.fading;
+            let s = self.lp[1] * self.fading * level;
             frame[0] = s * self.left;
             frame[1] = s * self.right;
         }

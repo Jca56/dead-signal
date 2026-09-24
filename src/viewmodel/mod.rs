@@ -118,7 +118,7 @@ impl Viewmodel {
         let still = 1.0 - aim;
         let sway = self.sway.angle * steady;
         let sprint = view.sprint_amount.max(lowered);
-        let amount = view.bob_amount * (1.0 + 0.6 * sprint) * steady;
+        let amount = view.bob_amount * view.feel.bob * (1.0 + 0.6 * sprint) * steady;
         let phase = view.bob_phase;
         let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0) * (1.0 - aim);
         let stow = stowed.clamp(0.0, 1.0);

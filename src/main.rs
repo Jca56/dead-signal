@@ -24,6 +24,7 @@ mod player;
 mod profile;
 mod render;
 mod run;
+mod settings;
 mod sound;
 mod stats;
 mod style;
@@ -40,7 +41,8 @@ use lntrn_app::{AppConfig, run};
 use lntrn_ui::Shell;
 
 fn main() {
-    let windowed = std::env::args().any(|a| a == "--windowed");
+    let settings = settings::load();
+    let windowed = std::env::args().any(|a| a == "--windowed") || !settings.fullscreen;
     let config = AppConfig {
         title: "Dead Signal".into(),
         app_id: "dead-signal".into(),
@@ -52,5 +54,5 @@ fn main() {
         persist: false,
         ..AppConfig::default()
     };
-    run(config, app::DeadSignal::new(!windowed), Shell::new(()));
+    run(config, app::DeadSignal::new(settings, !windowed), Shell::new(()));
 }

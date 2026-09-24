@@ -19,13 +19,13 @@ use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 mod gpu;
 mod level;
 mod load;
+mod options;
 
 use crate::assets::Prop;
 use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::combat::Combat;
 use crate::ending::After;
-use crate::head;
 use crate::hideout::{Hideout, Leave};
 use crate::loot::tables::Source;
 use crate::map::Map;
@@ -37,6 +37,8 @@ use crate::player::Controls;
 use crate::profile::{Profile, save};
 use crate::render::{Mark, MeshId, Renderer};
 use crate::run::Run;
+use crate::settings::screen::SettingsScreen;
+use crate::settings::{self, Settings};
 use crate::viewmodel::Viewmodel;
 use crate::world::Game;
 use crate::zombie;
@@ -67,12 +69,14 @@ enum Screen {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TitleItem {
     Hideout,
+    Settings,
     Quit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PauseItem {
     Resume,
+    Settings,
     ToTitle,
 }
 
@@ -143,16 +147,30 @@ pub struct DeadSignal {
     black: f64,
     fading_to: Option<Then>,
     fade_seconds: f64,
+    /// Whether the window is fullscreen now (the setting, unless started
+    /// `--windowed`).
     fullscreen: bool,
+    /// The settings screen, while it's up (over the title, or a paused
+    /// run); the UI scale as last let go of (not while its slider's held).
+    settings: Option<SettingsScreen>,
+    ui_scale: f64,
+    /// Whether what the window can't be told till it's open (vsync) has
+    /// been told.
+    told_window: bool,
 }
 
 impl DeadSignal {
-    pub fn new(fullscreen: bool) -> Self {
+    pub fn new(settings: Settings, fullscreen: bool) -> Self {
+        let mut game = Game::new();
+        let combat = Combat::new();
+        combat.set_mix(settings.levels());
+        let ui_scale = settings.ui_scale;
+        game.world.insert_resource(settings);
         Self {
-            game: Game::new(),
+            game,
             renderer: None,
             viewmodel: None,
-            combat: Combat::new(),
+            combat,
             run: Run::default(),
             icons: Icons::default(),
             profile: save::load(),
@@ -173,8 +191,8 @@ impl DeadSignal {
             picture: None,
             map_open: false,
             screen: Screen::Title,
-            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("QUIT", TitleItem::Quit)]),
-            pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("QUIT TO TITLE", PauseItem::ToTitle)]),
+            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("SETTINGS", TitleItem::Settings), ("QUIT", TitleItem::Quit)]),
+            pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("SETTINGS", PauseItem::Settings), ("QUIT TO TITLE", PauseItem::ToTitle)]),
             leave_menu: SideMenu::new("LEAVE THE RUN?", &[("STAY", LeaveItem::Stay), ("LEAVE", LeaveItem::Leave)])
                 .warning(&["Leaving now counts as dying.", "Everything but your pockets is lost."]),
             paused: false,
@@ -185,6 +203,9 @@ impl DeadSignal {
             fading_to: None,
             fade_seconds: FIRST_FADE,
             fullscreen,
+            settings: None,
+            ui_scale,
+            told_window: false,
         }
     }
 
@@ -313,6 +334,13 @@ impl DeadSignal {
             self.pause(cx);
         }
         self.was_locked = locked;
+        if self.paused && self.settings.is_some() {
+            ui.draw.rect(ui.clip(), Color::rgba(0.0, 0.0, 0.0, PAUSE_DIM));
+            if self.settings_frame(ui, cx, active) {
+                self.pause_menu.reset();
+            }
+            return;
+        }
         if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() && !self.run.shut_bag(&mut self.game, cx) {
             // Asked about leaving, Esc is staying.
             if self.leaving {
@@ -338,6 +366,7 @@ impl DeadSignal {
             } else {
                 match self.pause_menu.draw(ui, active) {
                     Some(PauseItem::Resume) => self.resume(cx),
+                    Some(PauseItem::Settings) => self.settings = Some(SettingsScreen::default()),
                     Some(PauseItem::ToTitle) => {
                         self.leaving = true;
                         self.leave_menu.reset();
@@ -355,36 +384,6 @@ impl DeadSignal {
         // The run just ended: it's settled (and saved) at once.
         if self.run.ending.is_some() {
             self.settle_run();
-        }
-    }
-
-    /// Where the camera is this frame.
-    fn place_camera(&mut self, time: f64) {
-        match self.screen {
-            Screen::Title | Screen::Hideout | Screen::Loading => {
-                // A slow drift, never quite still.
-                let drift = Vec3::new((time * 0.05).sin() * 4.0, (time * 0.07).sin() * 0.5, (time * 0.04).cos() * 2.5);
-                let mut eye = TITLE_EYE + drift;
-                if let Some(h) = self.game.ground().height_at(eye.x, eye.z) {
-                    eye.y = eye.y.max(h + 2.0);
-                }
-                self.camera.position = eye;
-                self.camera.roll = 0.0;
-                self.camera.fov_y = TITLE_FOV.to_radians();
-                self.camera.look_at(TITLE_LOOK + Vec3::new((time * 0.09).sin() * 1.5, 0.0, 0.0));
-            }
-            Screen::Run => {
-                let alpha = self.game.alpha();
-                if let Some((body, view)) = self.game.player() {
-                    self.camera.position = head::eye_position(&view, &body, alpha);
-                    (self.camera.yaw, self.camera.pitch) = view.aim();
-                    self.camera.fov_y = view.fov_y();
-                    self.camera.roll = 0.0;
-                    if let Some(ending) = &self.run.ending {
-                        ending.fall(&mut self.camera);
-                    }
-                }
-            }
         }
     }
 }
@@ -423,14 +422,31 @@ impl Host for DeadSignal {
         self.perf.done(Phase::Sim, started);
         let clock = self.game.clock();
 
+        // The game's menus and HUD at the player's scale.
+        ui.m.scale *= self.ui_scale;
+        if !self.told_window {
+            self.told_window = true;
+            if !self.game.world.resource::<Settings>().vsync {
+                cx.request(ShellRequest::Vsync(false));
+            }
+        }
         if ui.state.take_key(|k| k.key == Key::F(11)).is_some() {
             self.fullscreen = !self.fullscreen;
             cx.request(ShellRequest::Fullscreen(self.fullscreen));
+            let mut s = self.game.world.resource_mut::<Settings>();
+            s.fullscreen = self.fullscreen;
+            settings::store(&s);
         }
         let active = self.fading_to.is_none();
         match self.screen {
+            Screen::Title if self.settings.is_some() => {
+                if self.settings_frame(ui, cx, active) {
+                    self.title_menu.reset();
+                }
+            }
             Screen::Title => match self.title_menu.draw(ui, active) {
                 Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
+                Some(TitleItem::Settings) => self.settings = Some(SettingsScreen::default()),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
                 None => {}
             },

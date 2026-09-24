@@ -22,6 +22,26 @@ const SPRINT_FOV: f64 = 4.0;
 /// How fast the eye catches up with the feet after a stair.
 const STAIR_RATE: f64 = 14.0;
 
+/// How the view feels, as the player has set it (`settings`): the mouse,
+/// down the sights too, the field of view, the bob.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Feel {
+    /// Times the base sensitivity; times that again all the way down the
+    /// sights.
+    pub sensitivity: f64,
+    pub ads_sensitivity: f64,
+    /// Vertical, degrees.
+    pub fov: f64,
+    /// Times the usual head bob.
+    pub bob: f64,
+}
+
+impl Default for Feel {
+    fn default() -> Self {
+        Self { sensitivity: 1.0, ads_sensitivity: 1.0, fov: FOV, bob: 1.0 }
+    }
+}
+
 /// Which way the player faces, and how the view sits on the body.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct View {
@@ -48,11 +68,12 @@ pub struct View {
     /// left at all the way.
     pub ads: f64,
     pub ads_zoom: f64,
+    pub feel: Feel,
 }
 
 impl View {
     pub fn facing(yaw: f64) -> Self {
-        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, stair: 0.0, sprint_amount: 0.0, kick: (0.0, 0.0), shake: 0.0, shake_t: 0.0, ads: 0.0, ads_zoom: 1.0 }
+        Self { yaw, pitch: 0.0, eye: EYE_STAND, bob_phase: 0.0, bob_amount: 0.0, dip: 0.0, dip_vel: 0.0, stair: 0.0, sprint_amount: 0.0, kick: (0.0, 0.0), shake: 0.0, shake_t: 0.0, ads: 0.0, ads_zoom: 1.0, feel: Feel::default() }
     }
 
     /// Where the eye actually points: the held aim plus the recoil.
@@ -72,10 +93,13 @@ impl View {
     }
 
     /// Turn by raw mouse counts: slower down the sights, as much as the
-    /// view closes in (the world passes under them as fast as ever).
+    /// view closes in (the world passes under them as fast as ever), and
+    /// by the aiming sensitivity.
     pub fn look(&mut self, counts: Vec2) {
         let half = |fov: f64| (fov.to_radians() * 0.5).tan();
-        let sensitivity = SENSITIVITY * half(FOV * self.zoom()) / half(FOV);
+        let feel = self.feel;
+        let aiming = 1.0 + (feel.ads_sensitivity - 1.0) * self.ads;
+        let sensitivity = SENSITIVITY * feel.sensitivity * aiming * half(feel.fov * self.zoom()) / half(feel.fov);
         self.yaw -= counts.x * sensitivity;
         self.pitch = (self.pitch - counts.y * sensitivity).clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
@@ -86,7 +110,7 @@ impl View {
     }
 
     pub fn fov_y(&self) -> f64 {
-        ((FOV + SPRINT_FOV * self.sprint_amount) * self.zoom()).to_radians()
+        ((self.feel.fov + SPRINT_FOV * self.sprint_amount) * self.zoom()).to_radians()
     }
 }
 
@@ -131,8 +155,9 @@ pub fn settle_view(view: &mut View, body: &mut Body, dt: f64) {
 /// raised to eye height, bobbing, dipping, gliding over stairs.
 pub fn eye_position(view: &View, body: &Body, alpha: f64) -> Vec3 {
     let feet = body.prev + (body.pos - body.prev) * alpha;
-    let bob_y = (view.bob_phase * 2.0).sin() * 0.035 * view.bob_amount;
-    let bob_x = view.bob_phase.cos() * 0.025 * view.bob_amount;
+    let bob = view.bob_amount * view.feel.bob;
+    let bob_y = (view.bob_phase * 2.0).sin() * 0.035 * bob;
+    let bob_x = view.bob_phase.cos() * 0.025 * bob;
     let (s, c) = view.yaw.sin_cos();
     let right = Vec3::new(c, 0.0, -s);
     let t = view.shake_t;

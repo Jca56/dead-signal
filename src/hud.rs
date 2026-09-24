@@ -38,6 +38,8 @@ pub struct Hud<'a> {
     /// A word flashed under the middle.
     pub note: Option<&'a str>,
     pub time: f64,
+    /// Whether the dot's shown at all (the player's setting).
+    pub crosshair: bool,
 }
 
 const HEALTH: Color = Color::rgb(0.62, 0.11, 0.08);
@@ -63,7 +65,7 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     // The dot, ringed dark so it shows against sky and ground alike; gone
     // down the sights.
     let dot = 5.0 * s;
-    let shown = 1.0 - h.aim.clamp(0.0, 1.0);
+    let shown = if h.crosshair { 1.0 - h.aim.clamp(0.0, 1.0) } else { 0.0 };
     if shown > 0.0 {
         ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5 - Vec2::new(2.0 * s, 2.0 * s), Vec2::new(dot + 4.0 * s, dot + 4.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.55 * shown));
         ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5, Vec2::new(dot, dot)), Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, shown));

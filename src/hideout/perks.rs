@@ -85,7 +85,7 @@ pub fn page(ui: &mut Ui, profile: &mut Profile, active: bool) -> Option<&'static
 /// A button: drawn (bright when it can be used, primary in red), and
 /// whether it was clicked.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn pressed(ui: &mut Ui, id: &str, r: Rect, label: &str, style_: &TextStyle, can: bool, primary: bool, active: bool) -> bool {
+pub(crate) fn pressed(ui: &mut Ui, id: &str, r: Rect, label: &str, style_: &TextStyle, can: bool, primary: bool, active: bool) -> bool {
     let s = ui.m.scale;
     let hit = ui.interact(ui.id(id), r, Sense::CLICK);
     let lit = active && can && hit.hovered;

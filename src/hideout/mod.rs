@@ -7,6 +7,8 @@
 mod perks;
 mod trader;
 
+pub(crate) use perks::pressed;
+
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::{Key, Sense, Ui};

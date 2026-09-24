@@ -13,6 +13,7 @@ use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
 
 use crate::bag_ui::{BagUi, Icons};
 use crate::combat::Combat;
+use crate::settings::Settings;
 use crate::ending::{After, Ending, Outcome};
 use crate::exits::{self, Way};
 use crate::hud::{self, Hud};
@@ -133,6 +134,10 @@ impl Run {
     pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons) {
         let dt = game.clock().dt;
         let open = self.open.is_some();
+        let feel = game.world.get_resource::<Settings>().map(Settings::feel).unwrap_or_default();
+        if let Some(mut view) = game.player_view_mut() {
+            view.feel = feel;
+        }
         if open {
             // The pointer is the inventory's.
         } else if locked {
@@ -306,6 +311,7 @@ impl Run {
                 prompt: prompt.as_ref().map(|(key, text)| (*key, text.as_str())),
                 note: self.note.map(|(n, _)| n),
                 time,
+                crosshair: game.world.get_resource::<Settings>().is_none_or(|s| s.crosshair),
             },
         );
         let o = self.out_hud(game);
