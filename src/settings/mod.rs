@@ -6,6 +6,7 @@
 //! slider's range, or on/off), so the screen (`screen.rs`) and the file are
 //! both made from the one list.
 
+pub mod keys;
 pub mod screen;
 
 use std::path::PathBuf;
@@ -19,6 +20,8 @@ use lntrn_data::Doc;
 pub enum Field {
     Sensitivity,
     AdsSensitivity,
+    ToggleCrouch,
+    ToggleSprint,
     Fov,
     Fullscreen,
     Vsync,
@@ -52,9 +55,11 @@ pub enum Show {
 }
 
 impl Field {
-    pub const ALL: [Field; 13] = [
+    pub const ALL: [Field; 15] = [
         Field::Sensitivity,
         Field::AdsSensitivity,
+        Field::ToggleCrouch,
+        Field::ToggleSprint,
         Field::Fov,
         Field::Fullscreen,
         Field::Vsync,
@@ -73,6 +78,8 @@ impl Field {
         match self {
             Field::Sensitivity => "sensitivity",
             Field::AdsSensitivity => "ads_sensitivity",
+            Field::ToggleCrouch => "toggle_crouch",
+            Field::ToggleSprint => "toggle_sprint",
             Field::Fov => "fov",
             Field::Fullscreen => "fullscreen",
             Field::Vsync => "vsync",
@@ -92,6 +99,8 @@ impl Field {
         match self {
             Field::Sensitivity => "MOUSE SENSITIVITY",
             Field::AdsSensitivity => "AIMING SENSITIVITY",
+            Field::ToggleCrouch => "TOGGLE CROUCH",
+            Field::ToggleSprint => "TOGGLE SPRINT",
             Field::Fov => "FIELD OF VIEW",
             Field::Fullscreen => "FULLSCREEN",
             Field::Vsync => "VSYNC",
@@ -111,6 +120,8 @@ impl Field {
         match self {
             Field::Sensitivity => "How far the view turns for the mouse",
             Field::AdsSensitivity => "Times the mouse sensitivity, down the sights and the scope",
+            Field::ToggleCrouch => "Off: hold the key to stay crouched",
+            Field::ToggleSprint => "On: tap to sprint till you stop running forward",
             Field::Fov => "How wide you see (the sights still zoom in from it)",
             Field::Fullscreen => "F11 flips it any time",
             Field::Vsync => "Off: less input lag, but the picture may tear",
@@ -134,7 +145,7 @@ impl Field {
             Field::Master | Field::Music | Field::Effects | Field::Zombies => slider(0.0, 1.0, 0.01, Show::Percent),
             Field::HeadBob => slider(0.0, 1.5, 0.05, Show::Percent),
             Field::UiScale => slider(0.75, 1.5, 0.05, Show::Percent),
-            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair => Range::Toggle,
+            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint => Range::Toggle,
         }
     }
 
@@ -166,6 +177,11 @@ pub struct Settings {
     /// Times the base mouse sensitivity; times that again down the sights.
     pub sensitivity: f64,
     pub ads_sensitivity: f64,
+    /// Crouch on a tap (not held); sprint on a tap (not held).
+    pub toggle_crouch: bool,
+    pub toggle_sprint: bool,
+    /// Every action's key.
+    pub keys: keys::Keys,
     /// Vertical field of view, degrees.
     pub fov: f64,
     pub fullscreen: bool,
@@ -188,6 +204,9 @@ impl Default for Settings {
         Self {
             sensitivity: 1.0,
             ads_sensitivity: 1.0,
+            toggle_crouch: true,
+            toggle_sprint: false,
+            keys: keys::Keys::default(),
             fov: crate::head::FOV,
             fullscreen: true,
             vsync: true,
@@ -210,6 +229,8 @@ impl Settings {
         match f {
             Field::Sensitivity => self.sensitivity,
             Field::AdsSensitivity => self.ads_sensitivity,
+            Field::ToggleCrouch => on(self.toggle_crouch),
+            Field::ToggleSprint => on(self.toggle_sprint),
             Field::Fov => self.fov,
             Field::Fullscreen => on(self.fullscreen),
             Field::Vsync => on(self.vsync),
@@ -231,6 +252,8 @@ impl Settings {
         match f {
             Field::Sensitivity => self.sensitivity = v,
             Field::AdsSensitivity => self.ads_sensitivity = v,
+            Field::ToggleCrouch => self.toggle_crouch = on,
+            Field::ToggleSprint => self.toggle_sprint = on,
             Field::Fov => self.fov = v,
             Field::Fullscreen => self.fullscreen = on,
             Field::Vsync => self.vsync = on,
@@ -260,6 +283,7 @@ impl Settings {
         for f in Field::ALL {
             d.set(f.key(), if f.range() == Range::Toggle { (self.get(f) > 0.5).into() } else { self.get(f).into() });
         }
+        d.set("keys", self.keys.to_doc());
         lntrn_data::toml::write(&d)
     }
 
@@ -278,6 +302,7 @@ impl Settings {
                 s.set(f, v);
             }
         }
+        s.keys = keys::Keys::from_doc(d.get("keys"));
         Ok(s)
     }
 }
@@ -334,6 +359,8 @@ mod tests {
         s.set(Field::Vsync, 0.0);
         s.set(Field::Zombies, 0.25);
         s.set(Field::MusicInRuns, 1.0);
+        s.set(Field::ToggleSprint, 1.0);
+        s.keys.bind(keys::Action::Crouch, keys::Bind::Key(lntrn_ui::Key::Control));
         let text = s.to_text();
         assert_eq!(Settings::from_text(&text).unwrap(), s, "{text}");
         assert!(text.contains("vsync = false") && text.contains("music_in_runs = true"), "{text}");

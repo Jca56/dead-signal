@@ -8,7 +8,7 @@ use lntrn_app::lntrn_render::{Gpu, Images};
 use lntrn_core::log_info;
 use lntrn_math::{Color, Mat4, Vec2, Vec3};
 use lntrn_text::TextStyle;
-use lntrn_ui::{Key, Ui};
+use lntrn_ui::Ui;
 
 use super::DeadSignal;
 use crate::exits::{self, Exits};
@@ -116,7 +116,8 @@ impl DeadSignal {
             self.map_open = false;
             return;
         }
-        if active && ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char(c) if c.eq_ignore_ascii_case(&'m'))).is_some() {
+        let keys = self.game.world.resource::<crate::settings::Settings>().keys;
+        if active && keys.pressed(ui, crate::settings::keys::Action::Map) {
             self.map_open = !self.map_open;
         }
         if !self.map_open {

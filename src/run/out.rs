@@ -6,13 +6,14 @@
 //! minutes.
 
 use lntrn_math::Vec3;
-use lntrn_ui::{Key, Ui};
+use lntrn_ui::Ui;
 
 use super::Run;
 use crate::combat::Combat;
 use crate::exits::hud::{Mark, Under};
 use crate::exits::{self, Exits, HANDS, Way};
 use crate::loot::{Dice, Kind};
+use crate::settings::keys::Action;
 use crate::sound::Sfx;
 use crate::world::Game;
 use crate::zombie;
@@ -99,10 +100,6 @@ fn chatter(ways: &[(Way, bool, Vec3)], truck_near: &str, dice: &mut Dice) -> Vec
     lines
 }
 
-fn e_down(ui: &Ui) -> bool {
-    ui.state.keys_down.iter().any(|k| matches!(k, Key::Char(c) if c.eq_ignore_ascii_case(&'e')))
-}
-
 impl Run {
     /// A fresh run's ways out and what the radio says of them.
     pub(super) fn begin_out(&mut self, game: &mut Game, seed: u32, truck_near: &str) {
@@ -172,7 +169,7 @@ impl Run {
             }
         }
 
-        let held = e_down(ui);
+        let held = self.keys.held(ui, Action::Interact);
         let bag_has = |bag: &crate::loot::bag::Bag, k: Kind| bag.count(k) > 0;
         let mut out = None;
         let mut refresh = None;

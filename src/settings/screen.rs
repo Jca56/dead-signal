@@ -1,6 +1,8 @@
 //! The settings screen, over the title or a paused run: tabs across the
-//! top (controls, video, audio, HUD), a row a setting (its name, a word on
-//! what it does, and a slider or an ON/OFF button), and the way back.
+//! top (controls, keys, video, audio, HUD), a row a setting (its name, a
+//! word on what it does, and a slider or an ON/OFF button), and the way
+//! back. The keys are a grid of every action and its key: click one, then
+//! press the key (or mouse button) to bind it to; Esc leaves it be.
 //! Changes take at once; the caller saves them on the way out. A slider is
 //! dragged, clicked along, or turned with the wheel a step at a time.
 
@@ -8,6 +10,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::{Key, Sense, Ui};
 
+use super::keys::{Action, Bind, Button};
 use super::{Field, Range, Settings};
 use crate::hideout::pressed;
 use crate::style;
@@ -15,17 +18,19 @@ use crate::style;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
     Controls,
+    Keys,
     Video,
     Audio,
     Hud,
 }
 
 impl Tab {
-    const ALL: [Tab; 4] = [Tab::Controls, Tab::Video, Tab::Audio, Tab::Hud];
+    const ALL: [Tab; 5] = [Tab::Controls, Tab::Keys, Tab::Video, Tab::Audio, Tab::Hud];
 
     fn label(self) -> &'static str {
         match self {
             Tab::Controls => "CONTROLS",
+            Tab::Keys => "KEYS",
             Tab::Video => "VIDEO",
             Tab::Audio => "AUDIO",
             Tab::Hud => "HUD",
@@ -34,7 +39,8 @@ impl Tab {
 
     fn fields(self) -> &'static [Field] {
         match self {
-            Tab::Controls => &[Field::Sensitivity, Field::AdsSensitivity],
+            Tab::Controls => &[Field::Sensitivity, Field::AdsSensitivity, Field::ToggleCrouch, Field::ToggleSprint],
+            Tab::Keys => &[],
             Tab::Video => &[Field::Fov, Field::Fullscreen, Field::Vsync],
             Tab::Audio => &[Field::Master, Field::Music, Field::Effects, Field::Zombies, Field::MusicInRuns],
             Tab::Hud => &[Field::Crosshair, Field::HeadBob, Field::UiScale],
@@ -47,15 +53,23 @@ const ROW: f64 = 118.0;
 const TRACK: f64 = 620.0;
 const KNOB: f64 = 34.0;
 
+/// A row of the keys' grid, logical pixels.
+const KEY_ROW: f64 = 72.0;
+
 pub struct SettingsScreen {
     tab: Tab,
     /// The slider being dragged.
     held: Option<Field>,
+    /// The action waiting for its new key, and whether the click that
+    /// chose it has been let go of (so it isn't taken as the new key).
+    listening: Option<(Action, bool)>,
+    /// A word on what was just done ("SWAPPED WITH RELOAD"), and till when.
+    note: Option<(String, f64)>,
 }
 
 impl Default for SettingsScreen {
     fn default() -> Self {
-        Self { tab: Tab::Controls, held: None }
+        Self { tab: Tab::Controls, held: None, listening: None, note: None }
     }
 }
 
@@ -68,6 +82,12 @@ impl SettingsScreen {
     /// A frame of it, `active` unless a fade is running. Whether it was
     /// closed (BACK, or Esc).
     pub fn frame(&mut self, ui: &mut Ui, settings: &mut Settings, active: bool) -> bool {
+        // Waiting for a key, the next one pressed is it (Esc: never mind).
+        let listening = active && self.listening.is_some();
+        if listening {
+            self.listen(ui, settings);
+        }
+        let active = active && !listening;
         let s = ui.m.scale;
         let screen = ui.clip();
         ui.draw.rect(screen, Color::rgba(0.02, 0.02, 0.02, 0.82));
@@ -108,6 +128,9 @@ impl SettingsScreen {
         let mut y = tab_y + tab_h + 50.0 * s;
         if !ui.state.down {
             self.held = None;
+        }
+        if self.tab == Tab::Keys {
+            self.keys_page(ui, settings, Vec2::new(left, y), active);
         }
         for &field in self.tab.fields() {
             let row = Rect::from_min_size(Vec2::new(left, y), Vec2::new(screen.max.x - 80.0 * s - left, (ROW - 14.0) * s));
@@ -166,6 +189,17 @@ impl SettingsScreen {
             for &f in self.tab.fields() {
                 settings.set(f, d.get(f));
             }
+            if self.tab == Tab::Keys {
+                settings.keys = d.keys;
+            }
+        }
+        if let Some((note, until)) = &self.note {
+            if ui.now() < *until {
+                let x = reset.max.x + 40.0 * s;
+                ui.text_at(note, &small, Vec2::new(x, reset.min.y + 14.0 * s), back.min.x - x, style::SIGNAL);
+            } else {
+                self.note = None;
+            }
         }
         let mut closed = back_button(ui, back, &item, active);
         if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() {
@@ -175,6 +209,63 @@ impl SettingsScreen {
             self.held = None;
         }
         closed
+    }
+}
+
+impl SettingsScreen {
+    /// The keys' grid from `at`: every action in two columns, its name and
+    /// its key on a button to click and rebind.
+    fn keys_page(&mut self, ui: &mut Ui, settings: &Settings, at: Vec2, active: bool) {
+        let s = ui.m.scale;
+        let screen = ui.clip();
+        let name = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
+        let key_style = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
+        let per_column = Action::ALL.len().div_ceil(2);
+        let width = (screen.max.x - 80.0 * s - at.x - 40.0 * s) * 0.5;
+        for (i, &action) in Action::ALL.iter().enumerate() {
+            let (col, row) = (i / per_column, i % per_column);
+            let cell = Rect::from_min_size(at + Vec2::new(col as f64 * (width + 40.0 * s), row as f64 * KEY_ROW * s), Vec2::new(width, (KEY_ROW - 10.0) * s));
+            ui.draw.rect(cell, Color::rgba(0.05, 0.05, 0.05, 0.7));
+            ui.text_at(action.label(), &name, Vec2::new(cell.min.x + 20.0 * s, cell.center().y - f64::from(name.line_height()) * 0.5), width * 0.55, style::BONE);
+            let waiting = self.listening.is_some_and(|(a, _)| a == action);
+            let label = if waiting { "PRESS A KEY".to_string() } else { settings.keys.name(action) };
+            let button = Rect::from_min_size(Vec2::new(cell.max.x - width * 0.42 - 8.0 * s, cell.min.y + 6.0 * s), Vec2::new(width * 0.42, cell.height() - 12.0 * s));
+            if waiting {
+                ui.draw.rect(button, style::SIGNAL);
+                ui.draw.stroke_rect(button, 2.0 * s, 0.0, style::BONE);
+                ui.text_at(&label, &key_style, Vec2::new(button.min.x + 18.0 * s, button.min.y + 10.0 * s), button.width(), style::BONE);
+            } else if pressed(ui, action.key(), button, &label, &key_style, true, false, active) {
+                self.listening = Some((action, false));
+            }
+        }
+    }
+
+    /// Waiting for `listening`'s new key: the first key pressed (Esc
+    /// cancels), or a mouse button once the click that started it is let go.
+    fn listen(&mut self, ui: &mut Ui, settings: &mut Settings) {
+        let Some((action, armed)) = self.listening else { return };
+        let armed = armed || !(ui.state.down || ui.state.right_down || ui.state.middle_down);
+        self.listening = Some((action, armed));
+        let got = if let Some(k) = ui.state.take_key(|k| !k.repeat) {
+            if k.key == Key::Escape {
+                self.listening = None;
+                return;
+            }
+            Some(Bind::Key(k.key))
+        } else if armed && ui.state.pressed {
+            Some(Bind::Mouse(Button::Left))
+        } else if armed && ui.state.right_pressed {
+            Some(Bind::Mouse(Button::Right))
+        } else if armed && ui.state.middle_pressed {
+            Some(Bind::Mouse(Button::Middle))
+        } else {
+            None
+        };
+        let Some(bind) = got.filter(|b| b.bindable()) else { return };
+        self.listening = None;
+        if let Some(other) = settings.keys.bind(action, bind) {
+            self.note = Some((format!("SWAPPED WITH {}", other.label()), ui.now() + 3.0));
+        }
     }
 }
 

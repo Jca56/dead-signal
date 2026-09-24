@@ -91,10 +91,17 @@ pub enum Mode {
     Trade,
 }
 
-#[derive(Default)]
 pub struct BagUi {
     held: Option<Held>,
     mode: Mode,
+    /// The weapon slots' keys, as written over them.
+    pub slot_keys: [String; 3],
+}
+
+impl Default for BagUi {
+    fn default() -> Self {
+        Self::new(Mode::Run)
+    }
 }
 
 /// What came of a frame: what was thrown on the ground, and what was taken
@@ -185,7 +192,7 @@ pub const SELL_H: u8 = 6;
 impl BagUi {
     /// The screen as the hideout, or trading, has it.
     pub fn new(mode: Mode) -> Self {
-        Self { held: None, mode }
+        Self { held: None, mode, slot_keys: ["1", "2", "3"].map(String::from) }
     }
 
     /// A cell's side on screen, what's searched (the stash) `loot` big:

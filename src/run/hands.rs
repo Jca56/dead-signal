@@ -1,15 +1,16 @@
-//! What's in hand, from the run's side: 1, 2 and 3 (or the wheel) to
+//! What's in hand, from the run's side: the slots' keys (or the wheel) to
 //! switch between what's carried in the slots, bare fists when there's
 //! nothing, and the hands kept in step with the bag: a gun's rounds go
 //! back into it (and rounds loaded into it in the bag come into the
 //! hands), a weapon thrown out of its slot is let go of, one picked up
 //! into empty hands is taken up.
 
-use lntrn_ui::{Key, Ui};
+use lntrn_ui::Ui;
 
 use super::Run;
 use crate::combat::Combat;
 use crate::loot::bag::Slot;
+use crate::settings::keys::Action;
 use crate::weapon::Weapon;
 
 /// How far the wheel turns for one step through the slots, pixels.
@@ -52,7 +53,7 @@ impl Run {
         }
         let mut want = None;
         for slot in Slot::ALL {
-            if pressed(ui, slot.key()) && self.bag.slot(slot).is_some() {
+            if self.keys.pressed(ui, Action::slot(slot)) && self.bag.slot(slot).is_some() {
                 want = Some(slot);
             }
         }
@@ -100,8 +101,4 @@ impl Run {
             stack.loaded = combat.hands.mag;
         }
     }
-}
-
-fn pressed(ui: &mut Ui, key: char) -> bool {
-    ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char(c) if c == key)).is_some()
 }

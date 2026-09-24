@@ -47,15 +47,14 @@ pub fn tile(r: Rect, stack: Stack, cell: f64) -> (Vec2, f64) {
 }
 
 /// The box of `slot` at `r`, and what's in it.
-pub fn draw(ui: &mut Ui, icons: &Icons, slot: Slot, stack: Option<Stack>, r: Rect, cell: f64) {
+pub fn draw(ui: &mut Ui, icons: &Icons, slot: Slot, key: &str, stack: Option<Stack>, r: Rect, cell: f64) {
     let s = ui.m.scale;
     ui.draw.rect(r.expand(6.0 * s), Color::rgba(0.05, 0.05, 0.05, 0.85));
     ui.draw.rect(r.shrink(2.0 * s), Color::rgba(1.0, 1.0, 1.0, 0.05));
     let label = TextStyle::new((22.0 * s) as f32).bold().family(style::FONT);
-    let key = slot.key().to_string();
     let at = r.min + Vec2::new(10.0 * s, 6.0 * s);
-    let kw = ui.measure(&key, &label);
-    ui.text_at(&key, &label, at, kw + 4.0, style::SIGNAL);
+    let kw = ui.measure(key, &label);
+    ui.text_at(key, &label, at, kw + 4.0, style::SIGNAL);
     ui.text_at(slot.name(), &label, at + Vec2::new(kw + 12.0 * s, 0.0), r.width(), style::DIM);
     if let Some(stack) = stack {
         let (at, size) = tile(r, stack, cell);

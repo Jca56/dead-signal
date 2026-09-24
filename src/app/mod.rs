@@ -424,6 +424,10 @@ impl Host for DeadSignal {
 
         // The game's menus and HUD at the player's scale.
         ui.m.scale *= self.ui_scale;
+        // The game is the whole window: no outline round it as the focused
+        // area, nor the areas' edge (every frame: the theme may be reloaded).
+        cx.prefs.theme.focus = Color::TRANSPARENT;
+        cx.prefs.theme.border_dark = Color::TRANSPARENT;
         if !self.told_window {
             self.told_window = true;
             if !self.game.world.resource::<Settings>().vsync {
@@ -440,6 +444,9 @@ impl Host for DeadSignal {
         // The music, in the menus (and in a run, if the player wants it).
         let in_run = self.screen == Screen::Run;
         self.combat.set_music(!in_run || self.game.world.resource::<Settings>().music_in_runs);
+        if self.screen == Screen::Hideout {
+            self.hideout.set_slot_keys(self.game.world.resource::<Settings>().keys.slot_names());
+        }
         let active = self.fading_to.is_none();
         match self.screen {
             Screen::Title if self.settings.is_some() => {

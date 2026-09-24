@@ -5,7 +5,7 @@
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::Vec3;
-use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
+use lntrn_ui::{AreaCx, ShellRequest, Ui};
 
 use super::{Open, Run};
 use crate::bag_ui::{Icons, Shelves};
@@ -14,6 +14,7 @@ use crate::containers::{self, Container};
 use crate::items;
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
+use crate::settings::keys::{Action, Bind};
 use crate::sound::Sfx;
 use crate::world::Game;
 use crate::zombie;
@@ -64,14 +65,6 @@ fn eye(game: &mut Game) -> Option<(Vec3, Vec3)> {
     Some((eye, Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos())))
 }
 
-fn e_down(ui: &Ui) -> bool {
-    ui.state.keys_down.iter().any(|k| matches!(k, Key::Char(c) if c.eq_ignore_ascii_case(&'e')))
-}
-
-fn e_pressed(ui: &mut Ui) -> bool {
-    ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char(c) if c.eq_ignore_ascii_case(&'e'))).is_some()
-}
-
 impl Run {
     /// What's looked at: something lying within reach first, else a
     /// container.
@@ -120,14 +113,14 @@ impl Run {
             self.inventory(ui, cx, game, open, icons);
             return;
         }
-        if ui.state.take_key(|k| !k.repeat && k.key == Key::Tab).is_some() {
+        if self.keys.pressed(ui, Action::Inventory) {
             self.open_bag(cx, None);
             return;
         }
         match aimed {
             Aimed::Pickup(e, stack) => {
                 self.search = None;
-                if e_pressed(ui) {
+                if self.keys.pressed(ui, Action::Interact) {
                     let left = self.bag.add(stack);
                     if left.count == stack.count {
                         self.note = Some(("NO ROOM", NOTE_FOR));
@@ -154,7 +147,7 @@ impl Run {
         let (source, searched, locked, middle) = (c.source, c.searched, c.locked, c.middle());
         if searched {
             self.search = None;
-            if e_pressed(ui) {
+            if self.keys.pressed(ui, Action::Interact) {
                 self.open_bag(cx, Some(e));
             }
             return;
@@ -163,13 +156,13 @@ impl Run {
         let has_key = key.is_some_and(|k| self.bag.count(k) > 0);
         if locked && !has_key {
             self.search = None;
-            if e_pressed(ui) {
+            if self.keys.pressed(ui, Action::Interact) {
                 combat.play(Sfx::Rattle, 0.8);
                 self.note = Some((if key == Some(Kind::ArmoryKey) { "NEEDS ARMORY KEY" } else { "NEEDS CAGE KEY" }, NOTE_FOR));
             }
             return;
         }
-        if !e_down(ui) {
+        if !self.keys.held(ui, Action::Interact) {
             self.search = None;
             return;
         }
@@ -239,7 +232,8 @@ impl Run {
     /// A frame of the inventory screen: shut by Tab or E, or by walking off
     /// from what's searched; things dragged out land at the player's feet.
     fn inventory(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, open: Open, icons: &Icons) {
-        let closing = ui.state.take_key(|k| !k.repeat && (k.key == Key::Tab || matches!(k.key, Key::Char(c) if c.eq_ignore_ascii_case(&'e')))).is_some();
+        // (Only a key closes it: a mouse button is for the things in it.)
+        let closing = [Action::Inventory, Action::Interact].into_iter().any(|a| matches!(self.keys.get(a), Bind::Key(_)) && self.keys.pressed(ui, a));
         let feet = game.player().map(|(b, _)| b.pos);
         let too_far = open.container.is_some_and(|e| {
             let middle = game.world.get::<Container>(e).map(Container::middle);

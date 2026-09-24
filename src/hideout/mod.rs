@@ -49,6 +49,11 @@ impl Default for Hideout {
 }
 
 impl Hideout {
+    /// Write the weapon slots' keys (the player's) over them.
+    pub fn set_slot_keys(&mut self, keys: [String; 3]) {
+        self.grids.slot_keys = keys;
+    }
+
     /// Put down whatever is held, and put back what was to be sold
     /// (leaving the page, or the hideout).
     pub fn let_go(&mut self, profile: &mut Profile) {

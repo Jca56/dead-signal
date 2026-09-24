@@ -9,11 +9,12 @@ mod out;
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::{Vec2, Vec3};
-use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
+use lntrn_ui::{AreaCx, ShellRequest, Ui};
 
 use crate::bag_ui::{BagUi, Icons};
 use crate::combat::Combat;
 use crate::settings::Settings;
+use crate::settings::keys::{Action, Keys};
 use crate::ending::{After, Ending, Outcome};
 use crate::exits::{self, Way};
 use crate::hud::{self, Hud};
@@ -69,6 +70,10 @@ pub struct Run {
     perks: Perks,
     /// The wheel's turn not yet stepped through the slots, pixels.
     wheel: f64,
+    /// The player's keys, this frame (`settings::keys`), and whether a
+    /// sprint's been toggled on (sprint set to toggle).
+    keys: Keys,
+    sprinting: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -134,7 +139,9 @@ impl Run {
     pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons) {
         let dt = game.clock().dt;
         let open = self.open.is_some();
-        let feel = game.world.get_resource::<Settings>().map(Settings::feel).unwrap_or_default();
+        let (feel, keys, toggle_crouch, toggle_sprint) = game.world.get_resource::<Settings>().map_or((Default::default(), Keys::default(), true, false), |s| (s.feel(), s.keys, s.toggle_crouch, s.toggle_sprint));
+        self.keys = keys;
+        self.bag_ui.slot_keys = keys.slot_names();
         if let Some(mut view) = game.player_view_mut() {
             view.feel = feel;
         }
@@ -149,13 +156,24 @@ impl Run {
             // The lock was refused or lost: a click takes it back.
             cx.request(ShellRequest::LockPointer(true));
         }
-        let held = |ui: &Ui, keys: &[char], other: Key| ui.state.keys_down.iter().any(|k| *k == other || matches!(k, Key::Char(c) if keys.iter().any(|w| c.eq_ignore_ascii_case(w))));
-        let pressed = |ui: &mut Ui, keys: &[char]| ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Char(c) if keys.iter().any(|w| c.eq_ignore_ascii_case(w)))).is_some();
         let axis = |neg: bool, pos: bool| f64::from(i8::from(pos) - i8::from(neg));
-        let walk = Vec2::new(axis(held(ui, &['a'], Key::ArrowLeft), held(ui, &['d'], Key::ArrowRight)), axis(held(ui, &['s'], Key::ArrowDown), held(ui, &['w'], Key::ArrowUp)));
-        let wants_sprint = ui.state.keys_down.contains(&Key::Shift) && walk.y > 0.0;
+        let walk = Vec2::new(axis(keys.held(ui, Action::Left), keys.held(ui, Action::Right)), axis(keys.held(ui, Action::Back), keys.held(ui, Action::Forward)));
+        // Sprinting, held or toggled (a toggled sprint ends when running
+        // forward does).
+        let sprint_key = if toggle_sprint {
+            if keys.pressed(ui, Action::Sprint) {
+                self.sprinting = !self.sprinting;
+            }
+            self.sprinting
+        } else {
+            keys.held(ui, Action::Sprint)
+        };
+        if walk.y <= 0.0 {
+            self.sprinting = false;
+        }
+        let wants_sprint = sprint_key && walk.y > 0.0;
         let sprint = wants_sprint && combat.sprint_allowed() && self.vitals.can_sprint();
-        let jump = ui.state.take_key(|k| !k.repeat && matches!(k.key, Key::Space | Key::Char(' '))).is_some();
+        let jump = keys.pressed(ui, Action::Jump);
         // Patching up takes both hands and standing still; rummaging, a
         // slow walk at most.
         let (walk, sprint, jump) = if self.vitals.healing.is_some() {
@@ -165,24 +183,37 @@ impl Run {
         } else {
             (walk * (1.0 - (1.0 - AIMING_PACE) * combat.hands.aim()), sprint, jump)
         };
-        let crouch = pressed(ui, &['c']);
+        // Crouching, toggled or held: a hold flips it whenever the key and
+        // the body disagree.
+        let crouch = if toggle_crouch {
+            keys.pressed(ui, Action::Crouch)
+        } else {
+            let crouched = game.player().is_some_and(|(b, _)| b.want_crouch);
+            keys.held(ui, Action::Crouch) != crouched
+        };
         {
             let mut controls = game.controls_mut();
             controls.walk = walk;
             controls.sprint = sprint;
             controls.jump |= jump;
-            controls.crouch_toggle ^= crouch;
+            // (A hold says what it wants each frame; a tap flips it, once a
+            // tap, however many frames before the body steps.)
+            if toggle_crouch {
+                controls.crouch_toggle ^= crouch;
+            } else {
+                controls.crouch_toggle = crouch;
+            }
         }
 
         // Patching up: 4 a bandage, 5 a medkit, from what's carried. Firing,
         // striking or a blow stops it (the kit is kept).
-        for (key, kit) in [('4', Kit::Bandage), ('5', Kit::Medkit)] {
-            if pressed(ui, &[key]) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
+        for (key, kit) in [(Action::Bandage, Kit::Bandage), (Action::Medkit, Kit::Medkit)] {
+            if keys.pressed(ui, key) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
                 combat.play(Sfx::Heal, 0.8);
             }
         }
-        let firing = locked && !open && ui.state.pressed;
-        let striking = !open && (ui.state.middle_pressed || pressed(ui, &['v']));
+        let firing = locked && !open && keys.pressed(ui, Action::Fire);
+        let striking = !open && keys.pressed(ui, Action::Bash);
         if self.vitals.healing.is_some() && (firing || striking) {
             self.vitals.interrupt();
         }
@@ -190,8 +221,8 @@ impl Run {
         self.switch_hands(ui, combat, !busy);
         // The sights up while the right button's held; a sprint takes them
         // down.
-        let aim = locked && ui.state.right_down && !wants_sprint;
-        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: pressed(ui, &['r']), melee: striking, aim } };
+        let aim = locked && keys.held(ui, Action::Aim) && !wants_sprint;
+        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: keys.pressed(ui, Action::Reload), melee: striking, aim } };
         self.pull_rounds(combat);
         // Reloading draws on the rounds carried, of the kind the gun takes.
         let ammo = combat.hands.spec().ammo;
@@ -291,6 +322,7 @@ impl Run {
     fn hud(&self, ui: &mut Ui, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>) {
         let time = game.clock().time;
         let v = &self.vitals;
+        let interact = self.keys.name(Action::Interact);
         hud::draw(
             ui,
             &Hud {
@@ -308,7 +340,7 @@ impl Run {
                 bandages: self.bag.count(Kind::Bandage),
                 medkits: self.bag.count(Kind::Medkit),
                 heal: v.heal_progress().or(self.search.as_ref().map(loot::Search::progress)).or(self.out_progress()),
-                prompt: prompt.as_ref().map(|(key, text)| (*key, text.as_str())),
+                prompt: prompt.as_ref().map(|(key, text)| (if key.is_empty() { "" } else { interact.as_str() }, text.as_str())),
                 note: self.note.map(|(n, _)| n),
                 time,
                 crosshair: game.world.get_resource::<Settings>().is_none_or(|s| s.crosshair),

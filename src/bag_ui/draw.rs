@@ -30,7 +30,8 @@ impl BagUi {
                     if slot == Slot::ALL[0] {
                         ui.text_at("WEAPONS", &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, style::BONE);
                     }
-                    slots::draw(ui, icons, slot, shelves.bag.slot(slot), r, cell);
+                    let i = Slot::ALL.iter().position(|&s| s == slot).unwrap_or(0);
+                    slots::draw(ui, icons, slot, &self.slot_keys[i], shelves.bag.slot(slot), r, cell);
                     continue;
                 }
             };

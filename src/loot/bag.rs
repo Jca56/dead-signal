@@ -36,15 +36,6 @@ impl Slot {
         }
     }
 
-    /// The key that takes it in hand.
-    pub fn key(self) -> char {
-        match self {
-            Slot::Primary => '1',
-            Slot::Sidearm => '2',
-            Slot::Melee => '3',
-        }
-    }
-
     /// Its name in a save file.
     pub fn save_key(self) -> &'static str {
         match self {
