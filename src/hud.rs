@@ -29,8 +29,9 @@ pub struct Hud<'a> {
     pub stamina: f64,
     pub max_stamina: f64,
     pub winded: bool,
-    pub bandages: u32,
-    pub medkits: u32,
+    /// The kits (and the throwable picked), from the bottom up: each its
+    /// key, name and how many.
+    pub kits: &'a [(String, &'a str, u32)],
     /// How far through applying a kit, 0–1.
     pub heal: Option<f64>,
     /// What E would do: its key (none when it does nothing), and the words.
@@ -171,7 +172,7 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     let kit = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
     let kit_h = f64::from(kit.line_height());
     let mut y = top - 20.0 * s - kit_h;
-    for (key, name, n) in [("5", "MEDKIT", h.medkits), ("4", "BANDAGE", h.bandages)] {
+    for &(ref key, name, n) in h.kits {
         let line = format!("{name}  ×{n}");
         let lw = ui.measure(&line, &kit);
         let kw = ui.measure(key, &kit);

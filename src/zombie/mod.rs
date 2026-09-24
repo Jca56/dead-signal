@@ -119,6 +119,8 @@ pub struct Horde {
     pub bursts: Vec<Vec3>,
     /// The player's standing in a puddle of bile.
     pub poisoned: bool,
+    /// Pipe bombs beeping, drawing the dead near to them.
+    pub lures: Vec<Vec3>,
     pub gone: usize,
     seed: u32,
     /// The world's steps so far.
@@ -143,7 +145,7 @@ impl Horde {
 }
 
 pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
-    fixed.add_systems((step::think, spit::fly, spit::fester).chain());
+    fixed.add_systems((step::think, spit::fly, spit::fester, crate::throw::step).chain());
     frame.add_systems((step::pose, step::bury));
 }
 

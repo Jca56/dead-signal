@@ -42,7 +42,7 @@ fn a_spitter_keeps_off_spits_and_bursts_when_it_dies() {
     let mut body = Body::at(Vec3::ZERO);
     let mut spat = Vec::new();
     for _ in 0..(12.0 / STEP) as usize {
-        let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
+        let senses = Senses { lures: &[], solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
         let mut intent = z.think(&body, &senses, STEP);
         spat.extend(intent.spit);
         let gait = z.gait;
@@ -54,7 +54,7 @@ fn a_spitter_keeps_off_spits_and_bursts_when_it_dies() {
     assert!(spat.len() >= 2, "{} globs in 12 s", spat.len());
     assert!(spat.iter().all(|(from, at)| from.y > 1.0 && flat(*at, player) < 0.1));
     // Dead, it bursts once, when it's swollen.
-    let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
+    let senses = Senses { lures: &[], solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
     z.hurt(1000.0, false, false, player);
     let bursts: usize = (0..(3.0 / STEP) as usize).map(|_| usize::from(z.think(&body, &senses, STEP).burst)).sum();
     assert_eq!(bursts, 1);
@@ -101,7 +101,7 @@ fn a_juggernaut_roars_charges_and_hits_hard() {
     let mut roared = false;
     let mut blow = None;
     for _ in 0..(4.0 / STEP) as usize {
-        let senses = Senses { solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
+        let senses = Senses { lures: &[], solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
         let mut intent = j.think(&body, &senses, STEP);
         roared |= matches!(j.state, State::Roar { .. });
         if let Some(b) = intent.hit {

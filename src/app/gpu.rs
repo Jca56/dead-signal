@@ -34,6 +34,7 @@ impl AppHost for DeadSignal {
         }
         self.combat.init(&mut renderer);
         zombie::spit::load(&mut renderer, &mut self.game.world);
+        crate::throw::draw::load(&mut renderer, &mut self.game.world);
         self.load_things(&mut renderer, gpu, images);
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
             Ok(model) => self.game.world.insert_resource(model),
@@ -87,6 +88,10 @@ impl AppHost for DeadSignal {
             self.combat.draw(renderer);
             let alpha = self.game.alpha();
             zombie::spit::draw(&mut self.game.world, renderer, alpha);
+            crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
+            if let Some((dots, lands)) = self.run.throw_arc() {
+                crate::throw::draw::aim(&self.game.world, renderer, dots, lands);
+            }
         }
         let plain = zombie::looks::Looks::default().palette();
         for (f, looks) in self.game.world.query::<(&Figure, Option<&zombie::looks::Looks>)>().iter(&self.game.world) {

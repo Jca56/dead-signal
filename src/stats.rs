@@ -17,6 +17,8 @@ pub struct Stats {
     pub melee_kills: u32,
     /// The dead killed by a Spitter's burst (one the player killed).
     pub burst_kills: u32,
+    /// The dead killed by the player's fire or blasts.
+    pub blast_kills: u32,
     pub longest_kill: f64,
     pub damage_dealt: f64,
     pub biggest_horde: u32,
@@ -57,7 +59,7 @@ impl Stats {
     }
 
     pub fn kills(&self) -> u32 {
-        self.gun_kills + self.melee_kills + self.burst_kills
+        self.gun_kills + self.melee_kills + self.burst_kills + self.blast_kills
     }
 
     /// The screen's groups, in reading order (PRACTICE only if there was
@@ -94,6 +96,7 @@ impl Stats {
                     ("By gun", self.gun_kills.to_string()),
                     ("By hand", self.melee_kills.to_string()),
                     ("By a Spitter's burst", self.burst_kills.to_string()),
+                    ("By fire or explosion", self.blast_kills.to_string()),
                     ("Longest kill", metres(self.longest_kill)),
                     ("Damage dealt", format!("{:.0}", self.damage_dealt)),
                     ("Most up at once", self.biggest_horde.to_string()),

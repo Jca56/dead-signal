@@ -37,7 +37,8 @@ pub(super) fn think(
     let shots: Vec<(u32, Vec3, f64)> = horde.shots.iter().map(|&(_, id, (at, range))| (id, at, range)).collect();
     let snarls: Vec<(Vec3, Vec3)> = horde.snarls.iter().map(|(_, n)| *n).collect();
     let searches = std::cell::Cell::new(SEARCHES);
-    let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: if cheats.is_some_and(|c| c.ignored) { 0.0 } else { stealth.map_or(1.0, |s| s.0) } };
+    let lures = horde.lures.clone();
+    let senses = Senses { lures: &lures, solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: if cheats.is_some_and(|c| c.ignored) { 0.0 } else { stealth.map_or(1.0, |s| s.0) } };
     for (mut z, mut body, mut beat) in &mut dead {
         // Far off, it steps less often, and further each time. (What's
         // heard is kept as long as the farthest go between steps.)

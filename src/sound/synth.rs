@@ -170,6 +170,50 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 (crack * 1.1 + thump * 1.0 + roll * 2.6).tanh()
             })
         }
+        Sfx::Shatter => {
+            // Glass going: a bright burst, and shards tinkling after.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.7, 0.8, |t, n| {
+                let x = n.next();
+                let burst = f.run(x, 5500.0, 0.4).2 * env(t, 0.0005, 0.03);
+                let tinkle: f32 = [3100.0, 4700.0, 6300.0, 3900.0].iter().enumerate().map(|(i, &fr)| sine(t, fr) * env((t - 0.05 * i as f32).max(0.0), 0.001, 0.06) * f32::from(t > 0.05 * i as f32)).sum();
+                burst * 1.2 + tinkle * 0.2 + g.run(x, 900.0, 0.6).1 * env(t, 0.001, 0.02) * 0.6
+            })
+        }
+        Sfx::Ignite => {
+            // Whoomph: air drawn in and a low roar of flame.
+            let mut f = Svf::default();
+            render(1.0, 0.9, |t, n| {
+                let x = n.next();
+                let roar = f.run(x, 250.0 + 500.0 * (t / 0.15).min(1.0), 0.8).1 * env(t, 0.06, 0.35);
+                roar * 2.2 + (std::f32::consts::TAU * sweep_phase(t, 70.0, 35.0, 0.1)).sin() * env(t, 0.03, 0.2) * 0.5
+            })
+        }
+        Sfx::Crackle => {
+            // A fire going: a low rush, and pops.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            let mut pops = Noise(0x51C3_2A77);
+            render(1.2, 0.5, move |t, n| {
+                let x = n.next();
+                let rush = f.run(x, 400.0, 1.0).1 * 0.6 * env(t, 0.1, 0.9);
+                let pop = if pops.next() > 0.9985 { 1.0 } else { 0.0 };
+                rush + g.run(pop + x * 0.02, 2600.0, 0.3).1 * 3.0
+            })
+        }
+        Sfx::Beep => render(0.09, 0.45, |t, _| (sine(t, 2200.0) + sine(t, 4400.0) * 0.2) * env(t, 0.002, 0.05)),
+        Sfx::Explosion => {
+            // A great deep boom, the blast's crack on its front, and a long
+            // roll after it, stuff raining down.
+            let (mut body, mut tail, mut debris) = (Svf::default(), Svf::default(), Svf::default());
+            render(2.5, 1.0, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 3000.0, 0.6).2 * env(t, 0.0008, 0.02);
+                let boom = (std::f32::consts::TAU * sweep_phase(t, 90.0, 25.0, 0.15)).sin() * env(t, 0.002, 0.45);
+                let roll = tail.run(x, 350.0, 1.0).0 * env(t, 0.01, 0.7);
+                let rain = debris.run(x, 2200.0, 0.6).1 * env((t - 0.3).max(0.0), 0.1, 0.6) * f32::from(t > 0.3) * (0.4 + 0.6 * sine(t, 17.0).abs());
+                (crack * 1.4 + boom * 1.6 + roll * 3.0 + rain * 0.5).tanh()
+            })
+        }
         Sfx::Bolt => {
             // Up, back, forward, down: four clicks and a slide either way.
             let (mut slide, mut click) = (Svf::default(), Svf::default());

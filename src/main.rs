@@ -32,6 +32,7 @@ mod sound;
 mod stats;
 mod style;
 mod targets;
+mod throw;
 #[cfg(test)]
 mod testing;
 mod viewmodel;

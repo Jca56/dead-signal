@@ -26,7 +26,7 @@ pub(super) fn run(z: &mut Zombie, body: &mut Body, solids: &Solids, nav: Option<
     let steps = (seconds / STEP) as usize;
     for i in 0..steps {
         let heard: &[(u32, Vec3, f64)] = if i == 0 { &noises } else { &[] };
-        let senses = Senses { solids, nav, player, noises: heard, alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
+        let senses = Senses { lures: &[], solids, nav, player, noises: heard, alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
         let mut intent = z.think(body, &senses, STEP);
         blows += usize::from(intent.hit.is_some());
         if !z.dead() {
@@ -62,7 +62,7 @@ fn light_feet_go_unseen_farther_off() {
     let look = |sight: f64| {
         let mut z = Zombie::new(0.0, 7);
         let body = Body::at(Vec3::ZERO);
-        let senses = Senses { solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight };
+        let senses = Senses { lures: &[], solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight };
         (0..10).any(|_| z.think(&body, &senses, STEP).alert.is_some())
     };
     assert!(look(1.0), "20 m ahead is seen");
@@ -322,7 +322,7 @@ fn a_snarl_brings_the_others_near_it() {
     let mut seer = Zombie::new(0.0, 7);
     let body = Body::at(Vec3::ZERO);
     let player = Vec3::new(0.0, 0.0, -10.0);
-    let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
+    let senses = Senses { lures: &[], solids: &s, nav: None, player: Some(player), noises: &[], alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
     // (It looks about a few times a second: give it a moment.)
     let seen = (0..10).find_map(|_| seer.think(&body, &senses, STEP).alert).expect("a snarl");
     let snarls = [(body.pos, seen)];
@@ -330,7 +330,7 @@ fn a_snarl_brings_the_others_near_it() {
     let listen = |at: Vec3| {
         let mut z = Zombie::new(std::f64::consts::PI, 9);
         let b = Body::at(at);
-        let senses = Senses { solids: &s, nav: None, player: Some(player), noises: &[], alerts: &snarls, searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
+        let senses = Senses { lures: &[], solids: &s, nav: None, player: Some(player), noises: &[], alerts: &snarls, searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
         z.think(&b, &senses, STEP);
         z.state
     };

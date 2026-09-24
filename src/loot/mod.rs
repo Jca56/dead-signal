@@ -73,9 +73,11 @@ pub enum Kind {
     Smg,
     AssaultRifle,
     Rounds556,
+    Molotov,
+    PipeBomb,
 }
 
-pub const ALL: [Kind; 27] = [
+pub const ALL: [Kind; 29] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -103,6 +105,8 @@ pub const ALL: [Kind; 27] = [
     Kind::Smg,
     Kind::AssaultRifle,
     Kind::Rounds556,
+    Kind::Molotov,
+    Kind::PipeBomb,
 ];
 
 impl Kind {
@@ -137,6 +141,8 @@ impl Kind {
             Kind::Smg => "smg",
             Kind::AssaultRifle => "assault_rifle",
             Kind::Rounds556 => "rounds_556",
+            Kind::Molotov => "molotov",
+            Kind::PipeBomb => "pipe_bomb",
         }
     }
 
@@ -206,6 +212,8 @@ impl Kind {
             Kind::Smg => d("SMG", (3, 1), 1, Rare, 380, "ITEM_Smg"),
             Kind::AssaultRifle => d("ASSAULT RIFLE", (5, 1), 1, Epic, 650, "ITEM_AssaultRifle"),
             Kind::Rounds556 => d("5.56 ROUNDS", (1, 1), 30, Uncommon, 5, "ITEM_Rounds556"),
+            Kind::Molotov => d("MOLOTOV", (2, 1), 2, Uncommon, 45, "ITEM_Molotov"),
+            Kind::PipeBomb => d("PIPE BOMB", (2, 1), 2, Rare, 90, "ITEM_PipeBomb"),
         }
     }
 }

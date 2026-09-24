@@ -10,7 +10,7 @@ use lntrn_ui::{Key, Sense, Ui};
 use super::{Cheats, DevAction};
 use crate::bag_ui::Icons;
 use crate::hideout::{GOLD, pressed};
-use crate::loot::{ALL, Kind};
+use crate::loot::Kind;
 use crate::zombie::kind::Kind as Dead;
 use crate::{feedback, style};
 
@@ -203,25 +203,50 @@ impl DevPanel {
     }
 }
 
-/// Every kind of thing, a button each with its picture: which was asked.
+/// Every kind of thing, by what it is: two columns of groups, each its
+/// name over a row of buttons.
+const GROUPS: [(&str, &[Kind]); 8] = [
+    ("GUNS", &[Kind::Pistol, Kind::Shotgun, Kind::Rifle, Kind::Smg, Kind::AssaultRifle]),
+    ("AMMO", &[Kind::Rounds, Kind::Shells, Kind::RifleRounds, Kind::Rounds556]),
+    ("THROWABLES", &[Kind::Molotov, Kind::PipeBomb]),
+    ("MELEE", &[Kind::Knife, Kind::Machete, Kind::FireAxe]),
+    ("HEALTH", &[Kind::Bandage, Kind::Medkit, Kind::Pills]),
+    ("VALUABLES", &[Kind::Cash, Kind::Watch, Kind::Ring, Kind::Chain, Kind::GoldBar]),
+    ("SUPPLIES", &[Kind::Beans, Kind::Water, Kind::Radio, Kind::Battery, Kind::Fuel]),
+    ("KEYS", &[Kind::Key, Kind::ArmoryKey]),
+];
+
+/// Every kind of thing, in its group, a button each with its picture:
+/// which was asked.
 fn items(ui: &mut Ui, icons: &Icons, area: Rect, active: bool) -> Option<DevAction> {
     let s = ui.m.scale;
-    let label = TextStyle::new((20.0 * s) as f32).bold().family(style::FONT);
-    let (w, h, gap) = (200.0 * s, 150.0 * s, 14.0 * s);
-    let per = ((area.width() + gap) / (w + gap)).floor().max(1.0) as usize;
+    let heading = TextStyle::new((24.0 * s) as f32).bold().family(style::FONT);
+    let label = TextStyle::new((19.0 * s) as f32).bold().family(style::FONT);
+    let gap = 12.0 * s;
+    let column_w = (area.width() - 40.0 * s) * 0.5;
+    // As big as fits: five across a column, the four groups a column down.
+    let w = ((column_w - gap * 4.0) / 5.0).min(200.0 * s);
+    let head_h = f64::from(heading.line_height()) + 8.0 * s;
+    let h = ((area.height() / 4.0 - head_h - 16.0 * s).min(w * 0.72)).max(60.0 * s);
     let mut asked = None;
-    for (i, &kind) in ALL.iter().enumerate() {
-        let r = Rect::from_min_size(area.min + Vec2::new((i % per) as f64 * (w + gap), (i / per) as f64 * (h + gap)), Vec2::new(w, h));
-        let id = format!("give {}", kind.key());
-        let hit = ui.interact(ui.id(&id), r, Sense::CLICK);
-        let lit = active && hit.hovered;
-        let c = kind.def().rarity.colour();
-        ui.draw.rect(r, if lit { Color::rgba(1.0, 1.0, 1.0, 0.14) } else { Color::rgba(0.05, 0.05, 0.05, 0.85) });
-        ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(c.r, c.g, c.b, if lit { 1.0 } else { 0.5 }));
-        picture(ui, icons, kind, Rect::from_min_size(r.min + Vec2::new(12.0 * s, 10.0 * s), Vec2::new(w - 24.0 * s, h - 56.0 * s)));
-        ui.text_at(kind.def().name, &label, Vec2::new(r.min.x + 10.0 * s, r.max.y - 38.0 * s), w - 20.0 * s, style::BONE);
-        if feedback::button(&id, lit, active && hit.clicked) {
-            asked = Some(DevAction::Give(kind));
+    for (g, (name, kinds)) in GROUPS.iter().enumerate() {
+        let (col, row) = (g / 4, g % 4);
+        let at = area.min + Vec2::new(col as f64 * (column_w + 40.0 * s), row as f64 * (head_h + h + 16.0 * s));
+        ui.text_at(name, &heading, at, column_w, GOLD);
+        for (i, &kind) in kinds.iter().enumerate() {
+            let r = Rect::from_min_size(at + Vec2::new(i as f64 * (w + gap), head_h), Vec2::new(w, h));
+            let id = format!("give {}", kind.key());
+            let hit = ui.interact(ui.id(&id), r, Sense::CLICK);
+            let lit = active && hit.hovered;
+            let c = kind.def().rarity.colour();
+            ui.draw.rect(r, if lit { Color::rgba(1.0, 1.0, 1.0, 0.14) } else { Color::rgba(0.05, 0.05, 0.05, 0.85) });
+            ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(c.r, c.g, c.b, if lit { 1.0 } else { 0.5 }));
+            let text_h = f64::from(label.line_height()) + 12.0 * s;
+            picture(ui, icons, kind, Rect::from_min_size(r.min + Vec2::new(10.0 * s, 8.0 * s), Vec2::new(w - 20.0 * s, h - text_h - 10.0 * s)));
+            ui.text_at(kind.def().name, &label, Vec2::new(r.min.x + 8.0 * s, r.max.y - text_h + 2.0 * s), w - 16.0 * s, style::BONE);
+            if feedback::button(&id, lit, active && hit.clicked) {
+                asked = Some(DevAction::Give(kind));
+            }
         }
     }
     asked
@@ -233,4 +258,18 @@ fn picture(ui: &mut Ui, icons: &Icons, kind: Kind, r: Rect) {
     let aspect = f64::from(flat.width) / f64::from(flat.height.max(1));
     let size = if aspect >= r.width() / r.height() { Vec2::new(r.width(), r.width() / aspect) } else { Vec2::new(r.height() * aspect, r.height()) };
     ui.draw.image(Rect::from_center_size(r.center(), size), flat, 0.0, Color::WHITE);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_kind_of_thing_is_in_one_group() {
+        for kind in crate::loot::ALL {
+            let n = GROUPS.iter().filter(|(_, kinds)| kinds.contains(&kind)).count();
+            assert_eq!(n, 1, "{kind:?} is in {n} groups");
+        }
+        assert!(GROUPS.iter().all(|(_, kinds)| kinds.len() <= 5), "five to a row");
+    }
 }

@@ -6,6 +6,7 @@
 mod hands;
 mod loot;
 mod out;
+mod throwing;
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::{Vec2, Vec3};
@@ -73,6 +74,9 @@ pub struct Run {
     /// sprint's been toggled on (sprint set to toggle).
     keys: Keys,
     sprinting: bool,
+    /// The throwable picked, and a throw being aimed.
+    throwable: Option<crate::throw::Throwable>,
+    aiming: Option<throwing::Aiming>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -125,7 +129,7 @@ impl Run {
 
     /// How far the gun is lowered (patching up, or rummaging), 0–1.
     pub fn lowered(&self) -> f64 {
-        if self.vitals.healing.is_some() || self.open.is_some() { 1.0 } else { 0.0 }
+        if self.vitals.healing.is_some() || self.open.is_some() || self.throw_arc().is_some() { 1.0 } else { 0.0 }
     }
 
     /// Whether the pointer should be locked for looking about (not with the
@@ -230,6 +234,8 @@ impl Run {
             self.vitals.interrupt();
         }
         let busy = self.vitals.healing.is_some() || open;
+        // A throw being aimed puts the gun down.
+        let busy = self.throwing(ui, game, combat, !busy && locked) || busy;
         if !busy && keys.pressed(ui, Action::FireMode) && combat.hands.switch_fire() {
             combat.play(Sfx::Tick, 0.9);
         }
@@ -266,6 +272,10 @@ impl Run {
         let cheats = game.world.get_resource::<crate::dev::Cheats>().copied().unwrap_or_default();
         if cheats.god {
             self.dev_heal();
+        }
+        if self.booms(game, combat, cheats.god) {
+            self.end(game, Outcome::Died(1.0), combat);
+            return;
         }
         for blow in blows {
             if cheats.god {
@@ -363,6 +373,11 @@ impl Run {
         let time = game.clock().time;
         let v = &self.vitals;
         let interact = self.keys.name(Action::Interact);
+        // The kits, and the throwable picked, each with its key.
+        let mut kits = vec![(self.keys.name(Action::Medkit), "MEDKIT", self.bag.count(Kind::Medkit)), (self.keys.name(Action::Bandage), "BANDAGE", self.bag.count(Kind::Bandage))];
+        if let Some((what, n)) = self.picked() {
+            kits.insert(0, (self.keys.name(Action::Throw), what.kind().def().name, n));
+        }
         // A gun that switches says how it's set.
         let hands = &combat.hands;
         let weapon = match hands.spec().shot {
@@ -383,8 +398,7 @@ impl Run {
                 stamina: v.stamina,
                 max_stamina: v.max_stamina,
                 winded: v.winded,
-                bandages: self.bag.count(Kind::Bandage),
-                medkits: self.bag.count(Kind::Medkit),
+                kits: &kits,
                 heal: v.heal_progress().or(self.search.as_ref().map(loot::Search::progress)).or(self.out_progress()),
                 prompt: prompt.as_ref().map(|(key, text)| (if key.is_empty() { "" } else { interact.as_str() }, text.as_str())),
                 note: self.note.map(|(n, _)| n),

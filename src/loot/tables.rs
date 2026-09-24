@@ -54,6 +54,7 @@ const CRATE: &[Line] = &[
     (Kind::Pills, 5, (1, 1)),
     (Kind::Fuel, 4, (1, 1)),
     (Kind::Shells, 12, (4, 10)),
+    (Kind::Molotov, 5, (1, 1)),
 ];
 
 const LOCKER: &[Line] = &[
@@ -86,6 +87,7 @@ const CAR: &[Line] = &[
     (Kind::Shotgun, 2, (1, 1)),
     (Kind::Shells, 10, (4, 10)),
     (Kind::Machete, 3, (1, 1)),
+    (Kind::Molotov, 5, (1, 1)),
 ];
 
 const CAGE: &[Line] = &[
@@ -105,6 +107,7 @@ const CAGE: &[Line] = &[
     (Kind::Smg, 4, (1, 1)),
     (Kind::AssaultRifle, 2, (1, 1)),
     (Kind::Rounds556, 10, (10, 20)),
+    (Kind::PipeBomb, 5, (1, 2)),
 ];
 
 const FRIDGE: &[Line] = &[
@@ -120,6 +123,7 @@ const CABINET: &[Line] = &[
     (Kind::Cash, 12, (1, 2)),
     (Kind::Beans, 10, (1, 1)),
     (Kind::Watch, 5, (1, 1)),
+    (Kind::Molotov, 3, (1, 1)),
 ];
 
 // Houses are full of desks and wardrobes: their gold is rarer than a
@@ -205,6 +209,8 @@ const TOOL_LOCKER: &[Line] = &[
     (Kind::Shells, 8, (4, 10)),
     (Kind::Rounds, 8, (8, 16)),
     (Kind::Knife, 5, (1, 1)),
+    (Kind::Molotov, 8, (1, 2)),
+    (Kind::PipeBomb, 5, (1, 1)),
 ];
 
 const SUPPLY_CASE: &[Line] = &[
@@ -219,6 +225,7 @@ const SUPPLY_CASE: &[Line] = &[
     (Kind::Knife, 4, (1, 1)),
     (Kind::Smg, 3, (1, 1)),
     (Kind::Rounds556, 14, (10, 20)),
+    (Kind::PipeBomb, 5, (1, 1)),
 ];
 
 // The richest rounds on the map, and the guns to fire them.
@@ -234,6 +241,8 @@ const AMMO_CAGE: &[Line] = &[
     (Kind::Smg, 6, (1, 1)),
     (Kind::AssaultRifle, 7, (1, 1)),
     (Kind::Rounds556, 25, (20, 30)),
+    (Kind::PipeBomb, 8, (1, 2)),
+    (Kind::Molotov, 5, (1, 2)),
 ];
 
 const SOLDIER: &[Line] = &[
@@ -246,6 +255,7 @@ const SOLDIER: &[Line] = &[
     (Kind::Medkit, 5, (1, 1)),
     (Kind::Knife, 5, (1, 1)),
     (Kind::ArmoryKey, 2, (1, 1)),
+    (Kind::PipeBomb, 3, (1, 1)),
 ];
 
 const JUGGERNAUT: &[Line] = &[

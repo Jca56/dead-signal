@@ -93,6 +93,12 @@ impl Combat {
     /// Now and then one of the dead had something on it (a soldier more
     /// often, and better; the special dead more often too): left where it
     /// fell.
+    /// One of the dead just died (not by the gun or hands: fire, a blast):
+    /// what it had on it.
+    pub fn drop_for(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
+        self.drop_something(game, e);
+    }
+
     pub(super) fn drop_something(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
         // A Juggernaut always had something, and plenty of it.
         if game.world.get::<zombie::brain::Zombie>(e).is_some_and(|z| z.kind == zombie::kind::Kind::Juggernaut) {

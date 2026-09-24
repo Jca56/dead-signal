@@ -139,7 +139,7 @@ impl DeadSignal {
     /// The readout in the corner, in a run: what's up and about, how loud
     /// it's been, where the player is.
     pub(super) fn dev_readout(&mut self, ui: &mut Ui) {
-        if !self.dev_on() || !self.dev.info || self.screen != Screen::Run {
+        if !self.dev_on() || !self.dev.info || self.screen != Screen::Run || self.dev_open {
             return;
         }
         let dt = self.game.clock().dt.max(1e-6);

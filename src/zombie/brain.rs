@@ -114,6 +114,8 @@ pub struct Senses<'a> {
     /// How far it sees, a share of [`SIGHT`] (the player can be hard to
     /// spot).
     pub sight: f64,
+    /// Pipe bombs beeping.
+    pub lures: &'a [Vec3],
 }
 
 /// A blow that landed on the player: the way it pushes, how much it takes
@@ -304,8 +306,12 @@ impl Zombie {
             self.in_sight = s.player.is_some_and(|p| self.sees(body, p, s.solids, s.sight));
         }
         let seen = s.player.filter(|_| self.in_sight);
+        // A pipe bomb beeping near draws it, whatever it was about (but a
+        // swipe, a heave or a charge, or the player right there); drawn, it
+        // pays the player, and the others' cries, no mind.
+        let lure = s.lures.iter().find(|l| flat_dist(**l, body.pos) < crate::throw::LURE).copied().filter(|_| seen.is_none_or(|p| flat_dist(p, body.pos) > 4.0));
         if let Some(p) = seen {
-            if matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. }) {
+            if lure.is_none() && matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. }) {
                 out.sounds.push((traits.snarl, 1.0));
                 out.alert = Some(p);
                 self.state = State::Hunt;
@@ -317,11 +323,17 @@ impl Zombie {
         {
             self.state = State::Investigate { at, looked: 0.0 };
         } else if let Some(&(_, seen_at)) = s.alerts.iter().find(|(from, _)| flat_dist(*from, body.pos) <= ALERT_RANGE)
+            && lure.is_none()
             && matches!(self.state, State::Wander { .. } | State::Search(_))
         {
             // Another saw them: come and look, answering it.
             out.sounds.push((Sfx::Groan, 0.8));
             self.state = State::Investigate { at: seen_at, looked: 0.0 };
+        }
+        if let Some(lure) = lure
+            && matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. } | State::Hunt)
+        {
+            self.state = State::Investigate { at: lure, looked: 0.0 };
         }
         if self.groan <= 0.0 {
             out.sounds.push((Sfx::Groan, 0.9));
