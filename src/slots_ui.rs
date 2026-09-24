@@ -11,7 +11,7 @@ use lntrn_ui::{Key, Sense, Ui};
 
 use crate::hideout::{GOLD, dollars, pressed};
 use crate::profile::Profile;
-use crate::profile::save::{NAME_MAX, SLOTS, clean_name};
+use crate::profile::save::{DEV, NAME_MAX, clean_name};
 use crate::{feedback, style};
 
 /// A slot's player, at a glance.
@@ -42,8 +42,9 @@ pub enum SlotEvent {
 }
 
 pub struct SlotsScreen {
-    /// Each slot's player, if it has one.
-    cards: Vec<Option<Summary>>,
+    /// Each slot shown (the DEV slot too, in developer mode), and its
+    /// player, if it has one.
+    cards: Vec<(u8, Option<Summary>)>,
     /// The slot being named, and the name so far.
     renaming: Option<(u8, String)>,
     /// The slot asked to be deleted, waiting to be sure.
@@ -55,12 +56,12 @@ const CARD_H: f64 = 620.0;
 const BUTTON_H: f64 = 68.0;
 
 impl SlotsScreen {
-    pub fn new(cards: Vec<Option<Summary>>) -> Self {
+    pub fn new(cards: Vec<(u8, Option<Summary>)>) -> Self {
         Self { cards, renaming: None, deleting: None }
     }
 
     /// How the slots look now.
-    pub fn refresh(&mut self, cards: Vec<Option<Summary>>) {
+    pub fn refresh(&mut self, cards: Vec<(u8, Option<Summary>)>) {
         self.cards = cards;
     }
 
@@ -87,10 +88,12 @@ impl SlotsScreen {
             event = Some(e);
         }
         let gap = 40.0 * s;
-        let width = (screen.max.x - 80.0 * s - left - gap * f64::from(SLOTS - 1)) / f64::from(SLOTS);
+        let n = self.cards.len().max(1) as f64;
+        let width = (screen.max.x - 80.0 * s - left - gap * (n - 1.0)) / n;
         let y = screen.min.y + screen.height() * 0.17;
-        for slot in 1..=SLOTS {
-            let card = Rect::from_min_size(Vec2::new(left + f64::from(slot - 1) * (width + gap), y), Vec2::new(width, CARD_H * s));
+        let slots: Vec<u8> = self.cards.iter().map(|(slot, _)| *slot).collect();
+        for (i, slot) in slots.into_iter().enumerate() {
+            let card = Rect::from_min_size(Vec2::new(left + i as f64 * (width + gap), y), Vec2::new(width, CARD_H * s));
             if let Some(e) = self.card(ui, slot, card, slot == current, active) {
                 event = Some(e);
             }
@@ -158,7 +161,8 @@ impl SlotsScreen {
         let pad = 28.0 * s;
         let inner = r.width() - pad * 2.0;
         let mut y = r.min.y + pad;
-        ui.text_at(&format!("SLOT {slot}"), &small, Vec2::new(r.min.x + pad, y), inner, style::DIM);
+        let (title, colour) = if slot == DEV { ("DEV SLOT · TEST TOOLS ON F1".to_string(), GOLD) } else { (format!("SLOT {slot}"), style::DIM) };
+        ui.text_at(&title, &small, Vec2::new(r.min.x + pad, y), inner, colour);
         if current {
             let w = ui.measure("PLAYING", &small);
             ui.text_at("PLAYING", &small, Vec2::new(r.max.x - pad - w, y), w + 4.0, style::SIGNAL);
@@ -166,7 +170,7 @@ impl SlotsScreen {
         y += f64::from(small.line_height()) + 18.0 * s;
 
         // The name: typed into, while it's being named.
-        let card = self.cards.get(usize::from(slot - 1)).cloned().flatten();
+        let card = self.cards.iter().find(|(n, _)| *n == slot).and_then(|(_, c)| c.clone());
         let naming = self.renaming.as_ref().filter(|(n, _)| *n == slot).map(|(_, name)| name.clone());
         if let Some(name) = &naming {
             let field = Rect::from_min_size(Vec2::new(r.min.x + pad - 10.0 * s, y - 6.0 * s), Vec2::new(inner + 20.0 * s, f64::from(big.line_height()) + 12.0 * s));
@@ -175,7 +179,8 @@ impl SlotsScreen {
             let caret = if (ui.now() * 2.0).fract() < 0.5 { "|" } else { " " };
             ui.text_at(&format!("{name}{caret}"), &big, Vec2::new(r.min.x + pad, y), inner, style::BONE);
         } else {
-            let name = card.as_ref().map_or("EMPTY".to_string(), |c| if c.name.is_empty() { format!("SLOT {slot}") } else { c.name.clone() });
+            let unnamed = if slot == DEV { "DEV".to_string() } else { format!("SLOT {slot}") };
+            let name = card.as_ref().map_or("EMPTY".to_string(), |c| if c.name.is_empty() { unnamed } else { c.name.clone() });
             ui.text_at(&name, &big, Vec2::new(r.min.x + pad, y), inner, if card.is_some() { style::BONE } else { style::DIM });
         }
         y += f64::from(big.line_height()) + 30.0 * s;

@@ -16,6 +16,7 @@ use lntrn_app::lntrn_render::ImageHandle;
 use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
+mod dev;
 mod gpu;
 mod level;
 mod load;
@@ -160,6 +161,11 @@ pub struct DeadSignal {
     settings: Option<SettingsScreen>,
     /// The save slots screen, while it's up (over the title).
     slots: Option<SlotsScreen>,
+    /// The dev panel (in the DEV slot), whether it's up, and the frame
+    /// rate its readout shows.
+    dev: crate::dev::panel::DevPanel,
+    dev_open: bool,
+    dev_fps: f64,
     ui_scale: f64,
     /// Whether what the window can't be told till it's open (vsync) has
     /// been told.
@@ -214,6 +220,9 @@ impl DeadSignal {
             fullscreen,
             settings: None,
             slots: None,
+            dev: crate::dev::panel::DevPanel::default(),
+            dev_open: false,
+            dev_fps: 60.0,
             ui_scale,
             told_window: false,
         }
@@ -317,7 +326,7 @@ impl Host for DeadSignal {
     fn draw_body(&mut self, _: (), ui: &mut Ui, cx: &mut AreaCx<()>) -> bool {
         // The world stops for the dead: nothing moves or makes a sound while
         // they fall and read their numbers.
-        self.game.simulating = self.screen == Screen::Run && !self.paused && self.run.ending.is_none();
+        self.game.simulating = self.screen == Screen::Run && !self.paused && self.run.ending.is_none() && !self.dev_open;
         self.perf.frame(ui.state.now, self.game.simulating);
         let started = Instant::now();
         self.game.tick(ui.state.now);
@@ -353,7 +362,16 @@ impl Host for DeadSignal {
             self.hideout.set_slot_keys(self.game.world.resource::<Settings>().keys.slot_names());
         }
         let active = self.fading_to.is_none();
+        // The DEV slot, with developer mode switched off: back to slot 1
+        // (at the title, never mid-run).
+        if self.screen == Screen::Title && self.saves.slot == crate::profile::save::DEV && !self.game.world.resource::<Settings>().dev_mode {
+            self.saves.store(&self.profile);
+            self.saves.choose(1);
+            self.profile = self.saves.profile();
+        }
+        let dev_took = self.dev_frame(ui, cx, active);
         match self.screen {
+            _ if dev_took => {}
             Screen::Title if self.settings.is_some() => {
                 if self.settings_frame(ui, cx, active) {
                     self.title_menu.reset();
@@ -407,6 +425,7 @@ impl Host for DeadSignal {
             Some(Then::Quit) => cx.request(ShellRequest::Quit),
             None => {}
         }
+        self.dev_readout(ui);
         self.place_camera(clock.time);
         if self.screen == Screen::Run
             && let (Some(vm), Some((body, view))) = (&mut self.viewmodel, self.game.player())

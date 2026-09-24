@@ -70,9 +70,12 @@ pub enum Kind {
     Machete,
     FireAxe,
     ArmoryKey,
+    Smg,
+    AssaultRifle,
+    Rounds556,
 }
 
-pub const ALL: [Kind; 24] = [
+pub const ALL: [Kind; 27] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -97,6 +100,9 @@ pub const ALL: [Kind; 24] = [
     Kind::Machete,
     Kind::FireAxe,
     Kind::ArmoryKey,
+    Kind::Smg,
+    Kind::AssaultRifle,
+    Kind::Rounds556,
 ];
 
 impl Kind {
@@ -128,6 +134,9 @@ impl Kind {
             Kind::Machete => "machete",
             Kind::FireAxe => "fire_axe",
             Kind::ArmoryKey => "armory_key",
+            Kind::Smg => "smg",
+            Kind::AssaultRifle => "assault_rifle",
+            Kind::Rounds556 => "rounds_556",
         }
     }
 
@@ -144,6 +153,8 @@ impl Kind {
             Kind::Knife => Some(Weapon::Knife),
             Kind::Machete => Some(Weapon::Machete),
             Kind::FireAxe => Some(Weapon::Axe),
+            Kind::Smg => Some(Weapon::Smg),
+            Kind::AssaultRifle => Some(Weapon::AssaultRifle),
             _ => None,
         }
     }
@@ -192,6 +203,9 @@ impl Kind {
             Kind::Machete => d("MACHETE", (3, 1), 1, Uncommon, 110, "ITEM_Machete"),
             Kind::FireAxe => d("FIRE AXE", (4, 1), 1, Rare, 160, "ITEM_Axe"),
             Kind::ArmoryKey => d("ARMORY KEY", (1, 1), 1, Rare, 40, "ITEM_ArmoryKey"),
+            Kind::Smg => d("SMG", (3, 1), 1, Rare, 380, "ITEM_Smg"),
+            Kind::AssaultRifle => d("ASSAULT RIFLE", (5, 1), 1, Epic, 650, "ITEM_AssaultRifle"),
+            Kind::Rounds556 => d("5.56 ROUNDS", (1, 1), 30, Uncommon, 5, "ITEM_Rounds556"),
         }
     }
 }

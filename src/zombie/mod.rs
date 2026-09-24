@@ -281,7 +281,9 @@ pub fn blow_shove(times: f64) -> f64 {
 /// Hurt the Shambler `e` with `hit` along `dir` from `from`. Whether it
 /// died.
 pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) -> bool {
+    let one_shot = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.one_shot);
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
+    let hit = if one_shot { Impact { damage: z.hp * 100.0, ..hit } } else { hit };
     // (No knife in the back drops a Juggernaut.)
     let damage = if hit.takedown && z.unaware() && z.kind != Kind::Juggernaut { z.hp * 10.0 } else { hit.damage * z.plating(dir, hit.limb) };
     let killed = z.hurt(damage, hit.head, hit.blow, from);
@@ -324,6 +326,10 @@ const MUFFLED: f64 = 0.6;
 /// A noise at `at`, heard `range` metres off (less, under a roof): the dead
 /// in earshot may come, and it heats things up.
 pub fn noise(world: &mut World, at: Vec3, range: f64) {
+    // (The dev's: nothing's heard.)
+    if world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.ignored) {
+        return;
+    }
     let roofed = world.get_resource::<Solid>().is_some_and(|s| s.0.raycast(at, Vec3::Y, 25.0).is_some());
     let range = if roofed { range * MUFFLED } else { range };
     world.resource_mut::<Noises>().shots.push((at, range));

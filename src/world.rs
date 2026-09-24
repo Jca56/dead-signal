@@ -155,6 +155,7 @@ impl Game {
         world.insert_resource(zombie::Nav::default());
         world.insert_resource(zombie::Noises::default());
         world.insert_resource(zombie::Heat::default());
+        world.insert_resource(crate::dev::Cheats::default());
         world.insert_resource(zombie::Stealth::default());
         world.insert_resource(zombie::Horde::default());
         let mut frame = Schedule::default();
@@ -187,6 +188,15 @@ impl Game {
     /// The player's body and view, if one is about.
     pub fn player(&mut self) -> Option<(Body, View)> {
         self.world.query_filtered::<(&Body, &View), With<Player>>().iter(&self.world).next().map(|(b, v)| (*b, *v))
+    }
+
+    /// Put the player at `at`, as they are (the dev's teleport).
+    pub fn teleport(&mut self, at: Vec3) {
+        if let Some(mut body) = self.world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut self.world).next() {
+            body.pos = at;
+            body.prev = at;
+            body.vel = Vec3::ZERO;
+        }
     }
 
     /// Shove the player (a blow landing).

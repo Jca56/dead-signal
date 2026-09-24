@@ -33,6 +33,10 @@ pub enum Sfx {
     ShellIn,
     RifleShot,
     Bolt,
+    /// The SMG's snap and the assault rifle's crack: short, for they come
+    /// one on another.
+    SmgShot,
+    ArShot,
     DryFire,
     MagOut,
     MagIn,
@@ -89,13 +93,15 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 45] = [
+const ALL: [Sfx; 47] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
     Sfx::ShellIn,
     Sfx::RifleShot,
     Sfx::Bolt,
+    Sfx::SmgShot,
+    Sfx::ArShot,
     Sfx::DryFire,
     Sfx::MagOut,
     Sfx::MagIn,

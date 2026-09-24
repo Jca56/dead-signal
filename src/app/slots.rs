@@ -5,7 +5,7 @@ use lntrn_ui::Ui;
 
 use super::DeadSignal;
 use crate::profile::Profile;
-use crate::profile::save::SLOTS;
+use crate::profile::save::{DEV, SLOTS};
 use crate::slots_ui::{SlotEvent, Summary};
 
 impl DeadSignal {
@@ -13,25 +13,30 @@ impl DeadSignal {
     pub(super) fn playing(&self) -> String {
         let p = &self.profile;
         let level = crate::profile::xp::level(p.xp).0;
-        if p.name.is_empty() {
+        if self.saves.slot == DEV {
+            format!("DEV SLOT · LEVEL {level} · F1 FOR TOOLS")
+        } else if p.name.is_empty() {
             format!("SLOT {} · LEVEL {level}", self.saves.slot)
         } else {
             format!("SLOT {} · {} · LEVEL {level}", self.saves.slot, p.name.to_uppercase())
         }
     }
 
-    /// Every slot's card: its player (the one playing as they are now), or
-    /// none.
-    pub(super) fn slot_cards(&self) -> Vec<Option<Summary>> {
+    /// Every slot's card (and the DEV slot's, in developer mode): its
+    /// player (the one playing as they are now), or none.
+    pub(super) fn slot_cards(&self) -> Vec<(u8, Option<Summary>)> {
+        let dev = self.game.world.resource::<crate::settings::Settings>().dev_mode;
         (1..=SLOTS)
+            .chain(dev.then_some(DEV))
             .map(|n| {
-                if !self.saves.used(n) {
+                let card = if !self.saves.used(n) {
                     None
                 } else if n == self.saves.slot {
                     Some(Summary::of(&self.profile))
                 } else {
                     self.saves.load(n).map(|p| Summary::of(&p))
-                }
+                };
+                (n, card)
             })
             .collect()
     }

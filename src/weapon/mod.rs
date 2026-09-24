@@ -86,7 +86,9 @@ pub enum Act {
 /// The frame's presses.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Trigger {
+    /// Pulled this frame, and held (a full-auto gun fires on while it is).
     pub fire: bool,
+    pub hold: bool,
     pub reload: bool,
     pub melee: bool,
     /// Held: the sights up.
@@ -122,11 +124,14 @@ pub struct Hands {
     since_swing: f64,
     /// The swing under way comes back the other way.
     backhand: bool,
+    /// A gun that can fire full auto or a round a pull is set to a round
+    /// a pull.
+    pub single: bool,
 }
 
 impl Default for Hands {
     fn default() -> Self {
-        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false, swing_speed: 1.0, chain: 0, since_swing: f64::INFINITY, backhand: false }
+        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false, swing_speed: 1.0, chain: 0, since_swing: f64::INFINITY, backhand: false, single: false }
     }
 }
 
@@ -144,6 +149,21 @@ impl Hands {
     /// last of the way up).
     pub fn scoped(&self) -> f64 {
         if self.spec().shot.is_some_and(|s| s.scope) { ((self.aim() - SCOPE_FROM) / (1.0 - SCOPE_FROM)).clamp(0.0, 1.0) } else { 0.0 }
+    }
+
+    /// Whether what's in hand fires on while the trigger's held.
+    pub fn full_auto(&self) -> bool {
+        self.spec().shot.is_some_and(|s| s.auto && !(s.select && self.single))
+    }
+
+    /// Switch full auto and a round a pull, if what's in hand can. Whether
+    /// it did.
+    pub fn switch_fire(&mut self) -> bool {
+        let can = self.spec().shot.is_some_and(|s| s.select);
+        if can {
+            self.single = !self.single;
+        }
+        can
     }
 
     /// The clip showing and how far into it.
@@ -325,7 +345,10 @@ impl Hands {
         if self.busy() {
             return acts;
         }
-        let fire = input.fire || std::mem::take(&mut self.fire_after);
+        // Full auto, held: on it goes, while there are rounds (empty, only
+        // a pull clicks).
+        let held = input.hold && self.full_auto() && self.mag > 0;
+        let fire = input.fire || held || std::mem::take(&mut self.fire_after);
         if input.melee {
             self.swing();
         } else if input.reload && self.can_reload() {

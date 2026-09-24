@@ -19,6 +19,7 @@ pub enum Action {
     Aim,
     Reload,
     Bash,
+    FireMode,
     Primary,
     Sidearm,
     Melee,
@@ -45,7 +46,7 @@ pub enum Bind {
 }
 
 impl Action {
-    pub const ALL: [Action; 19] = [
+    pub const ALL: [Action; 20] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -57,6 +58,7 @@ impl Action {
         Action::Aim,
         Action::Reload,
         Action::Bash,
+        Action::FireMode,
         Action::Primary,
         Action::Sidearm,
         Action::Melee,
@@ -81,6 +83,7 @@ impl Action {
             Action::Aim => "aim",
             Action::Reload => "reload",
             Action::Bash => "bash",
+            Action::FireMode => "fire_mode",
             Action::Primary => "primary",
             Action::Sidearm => "sidearm",
             Action::Melee => "melee",
@@ -106,6 +109,7 @@ impl Action {
             Action::Aim => "AIM DOWN SIGHTS",
             Action::Reload => "RELOAD",
             Action::Bash => "QUICK BASH",
+            Action::FireMode => "FIRE MODE",
             Action::Primary => "PRIMARY WEAPON",
             Action::Sidearm => "SIDEARM",
             Action::Melee => "MELEE WEAPON",
@@ -132,6 +136,7 @@ impl Action {
             Action::Aim => Bind::Mouse(Button::Right),
             Action::Reload => c('r'),
             Action::Bash => c('v'),
+            Action::FireMode => c('b'),
             Action::Primary => c('1'),
             Action::Sidearm => c('2'),
             Action::Melee => c('3'),

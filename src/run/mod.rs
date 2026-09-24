@@ -134,6 +134,18 @@ impl Run {
         self.open.is_none()
     }
 
+    /// The dev's: the dead surge now.
+    pub fn dev_surge(&mut self) {
+        self.out.surging = true;
+    }
+
+    /// The dev's: whole again, the bleeding and poison gone.
+    pub fn dev_heal(&mut self) {
+        self.vitals.hp = self.vitals.max_hp;
+        self.vitals.bleeding = 0;
+        self.vitals.poison = 0.0;
+    }
+
     /// A frame of a run while alive: what the keys do, and what came of it.
     pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons) {
         let dt = game.clock().dt;
@@ -212,16 +224,20 @@ impl Run {
             }
         }
         let firing = locked && !open && keys.pressed(ui, Action::Fire);
+        let holding = locked && !open && keys.held(ui, Action::Fire);
         let striking = !open && keys.pressed(ui, Action::Bash);
         if self.vitals.healing.is_some() && (firing || striking) {
             self.vitals.interrupt();
         }
         let busy = self.vitals.healing.is_some() || open;
+        if !busy && keys.pressed(ui, Action::FireMode) && combat.hands.switch_fire() {
+            combat.play(Sfx::Tick, 0.9);
+        }
         self.switch_hands(ui, combat, !busy);
         // The sights up while the right button's held; a sprint takes them
         // down.
         let aim = locked && keys.held(ui, Action::Aim) && !wants_sprint;
-        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, reload: keys.pressed(ui, Action::Reload), melee: striking, aim } };
+        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, hold: holding, reload: keys.pressed(ui, Action::Reload), melee: striking, aim } };
         self.pull_rounds(combat);
         // Reloading draws on the rounds carried, of the kind the gun takes.
         let ammo = combat.hands.spec().ammo;
@@ -234,6 +250,10 @@ impl Run {
         if let Some(kind) = ammo {
             self.bag.remove(kind, spare - combat.hands.spare);
         }
+        // (The dev's: a magazine that never runs down.)
+        if game.world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.ammo) {
+            combat.hands.mag = combat.hands.spec().mag;
+        }
         self.keep_rounds(combat);
 
         // Blows from the dead.
@@ -243,7 +263,14 @@ impl Run {
         if std::mem::take(&mut game.world.resource_mut::<crate::zombie::Horde>().poisoned) {
             self.vitals.afflict(crate::vitals::Affliction::Poison);
         }
+        let cheats = game.world.get_resource::<crate::dev::Cheats>().copied().unwrap_or_default();
+        if cheats.god {
+            self.dev_heal();
+        }
         for blow in blows {
+            if cheats.god {
+                continue;
+            }
             self.stats.times_hit += 1;
             self.stats.damage_taken += blow.damage.min(self.vitals.hp);
             if let Some(a) = blow.leaves {
@@ -336,10 +363,16 @@ impl Run {
         let time = game.clock().time;
         let v = &self.vitals;
         let interact = self.keys.name(Action::Interact);
+        // A gun that switches says how it's set.
+        let hands = &combat.hands;
+        let weapon = match hands.spec().shot {
+            Some(s) if s.select => format!("{}  ·  {}", hands.spec().name, if hands.full_auto() { "AUTO" } else { "SEMI" }),
+            _ => hands.spec().name.to_string(),
+        };
         hud::draw(
             ui,
             &Hud {
-                weapon: combat.hands.spec().name,
+                weapon: &weapon,
                 rounds: combat.hands.spec().ammo.map(|kind| (combat.hands.mag, self.bag.count(kind))),
                 aim: combat.hands.aim(),
                 scope: combat.hands.scoped(),

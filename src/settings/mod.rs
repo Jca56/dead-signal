@@ -33,6 +33,7 @@ pub enum Field {
     Crosshair,
     HeadBob,
     UiScale,
+    DevMode,
 }
 
 /// What a setting can be.
@@ -55,7 +56,7 @@ pub enum Show {
 }
 
 impl Field {
-    pub const ALL: [Field; 15] = [
+    pub const ALL: [Field; 16] = [
         Field::Sensitivity,
         Field::AdsSensitivity,
         Field::ToggleCrouch,
@@ -71,6 +72,7 @@ impl Field {
         Field::Crosshair,
         Field::HeadBob,
         Field::UiScale,
+        Field::DevMode,
     ];
 
     /// Its name in the file.
@@ -91,6 +93,7 @@ impl Field {
             Field::Crosshair => "crosshair",
             Field::HeadBob => "head_bob",
             Field::UiScale => "ui_scale",
+            Field::DevMode => "developer_mode",
         }
     }
 
@@ -112,6 +115,7 @@ impl Field {
             Field::Crosshair => "CROSSHAIR",
             Field::HeadBob => "HEAD BOB",
             Field::UiScale => "UI SCALE",
+            Field::DevMode => "DEVELOPER MODE",
         }
     }
 
@@ -133,6 +137,7 @@ impl Field {
             Field::Crosshair => "The dot in the middle",
             Field::HeadBob => "How much the view and the gun bob as you walk",
             Field::UiScale => "Menus and the HUD, bigger or smaller",
+            Field::DevMode => "A DEV save slot with test tools (F1 in it); your own slots are never touched",
         }
     }
 
@@ -145,7 +150,7 @@ impl Field {
             Field::Master | Field::Music | Field::Effects | Field::Zombies => slider(0.0, 1.0, 0.01, Show::Percent),
             Field::HeadBob => slider(0.0, 1.5, 0.05, Show::Percent),
             Field::UiScale => slider(0.75, 1.5, 0.05, Show::Percent),
-            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint => Range::Toggle,
+            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint | Field::DevMode => Range::Toggle,
         }
     }
 
@@ -197,6 +202,8 @@ pub struct Settings {
     pub head_bob: f64,
     /// Times the display's own scale, for the game's menus and HUD.
     pub ui_scale: f64,
+    /// The DEV save slot and its tools are there.
+    pub dev_mode: bool,
 }
 
 impl Default for Settings {
@@ -218,6 +225,7 @@ impl Default for Settings {
             crosshair: true,
             head_bob: 1.0,
             ui_scale: 1.0,
+            dev_mode: false,
         }
     }
 }
@@ -242,6 +250,7 @@ impl Settings {
             Field::Crosshair => on(self.crosshair),
             Field::HeadBob => self.head_bob,
             Field::UiScale => self.ui_scale,
+            Field::DevMode => on(self.dev_mode),
         }
     }
 
@@ -265,6 +274,7 @@ impl Settings {
             Field::Crosshair => self.crosshair = on,
             Field::HeadBob => self.head_bob = v,
             Field::UiScale => self.ui_scale = v,
+            Field::DevMode => self.dev_mode = on,
         }
     }
 

@@ -31,10 +31,10 @@ fn run(h: &mut Hands, input: Trigger, frames: usize) -> Vec<Act> {
     all
 }
 
-const FIRE: Trigger = Trigger { fire: true, reload: false, melee: false, aim: false };
-const RELOAD: Trigger = Trigger { fire: false, reload: true, melee: false, aim: false };
-const MELEE: Trigger = Trigger { fire: false, reload: false, melee: true, aim: false };
-const AIM: Trigger = Trigger { fire: false, reload: false, melee: false, aim: true };
+const FIRE: Trigger = Trigger { fire: true, hold: true, reload: false, melee: false, aim: false };
+const RELOAD: Trigger = Trigger { fire: false, hold: false, reload: true, melee: false, aim: false };
+const MELEE: Trigger = Trigger { fire: false, hold: false, reload: false, melee: true, aim: false };
+const AIM: Trigger = Trigger { fire: false, hold: false, reload: false, melee: false, aim: true };
 const RELOAD_TIME: f64 = 1.4;
 
 #[test]
@@ -384,4 +384,42 @@ fn winded_the_swing_is_slower() {
     };
     let (fresh, winded) = (time(1.0), time(0.75));
     assert!(f64::from(winded) > f64::from(fresh) * 1.25, "{winded} vs {fresh} frames");
+}
+
+#[test]
+fn a_full_auto_gun_fires_on_while_the_trigger_is_held_and_one_switches() {
+    let mut h = Hands::default();
+    h.take_up(Some(Slot::Primary), Weapon::Smg, 30);
+    idle(&mut h);
+    let held = Trigger { fire: false, hold: true, reload: false, melee: false, aim: false };
+    // A second of it held: about as many rounds as its rate.
+    let mut shots = usize::from(h.update(FIRE, DT).contains(&Act::Shoot));
+    for _ in 0..(1.0 / DT) as usize {
+        shots += usize::from(h.update(held, DT).contains(&Act::Shoot));
+    }
+    let rate = 1.0 / Weapon::Smg.spec().shot.unwrap().gap;
+    assert!((shots as f64 - rate).abs() <= 2.0, "{shots} rounds in a second at {rate:.0} a second");
+    // Held on empty, no clicking; a pull clicks.
+    h.mag = 0;
+    assert!(!h.update(held, DT).contains(&Act::DryFire));
+    // The pistol isn't: held, it fires once.
+    let mut h = Hands::default();
+    h.take_up(Some(Slot::Sidearm), Weapon::Pistol, 12);
+    idle(&mut h);
+    let mut shots = usize::from(h.update(FIRE, DT).contains(&Act::Shoot));
+    for _ in 0..60 {
+        shots += usize::from(h.update(held, DT).contains(&Act::Shoot));
+    }
+    assert_eq!(shots, 1);
+    assert!(!h.switch_fire(), "a pistol has no switch");
+    // The rifle switches to a round a pull.
+    let mut h = Hands::default();
+    h.take_up(Some(Slot::Primary), Weapon::AssaultRifle, 30);
+    idle(&mut h);
+    assert!(h.full_auto() && h.switch_fire() && !h.full_auto());
+    let mut shots = usize::from(h.update(FIRE, DT).contains(&Act::Shoot));
+    for _ in 0..60 {
+        shots += usize::from(h.update(held, DT).contains(&Act::Shoot));
+    }
+    assert_eq!(shots, 1, "a round a pull");
 }

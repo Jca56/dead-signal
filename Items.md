@@ -24,6 +24,9 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, hunter's cabinet, tool locker, ammo cage, zombies, soldiers, juggernaut | Red paper, brass base, a fistful of lead. Loaded one at a time. |
 | HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage, juggernaut | Bolt-action, 4× glass. One round, one less of them, and often the one behind it. |
 | .308 ROUNDS | 1×1 | 20 | Uncommon | $8 | cage, gun cabinet, hunter's cabinet, supply case, ammo cage, soldiers, juggernaut | Heavy brass. Every one of them should count. |
+| SMG | 3×1 | 1 | Rare | $380 | locker, cage, supply case, ammo cage | Thirty rounds of 9mm and an opinion about all of them. Hold the trigger and mean it. |
+| ASSAULT RIFLE | 5×1 | 1 | Epic | $650 | cage, ammo cage, juggernaut | The soldiers didn't need it anymore. B switches between full auto and a round a pull. |
+| 5.56 ROUNDS | 1×1 | 30 | Uncommon | $5 | cage, supply case, ammo cage, soldiers, juggernaut | Military surplus. The surplus part is new. |
 | TACTICAL KNIFE | 2×1 | 1 | Uncommon | $90 | locker, cage, tool locker, supply case, ammo cage, zombies, soldiers | Quiet work. One that never saw you coming never will. |
 | MACHETE | 3×1 | 1 | Uncommon | $110 | car, tool locker | For brush, once. Swing it again and it comes back the other way. |
 | FIRE AXE | 4×1 | 1 | Rare | $160 | hunter's cabinet, tool locker | Break glass in case of emergency. Everything is the emergency now. |
@@ -63,7 +66,7 @@ Searching makes noise the dead hear within 14 m. About 1 in 5 zombies drops some
 
 ## Trading
 
-Sparks, on the radio (the hideout's TRADER tab), buys anything for 60% of its value (a gun's loaded rounds counted too) and cash at its full face value. Always in stock, at full value: 9mm rounds ×30, 12ga shells ×20, bandages ×3, a medkit. Three rarer offers come in with every run, only so many of each, from: a loaded pistol (2), a loaded shotgun (1), a loaded hunting rifle (1), .308 rounds ×20 (2), a tactical knife (2), a machete (1), a fire axe (1), the cage key (1, $400: it opens the best there is), or the armory key (1, $500).
+Sparks, on the radio (the hideout's TRADER tab), buys anything for 60% of its value (a gun's loaded rounds counted too) and cash at its full face value. Always in stock, at full value: 9mm rounds ×30, 12ga shells ×20, bandages ×3, a medkit. Three rarer offers come in with every run, only so many of each, from: a loaded pistol (2), a loaded shotgun (1), a loaded hunting rifle (1), .308 rounds ×20 (2), a tactical knife (2), a machete (1), a fire axe (1), the cage key (1, $400: it opens the best there is), the armory key (1, $500), a loaded SMG (1), a loaded assault rifle (1), or 5.56 rounds ×30 (2).
 
 | Stash | Price |
 |---|---|

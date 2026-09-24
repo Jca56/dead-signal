@@ -357,3 +357,75 @@ fn the_machete_sweeps_across_and_back_and_the_axe_comes_down() {
     }
     assert!((bone_at(&g, "Idle", 0.0, "hand.L").translation() - bone_at(&g, "Idle", 0.0, "gun").translation()).length() > 0.2, "the hands a haft apart");
 }
+
+/// The red of a red dot (drawn unlit: its alpha a half).
+fn red_dot(c: [f32; 4]) -> bool {
+    c[0] > 0.9 && c[1] < 0.2 && (c[3] - 0.5).abs() < 0.01
+}
+
+#[test]
+fn aimed_the_smgs_post_and_the_rifles_dot_are_on_the_middle_of_the_view() {
+    for (weapon, pick) in [(Weapon::Smg, orange as fn([f32; 4]) -> bool), (Weapon::AssaultRifle, red_dot)] {
+        let g = viewmodel(weapon);
+        for (anim, t) in [("Aim", 0.0), ("Aim", 1.5), ("AimFire", weapon.spec().shot.unwrap().time)] {
+            let (x, y) = on_screen(painted(&g, anim, t, "gun", pick)).expect("in front");
+            assert!(x.abs() < 0.01 && y.abs() < 0.01, "{}: {anim} at {t}: the sight at {x:.3}, {y:.3}", weapon.spec().name);
+        }
+    }
+}
+
+#[test]
+fn a_magazine_is_dropped_and_a_fresh_one_seated() {
+    for weapon in [Weapon::Smg, Weapon::AssaultRifle] {
+        let g = viewmodel(weapon);
+        let time = length(&g, "Reload");
+        let size = |t: f64| bone_at(&g, "Reload", t, "mag").col(0).length();
+        let at = |t: f64| bone_at(&g, "Reload", t, "mag").translation();
+        assert!(size(0.0) > 0.9 && size(time) > 0.9, "{}: a mag in at the start and the end", weapon.spec().name);
+        assert!(size(time * 0.44) < 0.1, "{}: none in the middle", weapon.spec().name);
+        assert!((at(time * 0.3) - at(0.0)).length() > 0.1, "{}: it drops out", weapon.spec().name);
+    }
+}
+
+/// Every triangle of the viewmodel as posed `t` into `anim`, in view space
+/// (the eye at the origin), with its colour.
+fn posed_triangles(g: &Gltf, anim: &str, t: f64) -> Vec<([Vec3; 3], [f32; 4])> {
+    let skin = &g.skins[0];
+    let prim = &g.meshes[g.nodes.iter().find_map(|n| n.skin.and(n.mesh)).unwrap()].primitives[0];
+    let mut pose = g.rest_pose();
+    g.animations.iter().find(|a| a.name.as_deref() == Some(anim)).unwrap().sample(t, &mut pose);
+    let joints = skin.joint_matrices(&g.world_matrices(&pose));
+    let at = |i: usize| {
+        let p = prim.positions[i];
+        let p = Vec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]));
+        (0..4).fold(Vec3::ZERO, |a, k| a + joints[usize::from(prim.joints[i][k])].transform_point(p) * f64::from(prim.weights[i][k]))
+    };
+    prim.indices.chunks_exact(3).map(|tri| ([at(tri[0] as usize), at(tri[1] as usize), at(tri[2] as usize)], prim.colors[tri[0] as usize])).collect()
+}
+
+/// How far along the ray from the origin along `dir` it meets `tri`.
+fn ray_hits(dir: Vec3, tri: [Vec3; 3]) -> Option<f64> {
+    let (e1, e2) = (tri[1] - tri[0], tri[2] - tri[0]);
+    let p = dir.cross(e2);
+    let det = e1.dot(p);
+    if det.abs() < 1e-12 {
+        return None;
+    }
+    let s = -tri[0];
+    let u = s.dot(p) / det;
+    let q = s.cross(e1);
+    let v = dir.dot(q) / det;
+    let t = e2.dot(q) / det;
+    (u >= 0.0 && v >= 0.0 && u + v <= 1.0 && t > 0.0).then_some(t)
+}
+
+#[test]
+fn aimed_nothing_on_the_gun_hides_its_sight() {
+    for (weapon, pick) in [(Weapon::Smg, orange as fn([f32; 4]) -> bool), (Weapon::AssaultRifle, red_dot)] {
+        let g = viewmodel(weapon);
+        let sight = painted(&g, "Aim", 1.0, "gun", pick);
+        let dir = sight.normalize();
+        let blocked = posed_triangles(&g, "Aim", 1.0).into_iter().filter(|(_, c)| !pick(*c)).filter_map(|(tri, _)| ray_hits(dir, tri)).filter(|&t| t < sight.length() - 0.002).fold(f64::INFINITY, f64::min);
+        assert!(blocked.is_infinite(), "{}: something on the gun {blocked:.3} m out hides the sight ({:.3} m)", weapon.spec().name, sight.length());
+    }
+}

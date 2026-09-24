@@ -22,10 +22,11 @@ enum Tab {
     Video,
     Audio,
     Hud,
+    Game,
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [Tab::Controls, Tab::Keys, Tab::Video, Tab::Audio, Tab::Hud];
+    const ALL: [Tab; 6] = [Tab::Controls, Tab::Keys, Tab::Video, Tab::Audio, Tab::Hud, Tab::Game];
 
     fn label(self) -> &'static str {
         match self {
@@ -34,6 +35,7 @@ impl Tab {
             Tab::Video => "VIDEO",
             Tab::Audio => "AUDIO",
             Tab::Hud => "HUD",
+            Tab::Game => "GAME",
         }
     }
 
@@ -44,6 +46,7 @@ impl Tab {
             Tab::Video => &[Field::Fov, Field::Fullscreen, Field::Vsync],
             Tab::Audio => &[Field::Master, Field::Music, Field::Effects, Field::Zombies, Field::MusicInRuns],
             Tab::Hud => &[Field::Crosshair, Field::HeadBob, Field::UiScale],
+            Tab::Game => &[Field::DevMode],
         }
     }
 }

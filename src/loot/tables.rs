@@ -68,6 +68,7 @@ const LOCKER: &[Line] = &[
     (Kind::Pistol, 5, (1, 1)),
     (Kind::Shells, 8, (4, 10)),
     (Kind::Knife, 5, (1, 1)),
+    (Kind::Smg, 2, (1, 1)),
 ];
 
 // A map has a score of wrecks: their gold is rare.
@@ -101,6 +102,9 @@ const CAGE: &[Line] = &[
     (Kind::Rifle, 4, (1, 1)),
     (Kind::RifleRounds, 10, (6, 12)),
     (Kind::Knife, 6, (1, 1)),
+    (Kind::Smg, 4, (1, 1)),
+    (Kind::AssaultRifle, 2, (1, 1)),
+    (Kind::Rounds556, 10, (10, 20)),
 ];
 
 const FRIDGE: &[Line] = &[
@@ -213,6 +217,8 @@ const SUPPLY_CASE: &[Line] = &[
     (Kind::Cash, 6, (1, 3)),
     (Kind::Battery, 4, (1, 1)),
     (Kind::Knife, 4, (1, 1)),
+    (Kind::Smg, 3, (1, 1)),
+    (Kind::Rounds556, 14, (10, 20)),
 ];
 
 // The richest rounds on the map, and the guns to fire them.
@@ -225,11 +231,15 @@ const AMMO_CAGE: &[Line] = &[
     (Kind::Shotgun, 7, (1, 1)),
     (Kind::Medkit, 8, (1, 1)),
     (Kind::Knife, 6, (1, 1)),
+    (Kind::Smg, 6, (1, 1)),
+    (Kind::AssaultRifle, 7, (1, 1)),
+    (Kind::Rounds556, 25, (20, 30)),
 ];
 
 const SOLDIER: &[Line] = &[
     (Kind::Rounds, 25, (6, 12)),
     (Kind::RifleRounds, 12, (3, 8)),
+    (Kind::Rounds556, 18, (8, 20)),
     (Kind::Bandage, 15, (1, 2)),
     (Kind::Shells, 8, (3, 6)),
     (Kind::Cash, 6, (1, 3)),
@@ -247,6 +257,8 @@ const JUGGERNAUT: &[Line] = &[
     (Kind::Medkit, 12, (1, 1)),
     (Kind::Cash, 12, (3, 6)),
     (Kind::ArmoryKey, 4, (1, 1)),
+    (Kind::AssaultRifle, 6, (1, 1)),
+    (Kind::Rounds556, 12, (15, 30)),
 ];
 
 /// How many things a Juggernaut had on it, fewest and most.

@@ -147,6 +147,29 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 (crack * 1.2 + thump * 1.1 + roll * 2.8).tanh()
             })
         }
+        Sfx::SmgShot => {
+            // The pistol's shot, clipped: a snappy crack, a little thump,
+            // gone before the next.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(0.3, 0.8, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 4200.0, 0.6).2 * env(t, 0.0004, 0.005);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 190.0, 60.0, 0.02)).sin() * env(t, 0.001, 0.045);
+                let rumble = tail.run(x, 900.0, 1.1).0 * env(t, 0.003, 0.08);
+                (crack * 0.9 + thump * 0.8 + rumble * 2.2).tanh()
+            })
+        }
+        Sfx::ArShot => {
+            // A hard, bright crack and a punch, a short roll after it.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(0.55, 0.95, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 4800.0, 0.5).2 * env(t, 0.0003, 0.006);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 170.0, 48.0, 0.025)).sin() * env(t, 0.001, 0.06);
+                let roll = tail.run(x, 600.0, 1.0).0 * env(t, 0.004, 0.14);
+                (crack * 1.1 + thump * 1.0 + roll * 2.6).tanh()
+            })
+        }
         Sfx::Bolt => {
             // Up, back, forward, down: four clicks and a slide either way.
             let (mut slide, mut click) = (Svf::default(), Svf::default());

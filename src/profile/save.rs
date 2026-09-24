@@ -24,8 +24,10 @@ use crate::loot::{Kind, Stack};
 
 /// The save's layout; a newer one won't be read by an older game.
 const VERSION: i64 = 3;
-/// How many save slots there are.
+/// How many save slots there are; and the developer's slot (`dev.toml`),
+/// for trying things out, apart from them.
 pub const SLOTS: u8 = 3;
+pub const DEV: u8 = 0;
 
 /// What a stack is: its kind, how many, and a gun's rounds.
 fn stack_to_doc(stack: Stack) -> Doc {
@@ -194,12 +196,12 @@ impl Saves {
         }
         let last = saves.dir.as_ref().and_then(|d| std::fs::read_to_string(d.join("slots.toml")).ok());
         let last = last.and_then(|t| lntrn_data::toml::parse(&t).ok()).and_then(|d| d.get("current").and_then(Doc::as_i64));
-        saves.slot = last.map_or(1, |n| n.clamp(1, i64::from(SLOTS)) as u8);
+        saves.slot = last.map_or(1, |n| n.clamp(i64::from(DEV), i64::from(SLOTS)) as u8);
         saves
     }
 
     fn path(&self, slot: u8) -> Option<PathBuf> {
-        self.dir.as_ref().map(|d| d.join(format!("slot{slot}.toml")))
+        self.dir.as_ref().map(|d| d.join(if slot == DEV { "dev.toml".to_string() } else { format!("slot{slot}.toml") }))
     }
 
     /// Whether `slot` has a player in it.
@@ -245,7 +247,7 @@ impl Saves {
 
     /// Play `slot` from now on (and next time the game starts).
     pub fn choose(&mut self, slot: u8) {
-        self.slot = slot.clamp(1, SLOTS);
+        self.slot = slot.min(SLOTS);
         if let Some(dir) = &self.dir {
             let mut d = Doc::map();
             d.set("current", i64::from(self.slot).into());
@@ -334,6 +336,21 @@ mod tests {
         assert_eq!((again.load(1), again.load(2)), (Some(p), Some(q)));
         again.delete(2);
         assert!(!again.used(2) && dir.join("slot2.toml.deleted").exists(), "kept aside");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_dev_slot_is_a_file_of_its_own_and_never_a_real_slot() {
+        let dir = folder("dev");
+        let mut saves = Saves::at(Some(dir.clone()));
+        let real = Profile { money: 7, ..Profile::new_player() };
+        saves.store(&real);
+        saves.choose(DEV);
+        let dev = Profile { money: 1_000_000, ..Profile::new_player() };
+        saves.store(&dev);
+        assert!(dir.join("dev.toml").exists());
+        assert_eq!(saves.load(1).map(|p| p.money), Some(7), "the real slot untouched");
+        assert_eq!(Saves::at(Some(dir.clone())).slot, DEV, "remembered");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

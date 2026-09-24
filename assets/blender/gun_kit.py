@@ -30,9 +30,9 @@ def frame_matrix(origin, right, barrel, up):
     return m
 
 
-def box(b, to_rig, centre, size, colour, bone, tilt=0.0):
+def box(b, to_rig, centre, size, colour, bone, tilt=0.0, alpha=1.0):
     """A box in the gun's frame (turned `tilt` about its x axis), weighted
-    whole to `bone`."""
+    whole to `bone`; an `alpha` of 0.5 draws it unlit (a glowing dot)."""
     m = to_rig @ Matrix.Translation(centre) @ Matrix.Rotation(tilt, 4, "X") @ Matrix.Diagonal((size[0] / 2, size[1] / 2, size[2] / 2, 1.0))
     made = bmesh.ops.create_cube(b.bm, size=2.0, matrix=m)
     group = b.group(bone)
@@ -41,7 +41,7 @@ def box(b, to_rig, centre, size, colour, bone, tilt=0.0):
     faces = sorted({f for v in made["verts"] for f in v.link_faces}, key=lambda f: f.index if f.index >= 0 else 0)
     for f in faces:
         for loop in f.loops:
-            loop[b.col] = (*colour, 1.0)
+            loop[b.col] = (*colour, alpha)
 
 
 def flash(b, to_rig, bone, muzzle, size=1.0):

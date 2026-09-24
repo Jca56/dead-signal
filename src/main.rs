@@ -9,6 +9,7 @@ mod exits;
 mod feedback;
 mod combat;
 mod containers;
+mod dev;
 mod ending;
 mod fx;
 mod head;

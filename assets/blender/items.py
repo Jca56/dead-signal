@@ -17,101 +17,20 @@ the ground from standing height.
 
 import math
 import os
+import sys
 
 import bmesh
 import bpy
 from mathutils import Matrix
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 OUT = os.path.join(HERE, "..", "models", "items.glb")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
-GAUZE = (0.86, 0.84, 0.77)
-GAUZE_SHADE = (0.74, 0.72, 0.66)
-KIT_RED = (0.66, 0.10, 0.08)
-KIT_DARK = (0.36, 0.06, 0.05)
-WHITE = (0.92, 0.91, 0.87)
-HANDLE = (0.14, 0.13, 0.12)
-GOLD = (0.85, 0.63, 0.20)
-GOLD_DARK = (0.62, 0.43, 0.12)
-SILVER = (0.74, 0.74, 0.71)
-LEATHER = (0.33, 0.21, 0.12)
-TIN = (0.62, 0.62, 0.58)
-TIN_LABEL = (0.66, 0.30, 0.14)
-BOTTLE = (0.52, 0.66, 0.72)
-CAP_BLUE = (0.18, 0.30, 0.55)
-PILL = (0.80, 0.45, 0.12)
-BILL = (0.46, 0.56, 0.38)
-BILL_DARK = (0.34, 0.43, 0.28)
-BAND = (0.86, 0.80, 0.62)
-BLACK = (0.11, 0.11, 0.11)
-PLASTIC = (0.20, 0.21, 0.20)
-FUEL_RED = (0.58, 0.12, 0.08)
-GEM = (0.70, 0.08, 0.10)
-TAG = (0.80, 0.62, 0.14)
-CARTON = (0.33, 0.34, 0.21)
-CARTON_DARK = (0.24, 0.25, 0.15)
-LABEL = (0.78, 0.70, 0.48)
-BRASS = (0.78, 0.60, 0.26)
-LEAD = (0.45, 0.42, 0.40)
-
-
-class Part:
-    def __init__(self, name):
-        self.name = name
-        self.bm = bmesh.new()
-        self.col = self.bm.loops.layers.color.new("Col")
-
-    def paint(self, verts, colour, alt=None):
-        faces = sorted({f for v in verts for f in v.link_faces}, key=lambda f: f.calc_center_median().to_tuple())
-        for i, f in enumerate(faces):
-            c = alt if alt and i % 2 else colour
-            for loop in f.loops:
-                loop[self.col] = (*c, 1.0)
-
-    def box(self, centre, size, colour, turn=0.0):
-        m = Matrix.Translation(centre) @ Matrix.Rotation(turn, 4, "Z") @ Matrix.Diagonal((size[0] / 2, size[1] / 2, size[2] / 2, 1.0))
-        self.paint(bmesh.ops.create_cube(self.bm, size=2.0, matrix=m)["verts"], colour)
-
-    def roll(self, centre, radius, length, colour, alt):
-        """A cylinder lying along X."""
-        m = Matrix.Translation(centre) @ Matrix.Rotation(math.pi / 2, 4, "Y")
-        made = bmesh.ops.create_cone(self.bm, cap_ends=True, segments=10, radius1=radius, radius2=radius, depth=length, matrix=m)
-        self.paint(made["verts"], colour, alt)
-
-    def can(self, centre, radius, height, colour, segments=10):
-        """A cylinder standing up Z from `centre`."""
-        m = Matrix.Translation((centre[0], centre[1], centre[2] + height / 2))
-        made = bmesh.ops.create_cone(self.bm, cap_ends=True, segments=segments, radius1=radius, radius2=radius, depth=height, matrix=m)
-        self.paint(made["verts"], colour)
-
-    def hoop(self, centre, big, small, colour, segments=12, turn=None):
-        """A ring (a torus of boxes round Z, or turned by `turn`)."""
-        for k in range(segments):
-            a = k / segments * math.tau
-            at = Matrix.Translation(centre) @ (turn or Matrix.Identity(4)) @ Matrix.Translation((math.cos(a) * big, math.sin(a) * big, 0.0))
-            m = at @ Matrix.Rotation(a, 4, "Z") @ Matrix.Diagonal((small, big * math.pi / segments * 1.15, small, 1.0))
-            self.paint(bmesh.ops.create_cube(self.bm, size=2.0, matrix=m)["verts"], colour)
-
-    def finish(self):
-        mesh = bpy.data.meshes.new(self.name)
-        bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
-        self.bm.to_mesh(mesh)
-        self.bm.free()
-        attrs = mesh.color_attributes
-        attrs.active_color = attrs["Col"]
-        attrs.render_color_index = attrs.find("Col")
-        mat = bpy.data.materials.get("Flat") or bpy.data.materials.new("Flat")
-        mat.use_nodes = True
-        nodes = mat.node_tree.nodes
-        if "Col" not in [n.name for n in nodes]:
-            vc = nodes.new("ShaderNodeVertexColor")
-            vc.name = "Col"
-            vc.layer_name = "Col"
-            mat.node_tree.links.new(vc.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
-        mesh.materials.append(mat)
-        bpy.context.scene.collection.objects.link(bpy.data.objects.new(self.name, mesh))
+from item_kit import *  # noqa: E402,F403
+import items_guns  # noqa: E402
 
 
 def bandage():
@@ -255,110 +174,6 @@ def key():
     p.finish()
 
 
-def pistol():
-    """A service pistol lying on its side, barrel along X, grip to the
-    front (towards the icon's eye, so it reads as a pistol)."""
-    p = Part("ITEM_Pistol")
-    p.box((0.02, 0.0, 0.017), (0.22, 0.04, 0.03), PLASTIC)
-    p.box((0.03, 0.03, 0.014), (0.16, 0.024, 0.024), BLACK)
-    p.box((-0.07, 0.09, 0.015), (0.048, 0.12, 0.028), HANDLE, turn=-0.26)
-    p.box((-0.082, 0.152, 0.015), (0.056, 0.014, 0.032), BLACK, turn=-0.26)
-    # The trigger guard, and the trigger in it.
-    p.box((0.005, 0.07, 0.014), (0.06, 0.008, 0.018), BLACK)
-    p.box((0.032, 0.055, 0.014), (0.008, 0.03, 0.018), BLACK)
-    p.box((-0.005, 0.052, 0.014), (0.006, 0.02, 0.01), SILVER)
-    # The sights, and the slide's grip lines.
-    p.box((-0.078, -0.024, 0.017), (0.01, 0.01, 0.024), BLACK)
-    p.box((0.12, -0.024, 0.017), (0.008, 0.008, 0.014), SILVER)
-    for k in range(4):
-        p.box((-0.06 + k * 0.012, 0.0, 0.033), (0.004, 0.036, 0.004), BLACK)
-    p.finish()
-
-
-WALNUT = (0.40, 0.23, 0.12)
-BLUED = (0.12, 0.13, 0.15)
-SHELL_RED = (0.62, 0.10, 0.08)
-BEAD = (0.95, 0.45, 0.08)
-
-
-def shotgun():
-    """A pump shotgun lying on its side, muzzle along +X, its underside
-    (forend, trigger guard) towards the front."""
-    p = Part("ITEM_Shotgun")
-    z = 0.024
-    # (Each box by its middle and its size.) The stock and its pad, the
-    # wrist, the receiver.
-    p.box((-0.33, 0.02, z), (0.32, 0.07, 0.044), WALNUT, turn=0.12)
-    p.box((-0.495, 0.04, z), (0.02, 0.10, 0.046), BLACK, turn=0.12)
-    p.box((-0.08, 0.0, z), (0.16, 0.05, 0.04), WALNUT, turn=0.2)
-    p.box((0.10, 0.0, z), (0.24, 0.07, 0.048), BLUED)
-    p.box((0.52, -0.012, z), (0.60, 0.028, 0.03), BLUED)
-    p.box((0.45, 0.028, z), (0.46, 0.026, 0.026), BLUED)
-    p.box((0.38, 0.034, z), (0.20, 0.05, 0.05), WALNUT)
-    p.box((0.04, 0.045, z), (0.06, 0.02, 0.012), BLUED)
-    p.box((0.815, -0.03, z), (0.01, 0.01, 0.01), BEAD)
-    p.finish()
-
-
-def shells():
-    """A small carton, its lid off, shells standing in two rows, red hulls
-    and brass bases."""
-    p = Part("ITEM_Shells")
-    w, d, h = 0.16, 0.08, 0.07
-    p.box((0, 0, h / 2), (w, d, h), CARTON)
-    p.box((0, 0, h * 0.5), (w + 0.004, d + 0.004, 0.026), LABEL)
-    for row in (-0.018, 0.018):
-        for i in range(5):
-            x = -0.06 + i * 0.03
-            p.box((x, row, h + 0.012), (0.022, 0.022, 0.024), SHELL_RED)
-            p.box((x, row, h + 0.001), (0.024, 0.024, 0.004), BRASS)
-    p.finish()
-
-
-SCOPE_BLACK = (0.09, 0.09, 0.10)
-LENS = (0.22, 0.42, 0.52)
-COPPER = (0.66, 0.36, 0.20)
-
-
-def rifle():
-    """A scoped bolt-action rifle lying on its side, muzzle along +X, the
-    scope away from the eye (up, in the gun's frame, is -Y here)."""
-    p = Part("ITEM_Rifle")
-    z = 0.024
-    # (Each box by its middle and its size.) The stock, the wrist, the
-    # receiver, the forestock, the barrel.
-    p.box((-0.40, 0.03, z), (0.36, 0.08, 0.044), WALNUT, turn=0.1)
-    p.box((-0.585, 0.045, z), (0.02, 0.11, 0.046), BLACK, turn=0.1)
-    p.box((-0.15, 0.01, z), (0.14, 0.05, 0.04), WALNUT, turn=0.18)
-    p.box((0.02, 0.0, z), (0.22, 0.05, 0.042), BLUED)
-    p.box((0.32, 0.012, z), (0.36, 0.045, 0.044), WALNUT)
-    p.box((0.62, -0.012, z), (0.62, 0.022, 0.024), BLUED)
-    # The bolt's handle, out and down.
-    p.box((-0.03, 0.04, z + 0.01), (0.014, 0.06, 0.012), SILVER)
-    # The scope on its rings, its lens at the front.
-    for x in (-0.05, 0.08):
-        p.box((x, -0.04, z), (0.02, 0.03, 0.03), BLACK)
-    p.box((0.02, -0.07, z), (0.34, 0.032, 0.034), SCOPE_BLACK)
-    p.box((0.19, -0.07, z), (0.06, 0.046, 0.046), SCOPE_BLACK)
-    p.box((0.222, -0.07, z), (0.004, 0.038, 0.038), LENS)
-    p.finish()
-
-
-def rifle_rounds():
-    """A small box, lid off, rounds standing in two rows: brass, copper
-    tips."""
-    p = Part("ITEM_RifleRounds")
-    w, d, h = 0.14, 0.07, 0.06
-    p.box((0, 0, h / 2), (w, d, h), CARTON_DARK)
-    p.box((0, 0, h * 0.5), (w + 0.004, d + 0.004, 0.022), LABEL)
-    for row in (-0.016, 0.016):
-        for i in range(5):
-            x = -0.052 + i * 0.026
-            p.box((x, row, h + 0.02), (0.012, 0.012, 0.04), BRASS)
-            p.box((x, row, h + 0.046), (0.008, 0.008, 0.014), COPPER)
-    p.finish()
-
-
 STEEL_BLADE = (0.55, 0.56, 0.55)
 EDGE = (0.82, 0.82, 0.80)
 AXE_RED = (0.62, 0.10, 0.08)
@@ -436,11 +251,14 @@ def main():
     fuel()
     key()
     gold_bar()
-    pistol()
-    shotgun()
-    shells()
-    rifle()
-    rifle_rounds()
+    items_guns.pistol()
+    items_guns.shotgun()
+    items_guns.shells()
+    items_guns.rifle()
+    items_guns.rifle_rounds()
+    items_guns.smg()
+    items_guns.assault_rifle()
+    items_guns.rounds_556()
     knife()
     machete()
     axe()

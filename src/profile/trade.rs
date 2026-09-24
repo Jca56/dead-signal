@@ -50,7 +50,7 @@ fn basics() -> Vec<Stack> {
 /// What comes and goes: the lot, how many, and a price of its own if its
 /// worth isn't its price (the cage's key opens the best there is).
 fn rare() -> Vec<(Stack, u32, Option<u32>)> {
-    vec![(loaded(Kind::Pistol), 2, None), (loaded(Kind::Shotgun), 1, None), (Stack::one(Kind::Key), 1, Some(400)), (loaded(Kind::Rifle), 1, None), (Stack::new(Kind::RifleRounds, 20), 2, None), (Stack::one(Kind::Knife), 2, None), (Stack::one(Kind::Machete), 1, None), (Stack::one(Kind::FireAxe), 1, None), (Stack::one(Kind::ArmoryKey), 1, Some(500))]
+    vec![(loaded(Kind::Pistol), 2, None), (loaded(Kind::Shotgun), 1, None), (Stack::one(Kind::Key), 1, Some(400)), (loaded(Kind::Rifle), 1, None), (Stack::new(Kind::RifleRounds, 20), 2, None), (Stack::one(Kind::Knife), 2, None), (Stack::one(Kind::Machete), 1, None), (Stack::one(Kind::FireAxe), 1, None), (Stack::one(Kind::ArmoryKey), 1, Some(500)), (loaded(Kind::Smg), 1, None), (loaded(Kind::AssaultRifle), 1, None), (Stack::new(Kind::Rounds556, 30), 2, None)]
 }
 
 /// How many of the rare things are offered at once.
@@ -206,7 +206,7 @@ mod tests {
     fn the_rare_lot_changes_from_run_to_run() {
         let lots: std::collections::HashSet<Vec<Kind>> = (0..20).map(|r| offers(r).iter().skip(4).map(|o| o.stack.kind).collect()).collect();
         assert!(lots.len() > 1, "always the same lot");
-        for kind in [Kind::Pistol, Kind::Shotgun, Kind::Key, Kind::Rifle, Kind::RifleRounds, Kind::Knife, Kind::Machete, Kind::FireAxe, Kind::ArmoryKey] {
+        for kind in [Kind::Pistol, Kind::Shotgun, Kind::Key, Kind::Rifle, Kind::RifleRounds, Kind::Knife, Kind::Machete, Kind::FireAxe, Kind::ArmoryKey, Kind::Smg, Kind::AssaultRifle, Kind::Rounds556] {
             assert!(lots.iter().any(|l| l.contains(&kind)), "never a {kind:?}");
         }
     }

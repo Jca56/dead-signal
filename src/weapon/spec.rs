@@ -15,13 +15,15 @@ pub enum Weapon {
     Pistol,
     Shotgun,
     Rifle,
+    Smg,
+    AssaultRifle,
     Knife,
     Machete,
     Axe,
 }
 
 impl Weapon {
-    pub const ALL: [Weapon; 7] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Knife, Weapon::Machete, Weapon::Axe];
+    pub const ALL: [Weapon; 9] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Smg, Weapon::AssaultRifle, Weapon::Knife, Weapon::Machete, Weapon::Axe];
 }
 
 /// How far off true a round may fly, degrees: standing still, moving,
@@ -89,9 +91,14 @@ pub struct Shot {
     /// Aimed through a scope: the view all lens, the gun gone from it.
     pub scope: bool,
     /// The quickest it fires again, seconds (none: as fast as the trigger
-    /// is pulled), and how long the Fire clip runs.
+    /// is pulled), and how long the Fire clip runs; whether it goes on
+    /// firing while the trigger's held (full auto).
     pub gap: f64,
     pub time: f64,
+    pub auto: bool,
+    /// Whether it can be switched to firing a round a pull (full auto or
+    /// single).
+    pub select: bool,
     /// How hard it kicks the view up, and at most to the side, degrees.
     pub kick: f64,
     pub kick_side: f64,
@@ -197,6 +204,8 @@ const PISTOL: Spec = Spec {
         scope: false,
         gap: 0.0,
         time: 0.2,
+        auto: false,
+        select: false,
         kick: 1.5,
         kick_side: 0.8,
         marks: &[],
@@ -232,6 +241,8 @@ const SHOTGUN: Spec = Spec {
         // The pump is racked before it fires again.
         gap: 0.8,
         time: 0.8,
+        auto: false,
+        select: false,
         kick: 5.0,
         kick_side: 2.0,
         marks: &[(10.0 / 30.0, Act::Pump)],
@@ -269,11 +280,88 @@ const RIFLE: Spec = Spec {
         // The bolt is worked before it fires again.
         gap: 1.1,
         time: 1.1,
+        auto: false,
+        select: false,
         kick: 6.0,
         kick_side: 1.5,
         marks: &[(14.0 / 30.0, Act::Bolt)],
     }),
     reload: Some(Reload::Rounds { start: 0.5, start_marks: &[(6.0 / 30.0, Act::Bolt)], each: 0.6, insert_at: 10.0 / 30.0, end: 0.55, end_marks: &[(9.0 / 30.0, Act::Bolt)] }),
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
+    draw: 0.5,
+    holster: 0.4,
+};
+
+// A spray of 9mm: soft rounds, a lot of them, quickly.
+const SMG: Spec = Spec {
+    name: "SMG",
+    slot: Some(Slot::Primary),
+    model: "smg",
+    mag: 30,
+    ammo: Some(Kind::Rounds),
+    shot: Some(Shot {
+        damage: 20.0,
+        pellets: 1,
+        falloff: Some(Falloff { near: 20.0, far: 60.0, least: 0.6 }),
+        range: 150.0,
+        sound: Sfx::SmgShot,
+        heard: 60.0,
+        shove: 0.4,
+        stumble: false,
+        pierce: &[],
+        hip: Spread { still: 2.6, moving: 3.5, air: 6.0 },
+        aimed: Spread { still: 0.8, moving: 1.6, air: 4.0 },
+        aim_time: 0.2,
+        zoom: 0.8,
+        scope: false,
+        // About 800 a minute.
+        gap: 0.075,
+        time: 2.0 / 30.0,
+        auto: true,
+        select: false,
+        kick: 0.8,
+        kick_side: 0.9,
+        marks: &[],
+    }),
+    reload: Some(Reload::Magazine { time: 2.0, marks: &[(0.5, Act::MagOut), (1.48, Act::MagIn), (1.76, Act::SlideRack)] }),
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 50.0, reach: 1.8, stamina: 9.0, ..BLOW },
+    draw: 0.4,
+    holster: 0.3,
+};
+
+// The soldiers' rifle: hard-hitting, through one into the next, full auto
+// or a round a pull.
+const ASSAULT_RIFLE: Spec = Spec {
+    name: "ASSAULT RIFLE",
+    slot: Some(Slot::Primary),
+    model: "ar",
+    mag: 30,
+    ammo: Some(Kind::Rounds556),
+    shot: Some(Shot {
+        damage: 42.0,
+        pellets: 1,
+        falloff: None,
+        range: 350.0,
+        sound: Sfx::ArShot,
+        heard: 90.0,
+        shove: 1.0,
+        stumble: false,
+        pierce: &[0.5],
+        hip: Spread { still: 2.4, moving: 3.4, air: 6.0 },
+        aimed: Spread { still: 0.15, moving: 1.0, air: 4.0 },
+        aim_time: 0.25,
+        zoom: 0.7,
+        scope: false,
+        // About 600 a minute.
+        gap: 0.1,
+        time: 3.0 / 30.0,
+        auto: true,
+        select: true,
+        kick: 1.3,
+        kick_side: 0.8,
+        marks: &[],
+    }),
+    reload: Some(Reload::Magazine { time: 2.3, marks: &[(0.55, Act::MagOut), (1.7, Act::MagIn), (2.02, Act::SlideRack)] }),
     bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
     draw: 0.5,
     holster: 0.4,
@@ -298,6 +386,8 @@ impl Weapon {
             Weapon::Pistol => &PISTOL,
             Weapon::Shotgun => &SHOTGUN,
             Weapon::Rifle => &RIFLE,
+            Weapon::Smg => &SMG,
+            Weapon::AssaultRifle => &ASSAULT_RIFLE,
             Weapon::Knife => &KNIFE,
             Weapon::Machete => &MACHETE,
             Weapon::Axe => &AXE,
