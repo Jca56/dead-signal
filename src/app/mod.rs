@@ -437,6 +437,9 @@ impl Host for DeadSignal {
             s.fullscreen = self.fullscreen;
             settings::store(&s);
         }
+        // The music, in the menus (and in a run, if the player wants it).
+        let in_run = self.screen == Screen::Run;
+        self.combat.set_music(!in_run || self.game.world.resource::<Settings>().music_in_runs);
         let active = self.fading_to.is_none();
         match self.screen {
             Screen::Title if self.settings.is_some() => {

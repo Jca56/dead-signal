@@ -169,6 +169,11 @@ impl Combat {
         self.sound.set_mix(mix);
     }
 
+    /// Whether the music should be playing.
+    pub fn set_music(&self, on: bool) {
+        self.sound.set_music(on);
+    }
+
     pub fn play(&self, sfx: Sfx, gain: f32) {
         self.sound.play(sfx, gain);
     }

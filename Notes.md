@@ -61,12 +61,15 @@
   - Debuffs
   - What is this, an MMO now?
 
+## Phase 9: World 2: Electric Boogaloo
+- [ ] Bigger map
+  - Make the town worth actually going to.
+  - More POIs
+  - Forest creatures like rabbits and deer. Birbs.
+
 ---
 
 # Random
 
-- Does it makes sense that the game is called "Dead Signal" when the main way to extract is through a radio at the watch tower?
+- Remove the blue border around the game.
 
-- ~/Downloads/dead-signal.svg for game's launcher icon. There should be text but I don't see it, I don't know what to do about that?
-
-- ~/Downloads/dead-signal-background-music.mp3 for a background song. 

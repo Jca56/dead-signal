@@ -2,7 +2,11 @@
 //! rendered once at start into buffers, and played on a stream of our own
 //! through `lntrn-audio`'s mixer. A sound in the world is placed by
 //! `place.rs`: how loud, how muffled, which side, whether heard at all.
+//! The one thing not made in code is the music (`music.rs`), read from
+//! its file on a thread of its own and let into the stream once it's
+//! ready.
 
+mod music;
 mod place;
 mod synth;
 
@@ -119,13 +123,15 @@ pub struct Mix {
     pub zombies: f32,
 }
 
-/// The mix as the stream reads it, while the game sets it.
+/// The mix as the stream reads it, while the game sets it; and whether
+/// the music's wanted now.
 #[derive(Default)]
 struct Levels {
     master: AtomicU32,
     music: AtomicU32,
     effects: AtomicU32,
     zombies: AtomicU32,
+    music_on: AtomicBool,
 }
 
 impl Levels {
@@ -161,6 +167,7 @@ impl Sound {
         let levels = Arc::new(Levels::default());
         levels.set(Mix { master: 0.8, music: 0.6, effects: 1.0, zombies: 1.0 });
         let heard_levels = Arc::clone(&levels);
+        let songs = music::load();
         let mut crowds: Crowds<(VoiceId, Arc<AtomicBool>)> = Crowds::default();
         let render = move |out: &mut [f32]| {
             while let Ok(p) = rx.try_recv() {
@@ -178,6 +185,9 @@ impl Sound {
                 if let Some(c) = crowd {
                     crowds.add(c, (id, fade), p.heard.distance);
                 }
+            }
+            if let Ok(song) = songs.try_recv() {
+                mixer.play(music::Music::new(song, Arc::clone(&heard_levels)));
             }
             mixer.set_master(Levels::get(&heard_levels.master));
             mixer.render(out);
@@ -197,6 +207,11 @@ impl Sound {
     /// Set how loud everything is (at once, even what's playing).
     pub fn set_mix(&self, mix: Mix) {
         self.levels.set(mix);
+    }
+
+    /// Whether the music should be playing (it fades in and out).
+    pub fn set_music(&self, on: bool) {
+        self.levels.music_on.store(on, Ordering::Relaxed);
     }
 
     /// Play a sound at the listener (the gun in hand, a click).
