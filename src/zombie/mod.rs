@@ -10,6 +10,7 @@ pub mod figure;
 pub mod kind;
 pub mod looks;
 pub mod nav;
+pub mod spit;
 mod steer;
 
 use bevy_ecs::prelude::*;
@@ -111,6 +112,13 @@ pub struct Noises {
 pub struct Horde {
     pub sounds: Vec<(Sfx, Vec3, f32)>,
     pub blows: Vec<brain::Blow>,
+    /// Globs thrown this step (from, at), Spitters bursting (where), and
+    /// the bursts the combat side has yet to deal out.
+    pub spits: Vec<(Vec3, Vec3)>,
+    pub bursting: Vec<Vec3>,
+    pub bursts: Vec<Vec3>,
+    /// The player's standing in a puddle of bile.
+    pub poisoned: bool,
     pub gone: usize,
     seed: u32,
     /// The world's steps so far.
@@ -120,6 +128,16 @@ pub struct Horde {
     /// hear them on their next.
     shots: Vec<(u32, (Vec3, f64))>,
     snarls: Vec<(u32, (Vec3, Vec3))>,
+}
+
+impl Horde {
+    /// 0 to 1, from the horde's own luck.
+    pub fn roll(&mut self) -> f64 {
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 17;
+        self.seed ^= self.seed << 5;
+        f64::from(self.seed) / f64::from(u32::MAX)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -164,6 +182,13 @@ fn think(
         }
         if let Some(seen) = intent.alert {
             noises.snarls.push((body.pos, seen));
+        }
+        if let Some(throw) = intent.spit {
+            horde.spits.push(throw);
+        }
+        if intent.burst {
+            horde.bursting.push(body.pos);
+            horde.sounds.push((Sfx::Burst, body.pos + Vec3::new(0.0, 0.6, 0.0), 1.0));
         }
         if z.dead() {
             body.prev = body.pos;
@@ -250,7 +275,18 @@ fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<&Body, With
             State::Dead { t } => ((t - LIE_FOR) / SINK_FOR).clamp(0.0, 1.0) * 1.8,
             _ => 0.0,
         };
-        let (height, bulk) = looks.map_or((1.0, 1.0), |l| (l.height, l.bulk));
+        let (height, mut bulk) = looks.map_or((1.0, 1.0), |l| (l.height, l.bulk));
+        // A dead Spitter swells, shuddering, and once it's burst, it's gone.
+        if z.kind == Kind::Spitter
+            && let State::Dead { t } = z.state
+        {
+            if t >= spit::BURST_AT {
+                figure.hide();
+                continue;
+            }
+            let k = t / spit::BURST_AT;
+            bulk *= 1.0 + 0.45 * k * k + 0.05 * k * (t * 30.0).sin();
+        }
         let place = Mat4::from_translation(at - Vec3::new(0.0, sink, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(z.yaw)) * Mat4::from_scale(Vec3::new(bulk, height, bulk));
         if figure.parts.is_empty() {
             figure.parts = model.meshes(looks.unwrap_or(&Looks::default()));
@@ -270,7 +306,7 @@ fn bury(mut commands: Commands, dead: Query<(Entity, &Zombie)>, mut horde: ResMu
 }
 
 pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
-    fixed.add_systems(think);
+    fixed.add_systems((think, spit::fly, spit::fester).chain());
     frame.add_systems((pose, bury));
 }
 
@@ -290,6 +326,7 @@ pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Them
     let looks = match kind {
         Kind::Shambler => Looks::roll(theme, dice),
         Kind::Ripper => Looks::ripper(dice),
+        Kind::Spitter => Looks::spitter(dice),
     };
     let mut zombie = Zombie::of(kind, yaw, seed);
     if looks.headless() {
@@ -412,7 +449,7 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) ->
     }
     let mut sounds = Vec::new();
     if killed {
-        sounds.push(Sfx::Gurgle);
+        sounds.push(if z.kind == Kind::Spitter { Sfx::Swell } else { Sfx::Gurgle });
     }
     // (Shot from straight above, it isn't shoved at all.)
     let flat = Vec3::new(dir.x, 0.0, dir.z);
@@ -437,5 +474,7 @@ pub fn noise(world: &mut World, at: Vec3, range: f64) {
 mod bench;
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod special_tests;
 #[cfg(test)]
 mod tests;

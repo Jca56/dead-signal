@@ -254,6 +254,7 @@ impl Game {
     /// the dead, what's lying about, the ways out.
     pub fn clear_map(&mut self) {
         zombie::clear(&mut self.world);
+        zombie::spit::clear(&mut self.world);
         crate::items::clear(&mut self.world);
         crate::exits::hide(&mut self.world);
         self.world.remove_resource::<crate::exits::Exits>();

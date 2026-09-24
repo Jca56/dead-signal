@@ -15,6 +15,8 @@ pub struct Stats {
     /// Kills by a shot to the head.
     pub headshot_kills: u32,
     pub melee_kills: u32,
+    /// The dead killed by a Spitter's burst (one the player killed).
+    pub burst_kills: u32,
     pub longest_kill: f64,
     pub damage_dealt: f64,
     pub biggest_horde: u32,
@@ -55,7 +57,7 @@ impl Stats {
     }
 
     pub fn kills(&self) -> u32 {
-        self.gun_kills + self.melee_kills
+        self.gun_kills + self.melee_kills + self.burst_kills
     }
 
     /// The screen's groups, in reading order (PRACTICE only if there was
@@ -88,9 +90,10 @@ impl Stats {
             Group {
                 title: "KILLS",
                 lines: vec![
-                    ("Shamblers killed", self.kills().to_string()),
+                    ("The dead killed", self.kills().to_string()),
                     ("By gun", self.gun_kills.to_string()),
                     ("By hand", self.melee_kills.to_string()),
+                    ("By a Spitter's burst", self.burst_kills.to_string()),
                     ("Longest kill", metres(self.longest_kill)),
                     ("Damage dealt", format!("{:.0}", self.damage_dealt)),
                     ("Most up at once", self.biggest_horde.to_string()),
@@ -128,7 +131,7 @@ mod tests {
         let find = |label: &str| groups.iter().flat_map(|g| &g.lines).find(|(l, _)| *l == label).map(|(_, v)| v.clone()).unwrap();
         assert_eq!(find("Time survived"), "2:05");
         assert_eq!(find("Distance walked"), "1.23 km");
-        assert_eq!(find("Shamblers killed"), "3");
+        assert_eq!(find("The dead killed"), "3");
         assert_eq!(find("Longest kill"), "18 m");
     }
 }

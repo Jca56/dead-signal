@@ -222,6 +222,49 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
         Sfx::Confirm => render(0.05, 0.3, |t, _| sine(t, 1500.0) * env(t, 0.001, 0.012)),
         Sfx::Groan => voice(1.4, 0.7, 88.0, 72.0, 0.35, |t| (std::f32::consts::PI * (t / 1.4).min(1.0)).sin().powf(0.7)),
         Sfx::Snarl => voice(0.6, 0.85, 130.0, 170.0, 0.8, |t| env(t, 0.03, 0.3)),
+        Sfx::Retch => voice(0.9, 0.8, 95.0, 70.0, 1.4, |t| env(t, 0.08, 0.35) * (0.6 + 0.4 * sine(t, 13.0).abs())),
+        Sfx::Spit => {
+            // Hawked up and out: a wet rattle, then the throw's slap of air.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.55, 0.85, |t, n| {
+                let x = n.next();
+                let rattle = f.run(x, 700.0, 0.4).1 * (0.5 + 0.5 * sine(t, 38.0)) * env(t, 0.05, 0.12) * f32::from(t < 0.3);
+                let out = g.run(x, 1800.0 - 1200.0 * ((t - 0.3).max(0.0) / 0.2).min(1.0), 0.5).1 * env((t - 0.3).max(0.0), 0.01, 0.08) * f32::from(t >= 0.3);
+                rattle + out * 1.3
+            })
+        }
+        Sfx::Splat => {
+            // A wet slap, and a hiss as it eats in.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.8, 0.7, |t, n| {
+                let x = n.next();
+                f.run(x, 500.0, 0.6).1 * env(t, 0.002, 0.05) * 1.4 + sine(t, 90.0) * env(t, 0.001, 0.04) * 0.6 + g.run(x, 5200.0, 0.8).2 * env(t, 0.05, 0.3) * 0.25
+            })
+        }
+        Sfx::Swell => {
+            // Skin stretching: a low creak climbing, bubbling inside.
+            let mut f = Svf::default();
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(2.0, 0.6, move |t, n| {
+                let freq = 45.0 + 90.0 * (t / 2.0).powi(2);
+                phase = (phase + freq * dt).fract();
+                let creak = if phase < 0.2 { 1.0 } else { -0.25 };
+                let bubble = (0.5 + 0.5 * sine(t, 7.0 + 9.0 * t)).powi(4);
+                f.run(creak + n.next() * 0.5, 300.0 + 500.0 * t, 0.3).1 * (0.3 + 0.7 * t / 2.0) * (0.6 + 0.4 * bubble)
+            })
+        }
+        Sfx::Burst => {
+            // It gives: a deep wet boom, and what was in it raining down.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(1.4, 1.0, |t, n| {
+                let x = n.next();
+                let boom = (std::f32::consts::TAU * sweep_phase(t, 120.0, 35.0, 0.08)).sin() * env(t, 0.003, 0.25);
+                let wet = f.run(x, 900.0, 0.5).1 * env(t, 0.004, 0.12) * 1.6;
+                let rain = g.run(x, 2400.0, 0.7).1 * env((t - 0.2).max(0.0), 0.1, 0.4) * (0.5 + 0.5 * sine(t, 23.0).abs()) * 0.5 * f32::from(t > 0.2);
+                boom * 1.2 + wet + rain
+            })
+        }
         Sfx::Shriek => {
             // A torn, rising scream: a buzz climbing through high, narrow
             // throat shapes, choked with breath.

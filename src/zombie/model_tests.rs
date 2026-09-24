@@ -23,7 +23,7 @@ fn at(g: &Gltf, anim: &str, t: f64, bone: &str) -> Vec3 {
 fn it_stands_on_the_ground_head_high() {
     let g = shambler();
     let d = |name: &str| g.animations.iter().find(|a| a.name.as_deref() == Some(name)).map_or(-1.0, |a| a.duration());
-    for (name, want) in [("Walk", 0.8), ("Idle", 3.0), ("Attack", 0.9), ("Flinch", 0.33), ("Stumble", 0.6), ("Death", 1.2), ("Run", 0.5), ("Slash", 0.43)] {
+    for (name, want) in [("Walk", 0.8), ("Idle", 3.0), ("Attack", 0.9), ("Flinch", 0.33), ("Stumble", 0.6), ("Death", 1.2), ("Run", 0.5), ("Slash", 0.43), ("Spit", 0.9)] {
         assert!((d(name) - want).abs() < 0.05, "{name} lasts {}", d(name));
     }
     let head = at(&g, "", 0.0, "head");

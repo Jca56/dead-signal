@@ -75,6 +75,7 @@ impl Looks {
             Top::Plain => weighted(dice, &[(0.55, Sleeve::Short), (0.25, Sleeve::Long), (0.2, Sleeve::Torn)]),
             Top::Hoodie | Top::Jacket => weighted(dice, &[(0.8, Sleeve::Long), (0.2, Sleeve::Torn)]),
             Top::Overalls => weighted(dice, &[(0.4, Sleeve::Short), (0.3, Sleeve::Torn), (0.3, Sleeve::Long)]),
+            Top::Bloated => Sleeve::Torn,
             Top::Collar | Top::Flannel => weighted(dice, &[(0.5, Sleeve::Long), (0.5, Sleeve::Torn)]),
         };
         l.maim(dice);
@@ -100,6 +101,23 @@ impl Looks {
         l.wounds = if dice.unit() < 0.6 { vec![Wound::Front] } else { vec![Wound::Ribs] };
         l.height = 1.04 + 0.08 * dice.unit();
         l.bulk = 0.78 + 0.08 * dice.unit();
+        l
+    }
+
+    /// A Spitter: sallow and blown up with bile, in what it split open.
+    pub fn spitter(dice: &mut Dice) -> Self {
+        const SALLOW: [Rgb; 3] = [[0.56, 0.58, 0.32], [0.50, 0.54, 0.30], [0.60, 0.56, 0.36]];
+        let mut l = Looks {
+            head: Head::Spitter,
+            crown: if dice.unit() < 0.5 { Some(Crown::ShortHair) } else { None },
+            top: Top::Bloated,
+            sleeve: if dice.unit() < 0.5 { Sleeve::Torn } else { Sleeve::Short },
+            legs: Legs::Trousers,
+            colors: [pick(dice, &SALLOW), pick(dice, &SHIRTS), pick(dice, &JEANS), pick(dice, &HAIR), pick(dice, &SHIRTS)],
+            ..Looks::default()
+        };
+        l.height = 0.96 + 0.06 * dice.unit();
+        l.bulk = 1.05 + 0.1 * dice.unit();
         l
     }
 

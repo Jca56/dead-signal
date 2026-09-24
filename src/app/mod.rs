@@ -260,6 +260,7 @@ impl DeadSignal {
                 }
                 self.combat.reset();
                 zombie::clear(&mut self.game.world);
+                zombie::spit::clear(&mut self.game.world);
                 // The loadout goes in with the player. On disk it's already
                 // as good as lost (all but the pockets) till they're out:
                 // quitting mid-run is no way round dying.

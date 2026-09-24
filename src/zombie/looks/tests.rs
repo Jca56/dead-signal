@@ -52,7 +52,7 @@ fn every_part_is_in_the_model() {
     let names: std::collections::HashSet<String> = gltf.nodes.iter().filter(|n| n.mesh.is_some()).filter_map(|n| n.name.clone()).collect();
     let mut used = std::collections::HashSet::new();
     let themes = [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Drifter];
-    let specials = (0..50u32).map(|i| Looks::ripper(&mut Dice(i * 7919 + 1)));
+    let specials = (0..50u32).flat_map(|i| [Looks::ripper(&mut Dice(i * 7919 + 1)), Looks::spitter(&mut Dice(i * 7919 + 1))]);
     for l in themes.into_iter().flat_map(many).chain(specials) {
         for part in l.parts() {
             assert!(names.contains(&part), "no {part} in shambler.glb");

@@ -41,6 +41,8 @@ pub enum Surface {
     Metal,
     /// The dead.
     Flesh,
+    /// A Spitter's bile.
+    Bile,
 }
 
 #[derive(Clone, Copy, Debug)]

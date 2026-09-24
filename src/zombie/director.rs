@@ -6,8 +6,9 @@
 //! them near the player: whenever fewer are close than the kills so far
 //! call for, a new one comes in from out of sight. When the dead surge
 //! (the way out is being worked), they come fast and many. The special
-//! dead: packs of Rippers hunt the woods from the start, and now and then
-//! one comes in with the rest (often, in a surge).
+//! dead: packs of Rippers hunt the woods from the start, Spitters haunt a
+//! few of the outposts, and now and then one of either comes in with the
+//! rest (more often, in a surge).
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
@@ -47,6 +48,16 @@ const PACK_MOST: usize = 3;
 /// The share of newcomers that are Rippers, and while the dead surge.
 const RIPPER_SHARE: f64 = 0.04;
 const RIPPER_SURGE: f64 = 0.25;
+/// How many Spitters there are at the outposts, fewest and most; and the
+/// share of newcomers that are Spitters, and while the dead surge.
+const SPITTERS: (usize, usize) = (2, 4);
+const SPITTER_SHARE: f64 = 0.03;
+const SPITTER_SURGE: f64 = 0.08;
+
+/// Whether a Spitter might be found at a `kind` of place.
+fn outpost(kind: Kind) -> bool {
+    matches!(kind, Kind::Gas | Kind::Pad | Kind::Crash | Kind::Military | Kind::Radio)
+}
 /// Nothing starts nearer the player than this, metres.
 const CLEAR_OF_START: f64 = 45.0;
 /// What counts as near the player, how many should be near to begin with,
@@ -106,7 +117,14 @@ impl Director {
                 nav.connects(at, feet).then_some(at)
             };
             let mut spots = Vec::new();
-            for site in sites {
+            // Which outposts have a Spitter.
+            let mut outposts: Vec<usize> = (0..sites.len()).filter(|&i| outpost(sites[i].kind)).collect();
+            let spitters = SPITTERS.0 + dice.next() as usize % (SPITTERS.1 - SPITTERS.0 + 1);
+            let mut haunted = Vec::new();
+            while haunted.len() < spitters && !outposts.is_empty() {
+                haunted.push(outposts.swap_remove(dice.next() as usize % outposts.len()));
+            }
+            for (i, site) in sites.iter().enumerate() {
                 let want = at_place(site.kind);
                 let mut placed = 0;
                 for _ in 0..want * 20 {
@@ -116,7 +134,8 @@ impl Director {
                     let local = Vec2::new((dice.unit() * 2.0 - 1.0) * site.plot.half.x, (dice.unit() * 2.0 - 1.0) * site.plot.half.y);
                     let p = site.plot.world(local);
                     if let Some(at) = stand(&mut dice, p.x, p.y, site.plot.height) {
-                        spots.push((at, Dead::Shambler, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
+                        let kind = if placed == 0 && haunted.contains(&i) { Dead::Spitter } else { Dead::Shambler };
+                        spots.push((at, kind, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
                         placed += 1;
                     }
                 }
@@ -173,8 +192,15 @@ impl Director {
         if close >= want || self.wait > 0.0 || super::alive(world) >= MOST {
             return;
         }
-        let share = if self.surge { RIPPER_SURGE } else { RIPPER_SHARE };
-        let kind = if self.dice.unit() < share { Dead::Ripper } else { Dead::Shambler };
+        let (rippers, spitters) = if self.surge { (RIPPER_SURGE, SPITTER_SURGE) } else { (RIPPER_SHARE, SPITTER_SHARE) };
+        let roll = self.dice.unit();
+        let kind = if roll < rippers {
+            Dead::Ripper
+        } else if roll < rippers + spitters {
+            Dead::Spitter
+        } else {
+            Dead::Shambler
+        };
         self.wait = if !super::spawn_unseen(world, eye, forward, kind) {
             RETRY
         } else if self.surge {

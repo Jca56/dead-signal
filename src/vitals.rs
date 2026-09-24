@@ -35,7 +35,6 @@ pub enum Affliction {
     /// A cut (another adds to it, up to [`BLEED_MOST`]).
     Bleed,
     /// Poisoned afresh for [`POISON_FOR`].
-    #[cfg_attr(not(test), expect(dead_code, reason = "the Spitter's, in the next stage"))]
     Poison,
 }
 

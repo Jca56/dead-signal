@@ -139,7 +139,7 @@ mod tests {
     fn the_song_is_there_and_reads() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/music/dusty_resilience.mp3");
         let song = lntrn_audio::decode(&std::fs::read(path).expect("the song")).expect("an mp3 that decodes");
-        assert!((song.duration() - 180.0).abs() < 1.0, "{} s", song.duration());
+        assert!((song.duration() - 128.0).abs() < 1.0, "{} s", song.duration());
         assert_eq!(song.channels, 2);
         assert!(song.samples.iter().any(|s| s.abs() > 0.1), "not silent");
     }

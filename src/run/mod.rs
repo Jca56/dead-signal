@@ -237,7 +237,12 @@ impl Run {
         self.keep_rounds(combat);
 
         // Blows from the dead.
-        let blows = combat.answer_the_dead(game, true);
+        let mut blows = combat.answer_the_dead(game, true);
+        blows.extend(combat.bursts(game, &mut self.stats));
+        // Standing in a Spitter's bile.
+        if std::mem::take(&mut game.world.resource_mut::<crate::zombie::Horde>().poisoned) {
+            self.vitals.afflict(crate::vitals::Affliction::Poison);
+        }
         for blow in blows {
             self.stats.times_hit += 1;
             self.stats.damage_taken += blow.damage.min(self.vitals.hp);

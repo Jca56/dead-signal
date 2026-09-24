@@ -36,6 +36,11 @@ impl Sfx {
             Sfx::Groan | Sfx::Gurgle => 20.0,
             Sfx::Snarl => 30.0,
             Sfx::Shriek => 45.0,
+            Sfx::Retch => 30.0,
+            Sfx::Spit => 35.0,
+            Sfx::Splat => 25.0,
+            Sfx::Swell => 30.0,
+            Sfx::Burst => 70.0,
             Sfx::Flesh => 40.0,
             _ => 60.0,
         }
@@ -44,7 +49,7 @@ impl Sfx {
     /// Which crowd it's one of, if any.
     pub fn crowd(self) -> Option<Crowd> {
         match self {
-            Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Gurgle => Some(Crowd::Voices),
+            Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Retch | Sfx::Gurgle => Some(Crowd::Voices),
             Sfx::Shuffle => Some(Crowd::Feet),
             _ => None,
         }

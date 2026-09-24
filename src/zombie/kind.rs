@@ -12,6 +12,9 @@ pub enum Kind {
     /// Lean and fast, all claws: runs you down and opens you up, but a
     /// couple of good hits drop it.
     Ripper,
+    /// Bloated with bile: keeps its distance and lobs it at you, and dead,
+    /// swells and bursts over everything near.
+    Spitter,
 }
 
 /// Its swipe: seconds it takes, when in it the blow lands, the rest after,
@@ -76,11 +79,25 @@ const RIPPER: Traits = Traits {
     loot: 1.75,
 };
 
+const SPITTER: Traits = Traits {
+    hp: 110.0,
+    pace: (1.5, 1.8, 2.2),
+    fast: (1.5, 1.8, 2.2),
+    fast_share: 0.0,
+    sight: 1.3,
+    turn: 2.5,
+    lunge: 0.0,
+    swipe: Swipe { time: 0.9, strike_at: 0.4, cooldown: 1.5, range: 1.4, reach: 1.7, damage: 10.0, leaves: None },
+    snarl: Sfx::Retch,
+    loot: 1.5,
+};
+
 impl Kind {
     pub fn traits(self) -> &'static Traits {
         match self {
             Kind::Shambler => &SHAMBLER,
             Kind::Ripper => &RIPPER,
+            Kind::Spitter => &SPITTER,
         }
     }
 }
@@ -97,7 +114,7 @@ mod tests {
         // Quicker blows, each less, but they cut.
         let (s, rs) = (Kind::Shambler.traits().swipe, r.swipe);
         assert!(rs.time + rs.cooldown < s.time + s.cooldown && rs.damage < s.damage && rs.leaves == Some(Affliction::Bleed));
-        for k in [Kind::Shambler, Kind::Ripper] {
+        for k in [Kind::Shambler, Kind::Ripper, Kind::Spitter] {
             let w = k.traits().swipe;
             assert!(w.strike_at < w.time && w.range < w.reach, "{k:?}");
         }

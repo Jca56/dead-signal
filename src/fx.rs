@@ -46,6 +46,7 @@ pub fn chip_colour(surface: Surface) -> Color {
         Surface::Stone => Color::rgb(0.60, 0.60, 0.58),
         Surface::Metal => Color::rgb(1.0, 0.82, 0.45),
         Surface::Flesh => Color::rgb(0.36, 0.07, 0.06),
+        Surface::Bile => Color::rgb(0.52, 0.72, 0.14),
     }
 }
 

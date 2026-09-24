@@ -10,6 +10,7 @@ use lntrn_math::{Vec2, Vec3};
 
 use super::figure::Clip;
 use super::kind::Kind;
+use super::spit;
 use super::nav::NavGrid;
 use super::steer::{flat_dist, level};
 use crate::collide::Solids;
@@ -76,6 +77,8 @@ pub enum State {
     /// Going to where a shot came from, then looking about.
     Investigate { at: Vec3, looked: f64 },
     Attack { t: f64, struck: bool },
+    /// A Spitter heaving up a glob: `t` into it, and whether it's thrown.
+    Spit { t: f64, thrown: bool },
     /// Knocked off its stride for `until` seconds.
     Stagger { t: f64, until: f64 },
     Dead { t: f64 },
@@ -119,6 +122,10 @@ pub struct Intent {
     pub hit: Option<Blow>,
     /// It has just seen the player, there, and snarled for the rest.
     pub alert: Option<Vec3>,
+    /// A glob thrown: from where, at where.
+    pub spit: Option<(Vec3, Vec3)>,
+    /// A dead Spitter burst, just now.
+    pub burst: bool,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -142,6 +149,8 @@ pub struct Zombie {
     last_seen: Option<Vec3>,
     unseen: f64,
     cooldown: f64,
+    /// Till a Spitter may spit again.
+    spit_in: f64,
     groan: f64,
     shuffle: f64,
     /// Ground walked, for the walk animation's stride.
@@ -163,7 +172,7 @@ impl Zombie {
     /// One of `kind` facing `yaw`, its own ways from `seed`.
     pub fn of(kind: Kind, yaw: f64, seed: u32) -> Self {
         let t = kind.traits();
-        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, spit_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
         let (lo, hi, lunge) = if z.rand() < t.fast_share { t.fast } else { t.pace };
         let walk = lo + (hi - lo) * z.rand();
@@ -196,6 +205,7 @@ impl Zombie {
         match self.state {
             State::Dead { t } => (Clip::Death, t),
             State::Attack { t, .. } if self.kind == Kind::Ripper => (Clip::Slash, t),
+            State::Spit { t, .. } => (Clip::Spit, t),
             State::Attack { t, .. } => (Clip::Attack, t),
             State::Stagger { t, until } if until > FLINCH_TIME => (Clip::Stumble, t),
             State::Stagger { t, .. } => (Clip::Flinch, t),
@@ -221,7 +231,7 @@ impl Zombie {
         self.unseen = 0.0;
         if blow || head {
             self.set(State::Stagger { t: 0.0, until: if blow { STUMBLE_TIME } else { FLINCH_TIME } });
-        } else if !matches!(self.state, State::Attack { .. } | State::Stagger { .. }) {
+        } else if !matches!(self.state, State::Attack { .. } | State::Stagger { .. } | State::Spit { .. }) {
             self.state = State::Hunt;
         }
         false
@@ -267,10 +277,13 @@ impl Zombie {
         let swipe = traits.swipe;
         self.clip_t += dt;
         if let State::Dead { t } = &mut self.state {
+            // A dead Spitter swells, then bursts.
+            out.burst = self.kind == Kind::Spitter && *t < spit::BURST_AT && *t + dt >= spit::BURST_AT;
             *t += dt;
             self.moving = false;
             return out;
         }
+        self.spit_in -= dt;
         self.cooldown -= dt;
         self.repath -= dt;
         self.groan -= dt;
@@ -336,6 +349,25 @@ impl Zombie {
                     self.state = State::Attack { t, struck };
                 }
             }
+            State::Spit { t, thrown } => {
+                let t = t + dt;
+                let mut thrown = thrown;
+                if let Some(p) = s.player {
+                    self.face(p, body, traits.turn, dt);
+                    if !thrown && t >= spit::SPIT_AT {
+                        thrown = true;
+                        let facing = Vec3::new(-self.yaw.sin(), 0.0, -self.yaw.cos());
+                        out.spit = Some((body.pos + Vec3::new(0.0, spit::MOUTH, 0.0) + facing * 0.4, p));
+                        out.sounds.push((Sfx::Spit, 1.0));
+                    }
+                }
+                if t >= spit::SPIT_TIME {
+                    self.spit_in = spit::SPIT_EVERY * (0.8 + 0.4 * self.rand());
+                    self.set(State::Hunt);
+                } else {
+                    self.state = State::Spit { t, thrown };
+                }
+            }
             State::Hunt => {
                 if seen.is_none() {
                     self.unseen += dt;
@@ -349,6 +381,21 @@ impl Zombie {
                     if seen.is_some() && d <= swipe.range && level(body.pos, p) && self.cooldown <= 0.0 {
                         out.sounds.push((traits.snarl, 0.8));
                         self.set(State::Attack { t: 0.0, struck: false });
+                    } else if self.kind == Kind::Spitter {
+                        // It keeps off: spits from its distance (when it can
+                        // see them), backs away from too near, closes from
+                        // too far; turned away, it goes by where it saw them.
+                        if seen.is_some() && self.spit_in <= 0.0 && (spit::SPIT_NEAREST..=spit::SPIT_FARTHEST).contains(&d) {
+                            out.sounds.push((traits.snarl, 0.7));
+                            self.set(State::Spit { t: 0.0, thrown: false });
+                        } else if d < spit::KEEP_NEAR {
+                            let away = Vec3::new(body.pos.x - p.x, 0.0, body.pos.z - p.z) * (1.0 / d.max(1e-6));
+                            goal = Some((body.pos + away * 4.0, 1.0, false, traits.turn));
+                        } else if d > spit::KEEP_FAR {
+                            goal = Some((p, 1.0, false, traits.turn));
+                        } else {
+                            self.face(p, body, traits.turn, dt);
+                        }
                     } else if seen.is_some() && d < swipe.range * 0.8 && level(body.pos, p) {
                         // Right on top of them, waiting on its next swipe:
                         // it stands its ground and turns to face them (a fast

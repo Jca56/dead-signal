@@ -35,6 +35,8 @@ pub enum Head {
     Gone,
     /// A Ripper's: narrow, its mouth torn wide.
     Ripper,
+    /// A Spitter's: over a throat swollen into a sac.
+    Spitter,
 }
 
 /// What's on its head.
@@ -59,12 +61,14 @@ pub enum Top {
     /// Hanging open over what's worn under (a lab coat, in white).
     Jacket,
     Overalls,
+    /// A Spitter's belly, blown out through what's left of its shirt.
+    Bloated,
 }
 
 impl Top {
     /// Thick enough that nothing fits over it.
     fn bulky(self) -> bool {
-        matches!(self, Top::Hoodie | Top::Jacket)
+        matches!(self, Top::Hoodie | Top::Jacket | Top::Bloated)
     }
 }
 
@@ -193,6 +197,7 @@ impl Looks {
                 Head::Jawless => "head_jawless",
                 Head::Gone => "neck_stump",
                 Head::Ripper => "head_ripper",
+                Head::Spitter => "head_spitter",
             }
             .into(),
         );
@@ -217,6 +222,7 @@ impl Looks {
                 Top::Hoodie => "torso_hoodie",
                 Top::Jacket => "torso_jacket",
                 Top::Overalls => "torso_overalls",
+                Top::Bloated => "torso_bloated",
             }
             .into(),
         );

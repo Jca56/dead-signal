@@ -22,6 +22,8 @@ pub enum Clip {
     /// A Ripper's: flat out, and its rake.
     Run,
     Slash,
+    /// A Spitter's heave.
+    Spit,
 }
 
 impl Clip {
@@ -35,6 +37,7 @@ impl Clip {
             Clip::Death => "Death",
             Clip::Run => "Run",
             Clip::Slash => "Slash",
+            Clip::Spit => "Spit",
         }
     }
 

@@ -18,6 +18,7 @@ game picks the parts, and the colours of their regions (`shambler_kit.py`).
     Death   1.2 s  knees go, then face down; ends lying still
     Run     0.5 s  a Ripper's: bent double, flat out, claws trailing (loops)
     Slash   0.45 s a Ripper's rake, right claw across; lands at 0.18 s
+    Spit    0.9 s  a Spitter's: rears back, then heaves; the glob's off at 0.55 s
 
 Built facing Blender's +Y (the game's -Z, the way a yaw of 0 looks), feet
 on the ground at the origin. Bones: root > hips > spine > chest > neck >
@@ -255,6 +256,9 @@ def actions(rig):
     raised = with_(crouch, upper_arm__R=(140, 0, -45), forearm__R=(40, 0, 0), upper_arm__L=(60, 0, 20), chest=(0, 0, 20), spine=(-10, 0, 10))
     raked = with_(crouch, upper_arm__R=(55, 0, 45), forearm__R=(10, 0, 0), upper_arm__L=(90, 0, -15), forearm__L=(30, 0, 0), chest=(-25, 0, -20), spine=(-25, 0, -8), hips=(0, 0, 0, (0, 0.12, -0.06)))
     action("Slash", [(0, crouch), (3, raised), (6, raked), (9, blend(raked, crouch, 0.5)), (13, crouch)])
+    rear = with_(rest, spine=(8, 0, 0), chest=(22, 0, 0), neck=(5, 0, 0), head=(30, 0, 0), upper_arm__R=(20, 0, -35), upper_arm__L=(20, 0, 35), forearm__R=(20, 0, 0), forearm__L=(20, 0, 0), hips=(0, 0, 0, (0, -0.05, 0)))
+    heave = with_(rest, spine=(-20, 0, 0), chest=(-30, 0, 0), neck=(-15, 0, 0), head=(-25, 0, 0), upper_arm__R=(50, 0, -25), upper_arm__L=(50, 0, 25), forearm__R=(10, 0, 0), forearm__L=(10, 0, 0), hips=(0, 0, 0, (0, 0.08, -0.02)))
+    action("Spit", [(0, rest), (9, rear), (14, rear), (17, heave), (22, heave), (27, rest)])
     bpy.ops.object.mode_set(mode="OBJECT")
     return made
 

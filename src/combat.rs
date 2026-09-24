@@ -21,7 +21,7 @@ use crate::stats::Stats;
 use crate::targets::{self, Kind, Target};
 use crate::weapon::{Act, Clip, Falloff, Hands, Trigger, Weapon};
 use crate::world::{Game, Solid};
-use crate::zombie::{self, Horde};
+use crate::zombie::{self, Horde, spit};
 
 /// How long after a shot the player can't sprint, seconds.
 const SPRINT_BLOCK: f64 = 0.3;
@@ -101,6 +101,17 @@ struct Aim {
     dir: Vec3,
     right: Vec3,
     up: Vec3,
+}
+
+/// What a Spitter's burst takes off the dead near it (and 30 more), and
+/// the player, all of it close.
+const BURST_DEAD: f64 = 150.0;
+const BURST_PLAYER: f64 = 40.0;
+
+/// Flat, the way from `from` to `to` (any way, on top of it).
+fn away(from: Vec3, to: Vec3) -> Vec3 {
+    let d = Vec3::new(to.x - from.x, 0.0, to.z - from.z);
+    if d.length() > 1e-6 { d.normalize() } else { Vec3::new(1.0, 0.0, 0.0) }
 }
 
 impl Combat {
@@ -390,6 +401,7 @@ impl Combat {
             Surface::Stone => (Sfx::HitStone, 0.8),
             Surface::Metal => (Sfx::Ding, 0.35),
             Surface::Flesh => (Sfx::Flesh, 0.8),
+            Surface::Bile => (Sfx::Splat, 0.8),
         };
         if heard.thud() {
             self.sound.play_at(sfx, gain, wall.point, aim.eye, aim.right, false);
@@ -400,6 +412,40 @@ impl Combat {
             v.jolt(0.012);
         }
         Met { something: true, target: false, head: false }
+    }
+
+    /// The Spitters that burst: the dead near each take it (and a kill is
+    /// the player's), and so does the player, poisoned. The blows it dealt
+    /// the player.
+    pub fn bursts(&mut self, game: &mut Game, stats: &mut Stats) -> Vec<zombie::brain::Blow> {
+        let bursts = std::mem::take(&mut game.world.resource_mut::<Horde>().bursts);
+        let mut blows = Vec::new();
+        for at in bursts {
+            self.fx.burst(at + Vec3::new(0.0, 1.0, 0.0), Vec3::Y, Surface::Bile, 45);
+            let near: Vec<(bevy_ecs::entity::Entity, Vec3)> =
+                game.world.query::<(bevy_ecs::entity::Entity, &zombie::brain::Zombie, &Body)>().iter(&game.world).filter(|(_, z, b)| !z.dead() && (b.pos - at).length() < spit::BURST_REACH).map(|(e, _, b)| (e, b.pos)).collect();
+            for (e, pos) in near {
+                let share = spit::burst_share((pos - at).length());
+                let impact = zombie::Impact { damage: BURST_DEAD * share + 30.0, head: false, blow: false, shove: 3.0 + 9.0 * share, stumble: true, takedown: false };
+                if zombie::hurt(&mut game.world, e, away(at, pos), at, impact) {
+                    stats.burst_kills += 1;
+                    self.drop_something(game, e);
+                }
+            }
+            if let Some((body, _)) = game.player() {
+                let d = (body.pos - at).length();
+                if d < spit::BURST_REACH {
+                    let share = spit::burst_share(d);
+                    self.hurt = 1.0;
+                    if let Some(mut v) = game.player_view_mut() {
+                        v.jolt(0.02 + 0.06 * share);
+                    }
+                    game.push_player(away(at, body.pos) * BLOW_SHOVE * (1.0 + 2.0 * share));
+                    blows.push(zombie::brain::Blow { push: Vec3::ZERO, damage: BURST_PLAYER * share + 5.0, leaves: Some(crate::vitals::Affliction::Poison) });
+                }
+            }
+        }
+        blows
     }
 
     /// Now and then one of the dead had something on it (a soldier more
