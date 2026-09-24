@@ -51,12 +51,12 @@ fn every_part_is_in_the_model() {
     let gltf = lntrn_model::Gltf::load(path).expect("shambler.glb");
     let names: std::collections::HashSet<String> = gltf.nodes.iter().filter(|n| n.mesh.is_some()).filter_map(|n| n.name.clone()).collect();
     let mut used = std::collections::HashSet::new();
-    for theme in [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Drifter] {
-        for l in many(theme) {
-            for part in l.parts() {
-                assert!(names.contains(&part), "no {part} in shambler.glb");
-                used.insert(part);
-            }
+    let themes = [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Drifter];
+    let specials = (0..50u32).map(|i| Looks::ripper(&mut Dice(i * 7919 + 1)));
+    for l in themes.into_iter().flat_map(many).chain(specials) {
+        for part in l.parts() {
+            assert!(names.contains(&part), "no {part} in shambler.glb");
+            used.insert(part);
         }
     }
     let mut unused: Vec<_> = names.difference(&used).collect();

@@ -128,16 +128,16 @@ impl Combat {
     /// What the dead did since last frame: play their sounds where they
     /// are, and take their blows (a shove, a shake, the edges gone red).
     /// Once the player is dead (not `alive`) it's all let go unheard. How
-    /// many blows landed.
-    pub fn answer_the_dead(&mut self, game: &mut Game, alive: bool) -> usize {
+    /// blows landed.
+    pub fn answer_the_dead(&mut self, game: &mut Game, alive: bool) -> Vec<zombie::brain::Blow> {
         let (sounds, blows) = {
             let mut horde = game.world.resource_mut::<Horde>();
             (std::mem::take(&mut horde.sounds), std::mem::take(&mut horde.blows))
         };
         if !alive {
-            return 0;
+            return Vec::new();
         }
-        let Some((body, view)) = game.player() else { return 0 };
+        let Some((body, view)) = game.player() else { return Vec::new() };
         let aim = aim(&view, &body, game.alpha());
         let solids = &game.world.resource::<Solid>().0;
         for (sfx, at, gain) in sounds {
@@ -150,8 +150,8 @@ impl Combat {
             let blocked = d > 1.0 && solids.raycast(aim.eye, to * (1.0 / d), d - 0.5).is_some();
             self.sound.play_at(sfx, gain, at, aim.eye, aim.right, blocked);
         }
-        let landed = blows.len();
-        for push in blows {
+        for blow in &blows {
+            let push = blow.push;
             self.sound.play(Sfx::Flesh, 0.9);
             self.hurt = 1.0;
             if let Some(mut v) = game.player_view_mut() {
@@ -160,10 +160,9 @@ impl Combat {
             }
             game.push_player(push * BLOW_SHOVE);
         }
-        landed
+        blows
     }
 
-    /// Play a sound at the listener.
     /// Set how loud everything is.
     pub fn set_mix(&self, mix: crate::sound::Mix) {
         self.sound.set_mix(mix);
@@ -174,6 +173,7 @@ impl Combat {
         self.sound.set_music(on);
     }
 
+    /// Play a sound at the listener.
     pub fn play(&self, sfx: Sfx, gain: f32) {
         self.sound.play(sfx, gain);
     }
@@ -403,9 +403,11 @@ impl Combat {
     }
 
     /// Now and then one of the dead had something on it (a soldier more
-    /// often, and better): left where it fell.
+    /// often, and better; the special dead more often too): left where it
+    /// fell.
     fn drop_something(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
         let (source, chance) = if game.world.get::<zombie::Soldier>(e).is_some() { (Source::Soldier, tables::SOLDIER_CHANCE) } else { (Source::Corpse, tables::CORPSE_CHANCE) };
+        let chance = chance * game.world.get::<zombie::brain::Zombie>(e).map_or(1.0, |z| z.kind.traits().loot);
         if self.loot.unit() >= chance {
             return;
         }

@@ -222,6 +222,20 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
         Sfx::Confirm => render(0.05, 0.3, |t, _| sine(t, 1500.0) * env(t, 0.001, 0.012)),
         Sfx::Groan => voice(1.4, 0.7, 88.0, 72.0, 0.35, |t| (std::f32::consts::PI * (t / 1.4).min(1.0)).sin().powf(0.7)),
         Sfx::Snarl => voice(0.6, 0.85, 130.0, 170.0, 0.8, |t| env(t, 0.03, 0.3)),
+        Sfx::Shriek => {
+            // A torn, rising scream: a buzz climbing through high, narrow
+            // throat shapes, choked with breath.
+            let (mut a, mut b) = (Svf::default(), Svf::default());
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(0.7, 0.8, move |t, n| {
+                let freq = 420.0 + 380.0 * (t / 0.25).min(1.0) - 160.0 * ((t - 0.35).max(0.0) / 0.35) + 25.0 * sine(t, 11.0);
+                phase = (phase + freq * dt).fract();
+                let buzz = if phase < 0.25 { 1.0 } else { -0.33 };
+                let x = buzz * 0.8 + n.next() * 1.1;
+                (a.run(x, 1450.0, 0.22).1 + b.run(x, 2800.0, 0.3).1 * 0.7) * env(t, 0.02, 0.22)
+            })
+        }
         Sfx::Flesh => {
             let mut f = Svf::default();
             render(0.16, 0.8, |t, n| sine(t, 85.0) * env(t, 0.001, 0.05) + f.run(n.next(), 650.0, 0.6).1 * env(t, 0.0005, 0.03) * 0.9)

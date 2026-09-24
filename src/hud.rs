@@ -40,6 +40,9 @@ pub struct Hud<'a> {
     pub time: f64,
     /// Whether the dot's shown at all (the player's setting).
     pub crosshair: bool,
+    /// Cuts bleeding, and seconds of poison left.
+    pub bleeding: u8,
+    pub poison: f64,
 }
 
 const HEALTH: Color = Color::rgb(0.62, 0.11, 0.08);
@@ -47,6 +50,7 @@ const HEALTH_LOW: Color = Color::rgb(0.85, 0.16, 0.10);
 const STAMINA: Color = Color::rgb(0.66, 0.63, 0.47);
 const WINDED: Color = Color::rgb(0.52, 0.32, 0.13);
 const TROUGH: Color = Color::rgba(0.0, 0.0, 0.0, 0.55);
+const POISON: Color = Color::rgb(0.45, 0.72, 0.22);
 
 pub fn draw(ui: &mut Ui, h: &Hud) {
     let s = ui.m.scale;
@@ -118,6 +122,25 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     let tw = ui.measure(&text, &numbers);
     let th = f64::from(numbers.line_height());
     ui.text_at(&text, &numbers, Vec2::new(left + (width - tw) * 0.5, health_top + (health_h - th) * 0.5), width, style::BONE);
+    // What's still hurting, over the health: a chip each.
+    let chip = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
+    let chip_h = f64::from(chip.line_height()) + 10.0 * s;
+    let mut cx = left;
+    let beat = 0.75 + 0.25 * (h.time * 4.0).sin();
+    for (text, colour) in [
+        (h.bleeding > 0).then(|| (if h.bleeding > 1 { format!("BLEEDING ×{}", h.bleeding) } else { "BLEEDING".to_string() }, HEALTH_LOW)),
+        (h.poison > 0.0).then(|| (format!("POISONED  {:.0}s", h.poison.ceil()), POISON)),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let w = ui.measure(&text, &chip) + 24.0 * s;
+        let r = Rect::from_min_size(Vec2::new(cx, health_top - 12.0 * s - chip_h), Vec2::new(w, chip_h));
+        ui.draw.rect(r, Color::rgba(colour.r * 0.35, colour.g * 0.35, colour.b * 0.35, 0.85));
+        ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(colour.r, colour.g, colour.b, beat));
+        ui.text_at(&text, &chip, r.min + Vec2::new(12.0 * s, 5.0 * s), w, style::BONE);
+        cx += w + 12.0 * s;
+    }
     let stamina = Rect::from_min_size(Vec2::new(left, stamina_top), Vec2::new(width, stamina_h));
     ui.draw.rect(stamina, TROUGH);
     ui.draw.rect(Rect::from_min_size(stamina.min, Vec2::new(width * (h.stamina / h.max_stamina).clamp(0.0, 1.0), stamina_h)), if h.winded { WINDED } else { STAMINA });

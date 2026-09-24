@@ -7,8 +7,10 @@
 pub mod brain;
 pub mod director;
 pub mod figure;
+pub mod kind;
 pub mod looks;
 pub mod nav;
+mod steer;
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Quat, Vec2, Vec3};
@@ -17,6 +19,7 @@ use crate::player::{self, Body, Player, RADIUS, STEP};
 use crate::sound::Sfx;
 use crate::world::{Blend, Solid};
 use brain::{Senses, State, Zombie};
+use kind::Kind;
 use figure::{Figure, Model};
 use looks::{Looks, Theme};
 use nav::NavGrid;
@@ -107,7 +110,7 @@ pub struct Noises {
 #[derive(Resource, Default)]
 pub struct Horde {
     pub sounds: Vec<(Sfx, Vec3, f32)>,
-    pub blows: Vec<Vec3>,
+    pub blows: Vec<brain::Blow>,
     pub gone: usize,
     seed: u32,
     /// The world's steps so far.
@@ -156,8 +159,8 @@ fn think(
         let mut intent = z.think(&body, &senses, dt);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
         horde.sounds.extend(intent.sounds.drain(..).map(|(sfx, gain)| (sfx, voice, gain)));
-        if let Some(push) = intent.hit {
-            horde.blows.push(push);
+        if let Some(blow) = intent.hit {
+            horde.blows.push(blow);
         }
         if let Some(seen) = intent.alert {
             noises.snarls.push((body.pos, seen));
@@ -276,21 +279,19 @@ pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Soldier;
 
-/// Put a Shambler at `at`, facing `yaw`: anyone at all.
-pub fn spawn(world: &mut World, at: Vec3, yaw: f64) {
-    spawn_as(world, at, yaw, Theme::Drifter);
-}
-
-/// Put a Shambler at `at`, facing `yaw`, one of `theme`'s dead (a
-/// [`Soldier`], carrying a soldier's things, if a soldier's).
-pub fn spawn_as(world: &mut World, at: Vec3, yaw: f64, theme: Theme) {
+/// Put one of `kind` at `at`, facing `yaw` (a Shambler, one of `theme`'s).
+pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Theme) {
     let seed = {
         let mut h = world.resource_mut::<Horde>();
         h.seed = h.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         h.seed
     };
-    let looks = Looks::roll(theme, &mut crate::loot::Dice(seed.rotate_left(16) ^ 0x5BD1_E995 | 1));
-    let mut zombie = Zombie::new(yaw, seed);
+    let dice = &mut crate::loot::Dice(seed.rotate_left(16) ^ 0x5BD1_E995 | 1);
+    let looks = match kind {
+        Kind::Shambler => Looks::roll(theme, dice),
+        Kind::Ripper => Looks::ripper(dice),
+    };
+    let mut zombie = Zombie::of(kind, yaw, seed);
     if looks.headless() {
         zombie.hp *= looks::HEADLESS_TOUGHNESS;
     }
@@ -303,7 +304,7 @@ pub fn spawn_as(world: &mut World, at: Vec3, yaw: f64, theme: Theme) {
 /// Put a Shambler somewhere the player at `eye`, looking along `forward`,
 /// can't see: on walkable ground, 35–60 m off, behind something or behind
 /// them. Whether there was such a place.
-pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3) -> bool {
+pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3, kind: Kind) -> bool {
     let spot = {
         let (Some(nav), solid) = (world.resource::<Nav>().0.as_ref(), &world.resource::<Solid>().0) else { return false };
         let mut seed = world.resource::<Horde>().seed ^ 0x9E37_79B9;
@@ -340,7 +341,7 @@ pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3) -> bool {
     };
     let Some(feet) = spot else { return false };
     let yaw = (-(eye.x - feet.x)).atan2(-(eye.z - feet.z));
-    spawn(world, feet, yaw);
+    spawn_kind(world, feet, yaw, kind, Theme::Drifter);
     true
 }
 
@@ -404,7 +405,7 @@ pub fn blow_shove(times: f64) -> f64 {
 /// died.
 pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) -> bool {
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
-    let damage = if hit.takedown && z.unaware() { brain::HP * 10.0 } else { hit.damage };
+    let damage = if hit.takedown && z.unaware() { z.hp * 10.0 } else { hit.damage };
     let killed = z.hurt(damage, hit.head, hit.blow, from);
     if hit.stumble && !killed {
         z.stumble();

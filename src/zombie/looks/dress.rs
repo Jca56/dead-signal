@@ -83,6 +83,26 @@ impl Looks {
         l
     }
 
+    /// A Ripper: bled white and stretched thin, in rags, all claws.
+    pub fn ripper(dice: &mut Dice) -> Self {
+        const PALLOR: [Rgb; 3] = [[0.62, 0.64, 0.62], [0.56, 0.60, 0.62], [0.66, 0.62, 0.58]];
+        const RAGS: [Rgb; 4] = [[0.20, 0.18, 0.16], [0.28, 0.24, 0.20], [0.16, 0.17, 0.19], [0.34, 0.30, 0.26]];
+        let mut l = Looks {
+            head: Head::Ripper,
+            crown: if dice.unit() < 0.4 { Some(Crown::LongHair) } else { None },
+            top: if dice.unit() < 0.5 { Top::Tank } else { Top::Plain },
+            sleeve: Sleeve::Bare,
+            legs: if dice.unit() < 0.5 { Legs::Shorts } else { Legs::Trousers },
+            claws: true,
+            colors: [pick(dice, &PALLOR), pick(dice, &RAGS), pick(dice, &RAGS), [0.10, 0.09, 0.08], pick(dice, &RAGS)],
+            ..Looks::default()
+        };
+        l.wounds = if dice.unit() < 0.6 { vec![Wound::Front] } else { vec![Wound::Ribs] };
+        l.height = 1.04 + 0.08 * dice.unit();
+        l.bulk = 0.78 + 0.08 * dice.unit();
+        l
+    }
+
     /// Put a hat on it, `chance` of the time: one of `kinds` in one of
     /// `colours`.
     fn hat(&mut self, dice: &mut Dice, chance: f64, kinds: &[Crown], colours: &[Rgb]) {

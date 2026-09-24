@@ -2,11 +2,13 @@
 
 use lntrn_math::Vec3;
 
-use super::brain::{ALERT_RANGE, HEARING, HP, Senses, State, Zombie};
+use super::brain::{ALERT_RANGE, HEARING, Senses, State, Zombie};
 use super::figure::Clip;
 use super::nav::NavGrid;
 use crate::collide::{Solids, box_tris};
 use crate::player::{self, Body, STEP, capsule};
+
+const HP: f64 = 150.0;
 
 fn floor() -> Solids {
     let mut s = Solids::new();
@@ -351,7 +353,7 @@ fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
     let (feet, forward) = (Vec3::new(0.0, 0.0, 6.0), Vec3::new(0.0, 0.0, -1.0));
     let eye = feet + Vec3::new(0.0, 1.6, 0.0);
     for _ in 0..5 {
-        assert!(super::spawn_unseen(&mut world, eye, forward), "nowhere to come from");
+        assert!(super::spawn_unseen(&mut world, eye, forward, super::kind::Kind::Shambler), "nowhere to come from");
     }
     let bodies: Vec<Vec3> = world.query::<&Body>().iter(&world).map(|b| b.pos).collect();
     let nav = world.resource::<super::Nav>().0.as_ref().expect("the grid");
@@ -415,3 +417,25 @@ fn a_takedown_kills_only_one_that_never_saw_it_coming() {
     assert_eq!(super::brain::dealt(80.0, true, true), 120.0);
     assert_eq!(super::brain::dealt(80.0, false, true), 80.0);
 }
+
+#[test]
+fn a_ripper_runs_you_down_and_cuts_you_open() {
+    use super::kind::Kind;
+    let s = floor();
+    // Seen 25 m off: a Shambler's still on its way after 4 s; a Ripper's
+    // there and slashing, again and again, every cut bleeding.
+    let player = Some(Vec3::new(0.0, 0.0, -25.0));
+    let mut shambler = Zombie::new(0.0, 7);
+    let mut body = Body::at(Vec3::ZERO);
+    assert_eq!(run(&mut shambler, &mut body, &s, None, player, &[], 4.0), 0);
+    let mut ripper = Zombie::of(Kind::Ripper, 0.0, 7);
+    let mut body = Body::at(Vec3::ZERO);
+    run(&mut ripper, &mut body, &s, None, player, &[], 3.5);
+    assert!((body.pos - Vec3::new(0.0, 0.0, -25.0)).length() < 2.0, "caught up: {:?}", body.pos);
+    assert_eq!(ripper.clip().0, Clip::Slash, "slashing");
+    // A slash every three quarters of a second.
+    let cuts = run(&mut ripper, &mut body, &s, None, player, &[], 3.0);
+    assert!(cuts >= 3, "{cuts} cuts in 3 s");
+    assert_eq!(super::kind::Kind::Ripper.traits().swipe.leaves, Some(crate::vitals::Affliction::Bleed));
+}
+

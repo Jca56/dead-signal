@@ -3,7 +3,10 @@
 //! bandages and medkits carried to heal the rest, each taking a while to
 //! apply (kept if the patching is interrupted; the caller takes it out
 //! of the pack once it's done). How much of each there can be, and how
-//! quick the kits are, is down to the player's perks.
+//! quick the kits are, is down to the player's perks. What the special
+//! dead leave in you: bleeding (a Ripper's claws, worse with each cut,
+//! till a bandage or a medkit stops it) and poison (a Spitter's, wearing
+//! off on its own; a medkit clears it); neither lets health come back.
 
 use crate::profile::perks::Perks;
 
@@ -19,6 +22,22 @@ const SPRINT_COST: f64 = 20.0;
 const RECOVER_RATE: f64 = 17.0;
 const RECOVER_DELAY: f64 = 1.0;
 const WINDED_UNTIL: f64 = 30.0;
+/// Bleeding: health lost a second for each cut, and the most cuts that
+/// count. Poison: health lost a second, for how long.
+const BLEED_RATE: f64 = 1.0;
+pub const BLEED_MOST: u8 = 3;
+const POISON_RATE: f64 = 3.0;
+pub const POISON_FOR: f64 = 10.0;
+
+/// Something that keeps hurting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Affliction {
+    /// A cut (another adds to it, up to [`BLEED_MOST`]).
+    Bleed,
+    /// Poisoned afresh for [`POISON_FOR`].
+    #[cfg_attr(not(test), expect(dead_code, reason = "the Spitter's, in the next stage"))]
+    Poison,
+}
 
 /// Something that heals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +78,8 @@ pub struct Change {
     pub healed: Option<(Kit, f64)>,
     /// Health that came back on its own.
     pub regenerated: f64,
+    /// Health lost to bleeding and poison.
+    pub festered: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +100,9 @@ pub struct Vitals {
     recover: f64,
     kit_time: f64,
     kit_heals: f64,
+    /// Cuts bleeding, and seconds of poison left.
+    pub bleeding: u8,
+    pub poison: f64,
 }
 
 impl Default for Vitals {
@@ -92,7 +116,7 @@ impl Vitals {
     pub fn with(perks: &Perks) -> Self {
         let (max_hp, lungs) = (perks.max_hp(), perks.lungs());
         let max_stamina = 100.0 * lungs;
-        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), kit_heals: perks.kit_heals() }
+        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), kit_heals: perks.kit_heals(), bleeding: 0, poison: 0.0 }
     }
 
     fn regen_cap(&self) -> f64 {
@@ -141,10 +165,23 @@ impl Vitals {
         self.dead()
     }
 
-    /// Start applying `kit`, if one is `carried`, health isn't full, and
+    /// Take `a`: a cut bleeds more, poison starts over.
+    pub fn afflict(&mut self, a: Affliction) {
+        match a {
+            Affliction::Bleed => self.bleeding = (self.bleeding + 1).min(BLEED_MOST),
+            Affliction::Poison => self.poison = POISON_FOR,
+        }
+    }
+
+    /// Whether `kit` would do any good: health to heal, or what it cures.
+    fn helps(&self, kit: Kit) -> bool {
+        self.hp < self.max_hp || self.bleeding > 0 || (kit == Kit::Medkit && self.poison > 0.0)
+    }
+
+    /// Start applying `kit`, if one is `carried`, it would help, and
     /// nothing else is being applied. Whether it started.
     pub fn start_heal(&mut self, kit: Kit, carried: u32) -> bool {
-        if self.healing.is_some() || carried == 0 || self.hp >= self.max_hp || self.dead() {
+        if self.healing.is_some() || carried == 0 || !self.helps(kit) || self.dead() {
             return false;
         }
         self.healing = Some((kit, 0.0));
@@ -183,10 +220,23 @@ impl Vitals {
                 self.winded = false;
             }
         }
+        // Bleeding and poison, which keep health from coming back.
+        let festering = f64::from(self.bleeding) * BLEED_RATE + if self.poison > 0.0 { POISON_RATE } else { 0.0 };
+        self.poison = (self.poison - dt).max(0.0);
+        if festering > 0.0 {
+            let before = self.hp;
+            self.hp = (self.hp - festering * dt).max(0.0);
+            change.festered = before - self.hp;
+            self.since_hurt = 0.0;
+            if self.dead() {
+                self.healing = None;
+                return change;
+            }
+        }
         // Health comes back on its own, only so far.
         self.since_hurt += dt;
         let cap = self.regen_cap();
-        if self.since_hurt >= REGEN_DELAY && self.hp < cap {
+        if festering <= 0.0 && self.since_hurt >= REGEN_DELAY && self.hp < cap {
             let before = self.hp;
             self.hp = (self.hp + REGEN_RATE * dt).min(cap);
             change.regenerated = self.hp - before;
@@ -198,6 +248,11 @@ impl Vitals {
                 let before = self.hp;
                 self.hp = (self.hp + self.heals(kit)).min(self.max_hp);
                 self.healing = None;
+                // Either stops the bleeding; a medkit takes the poison too.
+                self.bleeding = 0;
+                if kit == Kit::Medkit {
+                    self.poison = 0.0;
+                }
                 change.healed = Some((kit, self.hp - before));
             } else {
                 self.healing = Some((kit, t));
@@ -301,5 +356,43 @@ mod tests {
         // Regen reaches half the (bigger) most.
         wait(&mut v, 80.0, false);
         assert_eq!(v.hp, 65.0);
+    }
+
+    #[test]
+    fn bleeding_goes_on_till_it_is_bandaged_and_poison_wears_off() {
+        let mut v = Vitals::default();
+        v.afflict(Affliction::Bleed);
+        v.afflict(Affliction::Bleed);
+        for _ in 0..600 {
+            v.update(DT, false);
+        }
+        assert!((v.hp - (v.max_hp - 20.0)).abs() < 0.5, "two cuts, ten seconds: {}", v.hp);
+        // It keeps on, and nothing comes back while it does.
+        for _ in 0..1200 {
+            v.update(DT, false);
+        }
+        assert!(v.hp < v.max_hp - 55.0 && v.bleeding == 2);
+        assert!(v.start_heal(Kit::Bandage, 1));
+        for _ in 0..200 {
+            v.update(DT, false);
+        }
+        assert_eq!(v.bleeding, 0, "bandaged");
+        // Cuts stop counting past the most.
+        for _ in 0..10 {
+            v.afflict(Affliction::Bleed);
+        }
+        assert_eq!(v.bleeding, BLEED_MOST);
+        let mut v = Vitals::default();
+        v.afflict(Affliction::Poison);
+        for _ in 0..(POISON_FOR * 60.0) as usize + 60 {
+            v.update(DT, false);
+        }
+        assert!(v.poison == 0.0 && (v.hp - (v.max_hp - POISON_RATE * POISON_FOR)).abs() < 0.5, "{}", v.hp);
+        // A bandage helps a bleed at full health; nothing helps poison but a medkit.
+        let mut v = Vitals::default();
+        v.afflict(Affliction::Bleed);
+        assert!(v.start_heal(Kit::Bandage, 1));
+        let mut v = Vitals { poison: 5.0, ..Vitals::default() };
+        assert!(!v.start_heal(Kit::Bandage, 1) && v.start_heal(Kit::Medkit, 1));
     }
 }

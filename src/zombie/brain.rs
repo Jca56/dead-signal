@@ -9,7 +9,9 @@ use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
 
 use super::figure::Clip;
+use super::kind::Kind;
 use super::nav::NavGrid;
+use super::steer::{flat_dist, level};
 use crate::collide::Solids;
 use crate::player::{Body, Controls, Gait};
 use crate::sound::Sfx;
@@ -25,57 +27,44 @@ const CLOSE: f64 = 2.5;
 /// How far a shot is heard, and another's snarl on seeing the player.
 pub const HEARING: f64 = 80.0;
 pub const ALERT_RANGE: f64 = 15.0;
-/// It swipes from this close, and the swipe reaches this far.
-pub const ATTACK_RANGE: f64 = 1.4;
-const REACH: f64 = 1.8;
 /// How far above its feet the player's feet can be and still be struck
 /// (standing on a crate: the swipe takes the legs), and how far below.
-const REACH_UP: f64 = 1.0;
-const REACH_DOWN: f64 = 1.2;
-/// Seconds: the swipe, when in it the blow lands, the rest after it.
-const ATTACK_TIME: f64 = 0.9;
-const STRIKE_AT: f64 = 0.4;
-const COOLDOWN: f64 = 1.2;
+pub(super) const REACH_UP: f64 = 1.0;
+pub(super) const REACH_DOWN: f64 = 1.2;
 /// How long a shot staggers it, and a blow (which sends it stumbling back).
 const FLINCH_TIME: f64 = 0.33;
 const STUMBLE_TIME: f64 = 0.6;
-/// It lunges from this close.
-const LUNGE: f64 = 2.2;
 /// How long out of sight before it goes to look where it last saw you.
 const FORGET: f64 = 8.0;
 /// Wandering: how far it strays, and at what share of its walk.
 const WANDER_RANGE: f64 = 12.0;
 const WANDER_PACE: f64 = 0.45;
-/// How fast it turns, rad/s: hunting, and not.
-const TURN_HUNT: f64 = 3.0;
+/// How fast it turns when not hunting, rad/s (hunting, its kind's).
 const TURN_IDLE: f64 = 1.5;
 /// How often it finds its way again, seconds, and how long it waits after
 /// finding none (a search that fails is the dearest there is).
-const REPATH: f64 = 0.6;
-const NO_WAY: f64 = 2.0;
+pub(super) const REPATH: f64 = 0.6;
+pub(super) const NO_WAY: f64 = 2.0;
 /// Cut off from what it's after, it comes this near and waits there,
 /// rather than pushing into the crowd at the one nearest spot.
-const GATHER: f64 = 3.0;
+pub(super) const GATHER: f64 = 3.0;
 /// Following a route: this near a turning point it has reached it, and it
 /// aims this far ahead along the leg it's on.
-const ARRIVE: f64 = 0.3;
-const LOOK_AHEAD: f64 = 0.7;
+pub(super) const ARRIVE: f64 = 0.3;
+pub(super) const LOOK_AHEAD: f64 = 0.7;
 /// Its eyes, and where it looks for yours, above the feet.
 const EYE: f64 = 1.55;
 const PLAYER_EYE: f64 = 1.5;
-/// A stride of its walk animation covers this much ground.
+/// A stride of its walk animation covers this much ground, and of its
+/// run (a Ripper's).
 const STRIDE: f64 = 1.1;
 const WALK_CLIP: f64 = 0.8;
-pub const HP: f64 = 150.0;
+const RUN_STRIDE: f64 = 3.4;
+const RUN_CLIP: f64 = 0.5;
 /// A shot to the head does this many times a body shot's damage (blows do
 /// the same wherever they land).
 pub const HEADSHOT: f64 = 3.0;
 pub const BLOW_HEADSHOT: f64 = 1.5;
-/// Its pace, m/s (a walk, and the lunge): most shamble, but one in
-/// `FAST_SHARE` walks fast.
-const SLOW: (f64, f64, f64) = (1.6, 2.0, 3.8);
-const FAST: (f64, f64, f64) = (3.0, 3.4, 4.5);
-const FAST_SHARE: f64 = 0.25;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum State {
@@ -112,34 +101,44 @@ pub struct Senses<'a> {
     pub sight: f64,
 }
 
+/// A blow that landed on the player: the way it pushes, how much it takes
+/// off, and what it leaves.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Blow {
+    pub push: Vec3,
+    pub damage: f64,
+    pub leaves: Option<crate::vitals::Affliction>,
+}
+
 /// What it wants done this step.
 #[derive(Default)]
 pub struct Intent {
     pub controls: Controls,
     pub sounds: Vec<(Sfx, f32)>,
-    /// Its blow landed on the player, pushing this way.
-    pub hit: Option<Vec3>,
+    /// Its blow landed on the player.
+    pub hit: Option<Blow>,
     /// It has just seen the player, there, and snarled for the rest.
     pub alert: Option<Vec3>,
 }
 
 #[derive(Component, Clone, Debug)]
 pub struct Zombie {
+    pub kind: Kind,
     pub hp: f64,
     pub state: State,
     pub yaw: f64,
     pub gait: Gait,
-    path: Vec<Vec3>,
-    path_goal: Vec3,
+    pub(super) path: Vec<Vec3>,
+    pub(super) path_goal: Vec3,
     /// Where the leg of the route it's on began.
-    leg_from: Vec3,
+    pub(super) leg_from: Vec3,
     /// Till it next looks, and whether it saw the player when it last did.
     look_in: f64,
     in_sight: bool,
     /// What it's after can't be got to (up on a car, say): the way found
     /// ends short of it.
-    cut_off: bool,
-    repath: f64,
+    pub(super) cut_off: bool,
+    pub(super) repath: f64,
     last_seen: Option<Vec3>,
     unseen: f64,
     cooldown: f64,
@@ -155,10 +154,18 @@ pub struct Zombie {
 }
 
 impl Zombie {
+    /// A Shambler facing `yaw`, its own ways from `seed`.
+    #[cfg(test)]
     pub fn new(yaw: f64, seed: u32) -> Self {
-        let mut z = Self { hp: HP, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        Self::of(Kind::Shambler, yaw, seed)
+    }
+
+    /// One of `kind` facing `yaw`, its own ways from `seed`.
+    pub fn of(kind: Kind, yaw: f64, seed: u32) -> Self {
+        let t = kind.traits();
+        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
-        let (lo, hi, lunge) = if z.rand() < FAST_SHARE { FAST } else { SLOW };
+        let (lo, hi, lunge) = if z.rand() < t.fast_share { t.fast } else { t.pace };
         let walk = lo + (hi - lo) * z.rand();
         z.gait = Gait { walk, sprint: lunge, crouch: walk };
         // Each finds its way and looks about on its own beat: a crowd come
@@ -168,7 +175,7 @@ impl Zombie {
         z
     }
 
-    fn rand(&mut self) -> f64 {
+    pub(super) fn rand(&mut self) -> f64 {
         self.seed ^= self.seed << 13;
         self.seed ^= self.seed >> 17;
         self.seed ^= self.seed << 5;
@@ -188,9 +195,11 @@ impl Zombie {
     pub fn clip(&self) -> (Clip, f64) {
         match self.state {
             State::Dead { t } => (Clip::Death, t),
+            State::Attack { t, .. } if self.kind == Kind::Ripper => (Clip::Slash, t),
             State::Attack { t, .. } => (Clip::Attack, t),
             State::Stagger { t, until } if until > FLINCH_TIME => (Clip::Stumble, t),
             State::Stagger { t, .. } => (Clip::Flinch, t),
+            _ if self.moving && self.kind == Kind::Ripper && matches!(self.state, State::Hunt | State::Search(_)) => (Clip::Run, self.walked / RUN_STRIDE * RUN_CLIP),
             _ if self.moving => (Clip::Walk, self.walked / STRIDE * WALK_CLIP),
             _ => (Clip::Idle, self.clip_t),
         }
@@ -236,7 +245,7 @@ impl Zombie {
     fn sees(&self, body: &Body, player: Vec3, solids: &Solids, reach: f64) -> bool {
         let to = Vec2::new(player.x - body.pos.x, player.z - body.pos.z);
         let d = to.length();
-        if d > SIGHT * reach {
+        if d > SIGHT * reach * self.kind.traits().sight {
             return false;
         }
         if d > CLOSE {
@@ -254,6 +263,8 @@ impl Zombie {
     /// One fixed step of thought.
     pub fn think(&mut self, body: &Body, s: &Senses, dt: f64) -> Intent {
         let mut out = Intent::default();
+        let traits = self.kind.traits();
+        let swipe = traits.swipe;
         self.clip_t += dt;
         if let State::Dead { t } = &mut self.state {
             *t += dt;
@@ -275,7 +286,7 @@ impl Zombie {
         let seen = s.player.filter(|_| self.in_sight);
         if let Some(p) = seen {
             if matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. }) {
-                out.sounds.push((Sfx::Snarl, 1.0));
+                out.sounds.push((traits.snarl, 1.0));
                 out.alert = Some(p);
                 self.state = State::Hunt;
             }
@@ -306,19 +317,20 @@ impl Zombie {
                 let t = t + dt;
                 let mut struck = struck;
                 if let Some(p) = s.player {
-                    self.face(p, body, TURN_HUNT, dt);
-                    if !struck && t >= STRIKE_AT {
+                    self.face(p, body, traits.turn, dt);
+                    if !struck && t >= swipe.strike_at {
                         struck = true;
                         let to = Vec3::new(p.x - body.pos.x, 0.0, p.z - body.pos.z);
                         let d = to.length();
                         let facing = Vec3::new(-self.yaw.sin(), 0.0, -self.yaw.cos());
-                        if d <= REACH && level(body.pos, p) && (d < 1e-6 || facing.dot(to * (1.0 / d)) > 0.5) {
-                            out.hit = Some(if d > 1e-6 { to * (1.0 / d) } else { facing });
+                        if d <= swipe.reach && level(body.pos, p) && (d < 1e-6 || facing.dot(to * (1.0 / d)) > 0.5) {
+                            let push = if d > 1e-6 { to * (1.0 / d) } else { facing };
+                            out.hit = Some(Blow { push, damage: swipe.damage, leaves: swipe.leaves });
                         }
                     }
                 }
-                if t >= ATTACK_TIME {
-                    self.cooldown = COOLDOWN;
+                if t >= swipe.time {
+                    self.cooldown = swipe.cooldown;
                     self.set(State::Hunt);
                 } else {
                     self.state = State::Attack { t, struck };
@@ -334,11 +346,16 @@ impl Zombie {
                 let target = seen.or(self.last_seen);
                 if let Some(p) = target {
                     let d = Vec2::new(p.x - body.pos.x, p.z - body.pos.z).length();
-                    if seen.is_some() && d <= ATTACK_RANGE && level(body.pos, p) && self.cooldown <= 0.0 {
-                        out.sounds.push((Sfx::Snarl, 0.8));
+                    if seen.is_some() && d <= swipe.range && level(body.pos, p) && self.cooldown <= 0.0 {
+                        out.sounds.push((traits.snarl, 0.8));
                         self.set(State::Attack { t: 0.0, struck: false });
+                    } else if seen.is_some() && d < swipe.range * 0.8 && level(body.pos, p) {
+                        // Right on top of them, waiting on its next swipe:
+                        // it stands its ground and turns to face them (a fast
+                        // one would run on through and past).
+                        self.face(p, body, traits.turn, dt);
                     } else {
-                        goal = Some((p, 1.0, seen.is_some() && d < LUNGE, TURN_HUNT));
+                        goal = Some((p, 1.0, seen.is_some() && d < traits.lunge, traits.turn));
                     }
                 } else {
                     self.state = State::Wander { goal: None, rest: 1.0 };
@@ -348,7 +365,7 @@ impl Zombie {
                 if flat_dist(body.pos, at) < 1.5 {
                     self.state = State::Wander { goal: None, rest: 2.0 };
                 } else {
-                    goal = Some((at, 1.0, false, TURN_HUNT));
+                    goal = Some((at, 1.0, false, traits.turn));
                 }
             }
             State::Investigate { at, looked } => {
@@ -356,7 +373,7 @@ impl Zombie {
                     let looked = looked + dt;
                     self.state = if looked > 3.0 { State::Wander { goal: None, rest: 1.0 } } else { State::Investigate { at, looked } };
                 } else {
-                    goal = Some((at, 0.8, false, TURN_HUNT));
+                    goal = Some((at, 0.8, false, traits.turn));
                 }
             }
             State::Wander { goal: aim, rest } => {
@@ -394,71 +411,6 @@ impl Zombie {
         }
         out
     }
-
-    /// Turn toward `p` at up to `rate` rad/s. How far off it still is.
-    fn face(&mut self, p: Vec3, body: &Body, rate: f64, dt: f64) -> f64 {
-        let (dx, dz) = (p.x - body.pos.x, p.z - body.pos.z);
-        if dx.abs() + dz.abs() < 1e-6 {
-            return 0.0;
-        }
-        let want = (-dx).atan2(-dz);
-        let mut off = want - self.yaw;
-        off = (off + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI;
-        let step = off.clamp(-rate * dt, rate * dt);
-        self.yaw += step;
-        off - step
-    }
-
-    /// The keys that take it toward `target`: along the nav grid when the
-    /// way isn't straight, slowed while it turns.
-    #[allow(clippy::too_many_arguments)]
-    fn steer(&mut self, body: &Body, target: Vec3, pace: f64, lunge: bool, turn: f64, nav: Option<&NavGrid>, searches: &std::cell::Cell<u32>, dt: f64) -> Controls {
-        // Close and on its level it just goes; anywhere else the grid
-        // decides (up on a roof over it means going round by the stairs).
-        let straight = (flat_dist(body.pos, target) < 3.0 && level(body.pos, target)) || nav.is_none_or(|n| n.clear(body.pos, target));
-        if !straight && self.cut_off && flat_dist(body.pos, target) < GATHER {
-            // As near as it gets: it stands and glares up at them.
-            self.face(target, body, turn, dt);
-            return Controls::default();
-        }
-        let waypoint = if straight {
-            self.cut_off = false;
-            self.path.clear();
-            target
-        } else {
-            // (No way found is remembered until the next repath too: a search
-            // that fails looks at the whole grid.)
-            let wants = self.repath <= 0.0 || flat_dist(self.path_goal, target) > 2.0;
-            if wants && searches.get() > 0 {
-                searches.set(searches.get() - 1);
-                let found = nav.and_then(|n| n.path(body.pos, target));
-                let beat = 0.75 + 0.5 * self.rand();
-                self.repath = if found.is_some() { REPATH } else { NO_WAY } * beat;
-                self.cut_off = found.as_ref().and_then(|p| p.last()).is_some_and(|end| flat_dist(*end, target) > 1.5 || !level(*end, target));
-                self.path = found.unwrap_or_default();
-                self.path_goal = target;
-                self.leg_from = body.pos;
-            }
-            // Each leg is walked along its line, not cut across: a turning
-            // point counts once it's truly reached (or passed), and it aims
-            // a little ahead on the leg, so knocked off it, it steers back
-            // on, and it comes to the foot of a flight of stairs lined up.
-            while self.path.len() > 1 && (flat_dist(body.pos, self.path[0]) < ARRIVE || along(self.leg_from, self.path[0], body.pos) >= 1.0) {
-                self.leg_from = self.path.remove(0);
-            }
-            match self.path.first() {
-                Some(&to) => {
-                    let len = flat_dist(self.leg_from, to);
-                    let t = if len > 1e-6 { (along(self.leg_from, to, body.pos) + LOOK_AHEAD / len).clamp(0.0, 1.0) } else { 1.0 };
-                    self.leg_from + (to - self.leg_from) * t
-                }
-                None => target,
-            }
-        };
-        let off = self.face(waypoint, body, turn, dt);
-        let go = pace * off.cos().max(0.0);
-        Controls { walk: Vec2::new(0.0, go), sprint: lunge && off.abs() < 0.5, jump: false, crouch_toggle: false }
-    }
 }
 
 /// What a hit takes off: a shot to the head many times over, a blow to
@@ -469,24 +421,4 @@ pub fn dealt(damage: f64, head: bool, blow: bool) -> f64 {
         (true, true) => BLOW_HEADSHOT,
         _ => 1.0,
     }
-}
-
-/// How far along the way from `a` to `b` the point `p` is, flat: 0 at `a`,
-/// 1 at `b`.
-fn along(a: Vec3, b: Vec3, p: Vec3) -> f64 {
-    let ab = Vec2::new(b.x - a.x, b.z - a.z);
-    let len2 = ab.dot(ab);
-    if len2 < 1e-9 {
-        return 1.0;
-    }
-    Vec2::new(p.x - a.x, p.z - a.z).dot(ab) / len2
-}
-
-/// Whether feet at `b` are near enough the level of feet at `a` to strike.
-fn level(a: Vec3, b: Vec3) -> bool {
-    (-REACH_DOWN..=REACH_UP).contains(&(b.y - a.y))
-}
-
-fn flat_dist(a: Vec3, b: Vec3) -> f64 {
-    Vec2::new(a.x - b.x, a.z - b.z).length()
 }

@@ -16,6 +16,8 @@ game picks the parts, and the colours of their regions (`shambler_kit.py`).
     Flinch  0.33 s snapped back by a hit
     Stumble 0.6 s  knocked reeling by a blow: a step back, arms flung
     Death   1.2 s  knees go, then face down; ends lying still
+    Run     0.5 s  a Ripper's: bent double, flat out, claws trailing (loops)
+    Slash   0.45 s a Ripper's rake, right claw across; lands at 0.18 s
 
 Built facing Blender's +Y (the game's -Z, the way a yaw of 0 looks), feet
 on the ground at the origin. Bones: root > hips > spine > chest > neck >
@@ -35,6 +37,7 @@ sys.path.insert(0, HERE)
 from kit import Builder  # noqa: E402
 import shambler_body  # noqa: E402
 import shambler_extras  # noqa: E402
+import shambler_specials  # noqa: E402
 from shambler_kit import BONES  # noqa: E402
 
 MODELS = os.path.join(HERE, "..", "models")
@@ -92,7 +95,7 @@ def build():
     vc = nodes.new("ShaderNodeVertexColor")
     vc.layer_name = "Col"
     material.node_tree.links.new(vc.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
-    made = [part(name, make, armature, material) for name, make in {**shambler_body.parts(), **shambler_extras.parts()}.items()]
+    made = [part(name, make, armature, material) for name, make in {**shambler_body.parts(), **shambler_extras.parts(), **shambler_specials.parts()}.items()]
     return armature, made
 
 
@@ -148,6 +151,31 @@ def walk_pose(p):
         "forearm.R": (12, 0, 0),
         "upper_arm.L": (14 * math.cos(a + math.pi), 0, 4),
         "forearm.L": (10 + 6 * swing_r, 0, 0),
+    }
+
+
+def run_pose(p):
+    """A Ripper flat out at phase `p` (0–1 of a stride): bent low, long
+    bounding strides, the arms swung back with the claws trailing."""
+    a = p * math.tau
+    swing_l = max(0.0, -math.sin(a))
+    swing_r = max(0.0, math.sin(a))
+    return {
+        "thigh.L": (55 * math.cos(a) + 15, 0, 0),
+        "shin.L": (-(15 + 85 * swing_l), 0, 0),
+        "foot.L": (-(20 * math.cos(a)) + 25 * swing_l, 0, 0),
+        "thigh.R": (-55 * math.cos(a) + 15, 0, 0),
+        "shin.R": (-(15 + 85 * swing_r), 0, 0),
+        "foot.R": (20 * math.cos(a) + 25 * swing_r, 0, 0),
+        "hips": (-12, 4 * math.sin(a), 6 * math.cos(a), (0, 0.05, -0.08 + 0.05 * abs(math.sin(a)))),
+        "spine": (-28, 0, -5 * math.cos(a)),
+        "chest": (-18, 0, -8 * math.cos(a)),
+        "neck": (25, 0, 0),
+        "head": (20, 6 * math.sin(a), 0),
+        "upper_arm.R": (-40 + 30 * math.cos(a), 0, -25),
+        "forearm.R": (35, 0, 0),
+        "upper_arm.L": (-40 - 30 * math.cos(a), 0, 25),
+        "forearm.L": (35, 0, 0),
     }
 
 
@@ -222,6 +250,11 @@ def actions(rig):
     down = {"hips": (-88, 6, 5, (0, 0.72, -0.80)), "head": (-15, 25, 0), "upper_arm.R": (165, 0, -25), "upper_arm.L": (150, 0, 30), "forearm.R": (20, 0, 0), "forearm.L": (15, 0, 0), "thigh.L": (-6, 0, 4), "shin.L": (-12, 0, 0), "foot.L": (-40, 0, 0), "foot.R": (-40, 0, 0)}
     bounce = blend(down, {**down, "hips": (-84, 6, 5, (0, 0.72, -0.76))}, 1.0)
     action("Death", [(0, rest), (8, buckle), (16, tip), (24, down), (28, bounce), (36, down)])
+    action("Run", [(f, run_pose(f / 15)) for f in range(0, 16)])
+    crouch = with_(rest, spine=(-20, 0, 0), chest=(-12, 0, 0), neck=(15, 0, 0), thigh__R=(20, 0, 0), shin__R=(-25, 0, 0), thigh__L=(15, 0, 0), shin__L=(-20, 0, 0), hips=(0, 0, 0, (0, 0, -0.05)))
+    raised = with_(crouch, upper_arm__R=(140, 0, -45), forearm__R=(40, 0, 0), upper_arm__L=(60, 0, 20), chest=(0, 0, 20), spine=(-10, 0, 10))
+    raked = with_(crouch, upper_arm__R=(55, 0, 45), forearm__R=(10, 0, 0), upper_arm__L=(90, 0, -15), forearm__L=(30, 0, 0), chest=(-25, 0, -20), spine=(-25, 0, -8), hips=(0, 0, 0, (0, 0.12, -0.06)))
+    action("Slash", [(0, crouch), (3, raised), (6, raked), (9, blend(raked, crouch, 0.5)), (13, crouch)])
     bpy.ops.object.mode_set(mode="OBJECT")
     return made
 

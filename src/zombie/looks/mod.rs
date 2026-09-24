@@ -33,6 +33,8 @@ pub enum Head {
     Whole,
     Jawless,
     Gone,
+    /// A Ripper's: narrow, its mouth torn wide.
+    Ripper,
 }
 
 /// What's on its head.
@@ -149,6 +151,8 @@ pub struct Looks {
     pub wounds: Vec<Wound>,
     pub vest: bool,
     pub pack: bool,
+    /// A Ripper's claws, on what hands it has.
+    pub claws: bool,
     /// Each region's colour, as authored (sRGB).
     pub colors: [Rgb; PALETTE],
     /// How tall and how broad, times the model.
@@ -171,6 +175,7 @@ impl Default for Looks {
             wounds: Vec::new(),
             vest: false,
             pack: false,
+            claws: false,
             colors: [SKINS[0], [0.31, 0.34, 0.37], [0.27, 0.23, 0.18], HAIR[0], SHIRTS[2]],
             height: 1.0,
             bulk: 1.0,
@@ -187,6 +192,7 @@ impl Looks {
                 Head::Whole => "head",
                 Head::Jawless => "head_jawless",
                 Head::Gone => "neck_stump",
+                Head::Ripper => "head_ripper",
             }
             .into(),
         );
@@ -254,6 +260,13 @@ impl Looks {
         }
         if self.pack {
             parts.push("pack".into());
+        }
+        if self.claws {
+            for (arm, side) in self.arms.iter().zip([".L", ".R"]) {
+                if *arm == Arm::Whole {
+                    parts.push(format!("claws{side}"));
+                }
+            }
         }
         parts
     }

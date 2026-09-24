@@ -287,7 +287,7 @@ fn pellets_hit_in_full_up_close_and_fade_with_distance() {
     assert!(mid < 1.0 && mid > falloff.least);
     // Point blank, every pellet in the body drops a shambler.
     let shot = Weapon::Shotgun.spec().shot.unwrap();
-    assert!(shot.damage * f64::from(shot.pellets) >= crate::zombie::brain::HP);
+    assert!(shot.damage * f64::from(shot.pellets) >= crate::zombie::kind::Kind::Shambler.traits().hp);
 }
 
 #[test]

@@ -30,7 +30,6 @@ use crate::world::Game;
 use crate::zombie::director::Director;
 
 /// How much a blow takes.
-const BLOW_DAMAGE: f64 = 20.0;
 /// Seconds between heartbeats when badly hurt.
 const HEARTBEAT: f64 = 1.1;
 /// How fast the player walks with the bag open, and down the sights, as
@@ -239,10 +238,13 @@ impl Run {
 
         // Blows from the dead.
         let blows = combat.answer_the_dead(game, true);
-        for _ in 0..blows {
+        for blow in blows {
             self.stats.times_hit += 1;
-            self.stats.damage_taken += BLOW_DAMAGE.min(self.vitals.hp);
-            if self.vitals.hurt(BLOW_DAMAGE) {
+            self.stats.damage_taken += blow.damage.min(self.vitals.hp);
+            if let Some(a) = blow.leaves {
+                self.vitals.afflict(a);
+            }
+            if self.vitals.hurt(blow.damage) {
                 let side = if self.stats.times_hit.is_multiple_of(2) { 1.0 } else { -1.0 };
                 self.end(game, Outcome::Died(side), combat);
                 return;
@@ -268,6 +270,12 @@ impl Run {
             }
         }
         self.stats.healed += change.regenerated;
+        self.stats.damage_taken += change.festered;
+        if self.vitals.dead() {
+            // Bled out, or the poison did it.
+            self.end(game, Outcome::Died(1.0), combat);
+            return;
+        }
         self.stats.seconds += dt;
         if let Some((body, _)) = game.player() {
             if let Some(last) = self.last {
@@ -344,6 +352,8 @@ impl Run {
                 note: self.note.map(|(n, _)| n),
                 time,
                 crosshair: game.world.get_resource::<Settings>().is_none_or(|s| s.crosshair),
+                bleeding: v.bleeding,
+                poison: v.poison,
             },
         );
         let o = self.out_hud(game);

@@ -5,12 +5,15 @@
 //! Then, as the run goes on, a trickle keeps some of
 //! them near the player: whenever fewer are close than the kills so far
 //! call for, a new one comes in from out of sight. When the dead surge
-//! (the way out is being worked), they come fast and many.
+//! (the way out is being worked), they come fast and many. The special
+//! dead: packs of Rippers hunt the woods from the start, and now and then
+//! one comes in with the rest (often, in a surge).
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
 
 use super::Nav;
+use super::kind::Kind as Dead;
 use super::looks::Theme;
 use crate::loot::Dice;
 use crate::map::sites::{Kind, Site};
@@ -38,6 +41,12 @@ fn soldiers(kind: Kind) -> f64 {
         _ => 0.0,
     }
 }
+/// Packs of Rippers in the woods, and how many to a pack (at most).
+const RIPPER_PACKS: usize = 3;
+const PACK_MOST: usize = 3;
+/// The share of newcomers that are Rippers, and while the dead surge.
+const RIPPER_SHARE: f64 = 0.04;
+const RIPPER_SURGE: f64 = 0.25;
 /// Nothing starts nearer the player than this, metres.
 const CLEAR_OF_START: f64 = 45.0;
 /// What counts as near the player, how many should be near to begin with,
@@ -66,6 +75,8 @@ pub struct Director {
     pub surge: bool,
     /// The most that were ever near the player at once.
     pub peak: usize,
+    /// Luck, for which kind comes in.
+    dice: Dice,
 }
 
 /// How many of the dead are standing within `NEAR` of `eye`, flat.
@@ -105,7 +116,7 @@ impl Director {
                     let local = Vec2::new((dice.unit() * 2.0 - 1.0) * site.plot.half.x, (dice.unit() * 2.0 - 1.0) * site.plot.half.y);
                     let p = site.plot.world(local);
                     if let Some(at) = stand(&mut dice, p.x, p.y, site.plot.height) {
-                        spots.push((at, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
+                        spots.push((at, Dead::Shambler, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
                         placed += 1;
                     }
                 }
@@ -120,15 +131,34 @@ impl Director {
                 if let Some(base) = ground(x, z)
                     && let Some(at) = stand(&mut dice, x, z, base)
                 {
-                    spots.push((at, Theme::Drifter));
+                    spots.push((at, Dead::Shambler, Theme::Drifter));
+                }
+            }
+            // Packs of Rippers, each where a wanderer was, the rest of it
+            // close by.
+            let wanderers: Vec<usize> = (0..spots.len()).filter(|&i| spots[i].2 == Theme::Drifter).collect();
+            for _ in 0..RIPPER_PACKS.min(wanderers.len()) {
+                let i = wanderers[dice.next() as usize % wanderers.len()];
+                spots[i].1 = Dead::Ripper;
+                let centre = spots[i].0;
+                let more = 1 + dice.next() as usize % (PACK_MOST - 1);
+                for _ in 0..more * 10 {
+                    if spots.iter().filter(|s| s.1 == Dead::Ripper && (s.0 - centre).length() < 6.0).count() > more {
+                        break;
+                    }
+                    let (dx, dz) = ((dice.unit() - 0.5) * 6.0, (dice.unit() - 0.5) * 6.0);
+                    if let Some(at) = stand(&mut dice, centre.x + dx, centre.z + dz, centre.y) {
+                        spots.push((at, Dead::Ripper, Theme::Drifter));
+                    }
                 }
             }
             spots
         };
-        for (at, theme) in spots {
+        for (at, kind, theme) in spots {
             let yaw = dice.unit() * std::f64::consts::TAU;
-            super::spawn_as(world, at, yaw, theme);
+            super::spawn_kind(world, at, yaw, kind, theme);
         }
+        self.dice = Dice(seed.rotate_left(7) | 1);
         self.peak = near(world, eye);
         self.wait = TRICKLE;
     }
@@ -143,7 +173,9 @@ impl Director {
         if close >= want || self.wait > 0.0 || super::alive(world) >= MOST {
             return;
         }
-        self.wait = if !super::spawn_unseen(world, eye, forward) {
+        let share = if self.surge { RIPPER_SURGE } else { RIPPER_SHARE };
+        let kind = if self.dice.unit() < share { Dead::Ripper } else { Dead::Shambler };
+        self.wait = if !super::spawn_unseen(world, eye, forward, kind) {
             RETRY
         } else if self.surge {
             SURGE_TRICKLE

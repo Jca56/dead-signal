@@ -19,6 +19,9 @@ pub enum Clip {
     Flinch,
     Stumble,
     Death,
+    /// A Ripper's: flat out, and its rake.
+    Run,
+    Slash,
 }
 
 impl Clip {
@@ -30,11 +33,13 @@ impl Clip {
             Clip::Flinch => "Flinch",
             Clip::Stumble => "Stumble",
             Clip::Death => "Death",
+            Clip::Run => "Run",
+            Clip::Slash => "Slash",
         }
     }
 
     fn loops(self) -> bool {
-        matches!(self, Clip::Walk | Clip::Idle)
+        matches!(self, Clip::Walk | Clip::Idle | Clip::Run)
     }
 }
 

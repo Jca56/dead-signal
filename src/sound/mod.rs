@@ -48,6 +48,8 @@ pub enum Sfx {
     /// one, its last gurgle, its feet dragging.
     Groan,
     Snarl,
+    /// A Ripper's scream on seeing you, and as it slashes.
+    Shriek,
     Flesh,
     Gurgle,
     Shuffle,
@@ -74,7 +76,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 35] = [
+const ALL: [Sfx; 36] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -93,6 +95,7 @@ const ALL: [Sfx; 35] = [
     Sfx::Confirm,
     Sfx::Groan,
     Sfx::Snarl,
+    Sfx::Shriek,
     Sfx::Flesh,
     Sfx::Gurgle,
     Sfx::Shuffle,
@@ -115,7 +118,7 @@ const ALL: [Sfx; 35] = [
 impl Sfx {
     /// Whether it's the dead's (their own volume), not the world's.
     fn of_the_dead(self) -> bool {
-        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Gurgle | Sfx::Shuffle)
+        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Gurgle | Sfx::Shuffle)
     }
 }
 
