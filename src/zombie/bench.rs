@@ -39,7 +39,7 @@ fn crowd(n: usize, player: Option<Vec3>) -> World {
     world.insert_resource(Blend::default());
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb");
     let gltf = lntrn_model::Gltf::load(path).expect("shambler.glb");
-    let rig = crate::assets::Rigged { mesh: crate::render::FigureMeshId::placeholder(), gltf, skin: 0 };
+    let rig = crate::assets::Rigged { mesh: Vec::new(), gltf, skin: 0 };
     world.insert_resource(Model::new(rig).expect("the model"));
     world
 }

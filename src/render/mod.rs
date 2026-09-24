@@ -8,7 +8,7 @@
 mod figures;
 mod skinned;
 
-pub use figures::{FigureDraw, FigureMeshId};
+pub use figures::{FigureDraw, FigureMeshId, PALETTE};
 pub use skinned::{MAX_JOINTS, SkinnedDraw, SkinnedMeshId, SkinnedVertex};
 
 use lntrn_app::wgpu;

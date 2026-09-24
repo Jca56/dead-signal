@@ -7,6 +7,7 @@
 pub mod brain;
 pub mod director;
 pub mod figure;
+pub mod looks;
 pub mod nav;
 
 use bevy_ecs::prelude::*;
@@ -17,6 +18,7 @@ use crate::sound::Sfx;
 use crate::world::{Blend, Solid};
 use brain::{Senses, State, Zombie};
 use figure::{Figure, Model};
+use looks::{Looks, Theme};
 use nav::NavGrid;
 
 /// How long the dead lie before they sink, and how long sinking takes.
@@ -118,7 +120,15 @@ pub struct Horde {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn think(mut dead: Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>, players: Query<&Body, With<Player>>, solid: Res<Solid>, nav: Res<Nav>, stealth: Option<Res<Stealth>>, mut noises: ResMut<Noises>, mut horde: ResMut<Horde>) {
+fn think(
+    mut dead: Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>,
+    players: Query<&Body, With<Player>>,
+    solid: Res<Solid>,
+    nav: Res<Nav>,
+    stealth: Option<Res<Stealth>>,
+    mut noises: ResMut<Noises>,
+    mut horde: ResMut<Horde>,
+) {
     let player = players.iter().next().map(|b| b.pos);
     horde.tick = horde.tick.wrapping_add(1);
     let tick = horde.tick;
@@ -210,11 +220,15 @@ fn elbow(dead: &mut Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>)
 /// Pose each one for this frame: its animation, where it stands between
 /// its steps, and sinking once it has lain long enough. Lost in the fog,
 /// it isn't; far off, only now and then.
-fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<&Body, With<Player>>, mut frames: Local<u32>, mut dead: Query<(&Zombie, &Body, &Beat, &mut Figure), Without<Player>>) {
+/// One of the dead as it's posed: what it's doing, where, its beat, its
+/// figure, and how it looks.
+type Posed<'a> = (&'a Zombie, &'a Body, &'a Beat, &'a mut Figure, Option<&'a Looks>);
+
+fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<&Body, With<Player>>, mut frames: Local<u32>, mut dead: Query<Posed, Without<Player>>) {
     let Some(model) = model else { return };
     let player = players.iter().next().map(|b| b.pos);
     *frames = frames.wrapping_add(1);
-    for (z, body, beat, mut figure) in &mut dead {
+    for (z, body, beat, mut figure, looks) in &mut dead {
         let far = player.map_or(0.0, |p| Vec2::new(body.pos.x - p.x, body.pos.z - p.z).length());
         if far > UNSEEN {
             figure.hide();
@@ -233,7 +247,11 @@ fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<&Body, With
             State::Dead { t } => ((t - LIE_FOR) / SINK_FOR).clamp(0.0, 1.0) * 1.8,
             _ => 0.0,
         };
-        let place = Mat4::from_translation(at - Vec3::new(0.0, sink, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(z.yaw));
+        let (height, bulk) = looks.map_or((1.0, 1.0), |l| (l.height, l.bulk));
+        let place = Mat4::from_translation(at - Vec3::new(0.0, sink, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(z.yaw)) * Mat4::from_scale(Vec3::new(bulk, height, bulk));
+        if figure.parts.is_empty() {
+            figure.parts = model.meshes(looks.unwrap_or(&Looks::default()));
+        }
         figure.set(place, joints, points, !z.dead());
     }
 }
@@ -258,20 +276,26 @@ pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Soldier;
 
-/// Put a Shambler at `at`, facing `yaw`.
+/// Put a Shambler at `at`, facing `yaw`: anyone at all.
 pub fn spawn(world: &mut World, at: Vec3, yaw: f64) {
-    spawn_as(world, at, yaw, false);
+    spawn_as(world, at, yaw, Theme::Drifter);
 }
 
-/// Put a Shambler at `at`, facing `yaw`, a dead soldier if `soldier`.
-pub fn spawn_as(world: &mut World, at: Vec3, yaw: f64, soldier: bool) {
+/// Put a Shambler at `at`, facing `yaw`, one of `theme`'s dead (a
+/// [`Soldier`], carrying a soldier's things, if a soldier's).
+pub fn spawn_as(world: &mut World, at: Vec3, yaw: f64, theme: Theme) {
     let seed = {
         let mut h = world.resource_mut::<Horde>();
         h.seed = h.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         h.seed
     };
-    let mut e = world.spawn((Zombie::new(yaw, seed), Body::at(at), Figure::default(), Beat::new(seed % 64)));
-    if soldier {
+    let looks = Looks::roll(theme, &mut crate::loot::Dice(seed.rotate_left(16) ^ 0x5BD1_E995 | 1));
+    let mut zombie = Zombie::new(yaw, seed);
+    if looks.headless() {
+        zombie.hp *= looks::HEADLESS_TOUGHNESS;
+    }
+    let mut e = world.spawn((zombie, Body::at(at), Figure::of(&looks), looks, Beat::new(seed % 64)));
+    if theme == Theme::Soldier {
         e.insert(Soldier);
     }
 }

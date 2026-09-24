@@ -11,6 +11,7 @@ use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
 
 use super::Nav;
+use super::looks::Theme;
 use crate::loot::Dice;
 use crate::map::sites::{Kind, Site};
 
@@ -69,11 +70,7 @@ pub struct Director {
 
 /// How many of the dead are standing within `NEAR` of `eye`, flat.
 fn near(world: &mut World, eye: Vec3) -> usize {
-    world
-        .query::<(&super::Zombie, &crate::player::Body)>()
-        .iter(world)
-        .filter(|(z, b)| !z.dead() && Vec2::new(b.pos.x - eye.x, b.pos.z - eye.z).length() < NEAR)
-        .count()
+    world.query::<(&super::Zombie, &crate::player::Body)>().iter(world).filter(|(z, b)| !z.dead() && Vec2::new(b.pos.x - eye.x, b.pos.z - eye.z).length() < NEAR).count()
 }
 
 impl Director {
@@ -108,7 +105,7 @@ impl Director {
                     let local = Vec2::new((dice.unit() * 2.0 - 1.0) * site.plot.half.x, (dice.unit() * 2.0 - 1.0) * site.plot.half.y);
                     let p = site.plot.world(local);
                     if let Some(at) = stand(&mut dice, p.x, p.y, site.plot.height) {
-                        spots.push((at, dice.unit() < soldiers(site.kind)));
+                        spots.push((at, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
                         placed += 1;
                     }
                 }
@@ -123,14 +120,14 @@ impl Director {
                 if let Some(base) = ground(x, z)
                     && let Some(at) = stand(&mut dice, x, z, base)
                 {
-                    spots.push((at, false));
+                    spots.push((at, Theme::Drifter));
                 }
             }
             spots
         };
-        for (at, soldier) in spots {
+        for (at, theme) in spots {
             let yaw = dice.unit() * std::f64::consts::TAU;
-            super::spawn_as(world, at, yaw, soldier);
+            super::spawn_as(world, at, yaw, theme);
         }
         self.peak = near(world, eye);
         self.wait = TRICKLE;
@@ -146,7 +143,13 @@ impl Director {
         if close >= want || self.wait > 0.0 || super::alive(world) >= MOST {
             return;
         }
-        self.wait = if !super::spawn_unseen(world, eye, forward) { RETRY } else if self.surge { SURGE_TRICKLE } else { TRICKLE };
+        self.wait = if !super::spawn_unseen(world, eye, forward) {
+            RETRY
+        } else if self.surge {
+            SURGE_TRICKLE
+        } else {
+            TRICKLE
+        };
     }
 }
 

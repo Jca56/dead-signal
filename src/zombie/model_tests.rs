@@ -68,16 +68,17 @@ fn the_swipe_reaches_forward_and_death_lies_down() {
 }
 
 #[test]
-fn a_dead_soldier_is_the_same_rig_dressed_differently() {
-    let plain = shambler();
-    let soldier = Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler_soldier.glb")).expect("shambler_soldier.glb");
-    // The same bones in the same order: the one set of poses moves both.
-    let names = |g: &Gltf| g.skins[0].joints.iter().map(|&j| g.nodes[j].name.clone()).collect::<Vec<_>>();
-    assert_eq!(names(&plain), names(&soldier));
-    for bone in ["head", "hand.R", "foot.L"] {
-        assert!((at(&plain, "Walk", 0.3, bone) - at(&soldier, "Walk", 0.3, bone)).length() < 1e-4, "{bone} walks apart");
+fn every_part_rides_the_one_rig() {
+    // Put together from parts (`looks.rs`), all on the same skin: the one
+    // set of poses moves them all.
+    let g = shambler();
+    let parts: Vec<_> = g.nodes.iter().filter(|n| n.mesh.is_some()).collect();
+    assert!(parts.len() >= 40, "{} parts", parts.len());
+    for n in &parts {
+        assert_eq!(n.skin, Some(0), "{:?} is on a skin of its own", n.name);
     }
-    // More to it: the helmet, the vest, the pack.
-    let faces = |g: &Gltf| g.meshes.iter().map(|m| m.primitives.iter().map(|p| p.indices.len()).sum::<usize>()).sum::<usize>();
-    assert!(faces(&soldier) > faces(&plain));
+    let joints = g.skins[0].joints.len();
+    for p in g.meshes.iter().flat_map(|m| &m.primitives) {
+        assert!(p.joints.iter().flatten().all(|&j| usize::from(j) < joints));
+    }
 }

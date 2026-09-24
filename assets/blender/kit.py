@@ -39,9 +39,11 @@ class Builder:
         return v
 
     def face(self, verts, colour):
+        """A face of `colour`: RGB, or RGBA where the alpha says something
+        to the game (the dead's colour regions: `shambler_kit.py`)."""
         f = self.bm.faces.new(verts)
         for loop in f.loops:
-            loop[self.col] = (*colour, 1.0)
+            loop[self.col] = colour if len(colour) == 4 else (*colour, 1.0)
         return f
 
     def ring(self, centre, axis, a_dir, a, b, weights, spin=0.0):

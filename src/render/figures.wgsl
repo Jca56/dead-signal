@@ -1,6 +1,9 @@
 // Figures: skinned meshes out in the world (the dead), bent by their bones
 // and drawn like the rest of it, lit by the sky and taken by the fog. Every
 // figure's bones sit in one buffer; each instance says where its own start.
+// A face's colour alpha names the region it's painted in (skin, top,
+// bottoms, accent, under: 0, 0.2 ... 0.8), its RGB the shade of it, and the
+// figure's palette the region's colour; an alpha of 1 is a colour of its own.
 
 struct Globals {
     view_proj: mat4x4<f32>,
@@ -27,13 +30,19 @@ struct VertexIn {
     @location(3) bones: vec4<u32>,
     @location(4) weights: vec4<f32>,
     // The instance: its model matrix by columns; x: how much fog it takes;
-    // rgb tint; and where its bones start in `joints`.
+    // rgb tint; its palette, a colour a region; and where its bones start in
+    // `joints`.
     @location(5) m0: vec4<f32>,
     @location(6) m1: vec4<f32>,
     @location(7) m2: vec4<f32>,
     @location(8) m3: vec4<f32>,
     @location(9) look: vec4<f32>,
-    @location(10) first: u32,
+    @location(10) skin: vec4<f32>,
+    @location(11) top: vec4<f32>,
+    @location(12) bottom: vec4<f32>,
+    @location(13) accent: vec4<f32>,
+    @location(14) under: vec4<f32>,
+    @location(15) first: u32,
 };
 
 struct VertexOut {
@@ -56,7 +65,9 @@ fn vs(v: VertexIn) -> VertexOut {
     out.pos = g.view_proj * world;
     out.world = world.xyz;
     out.normal = normalize((model * vec4<f32>(v.normal, 0.0)).xyz);
-    out.color = v.color.rgb * v.look.yzw;
+    var palette = array<vec3<f32>, 6>(v.skin.rgb, v.top.rgb, v.bottom.rgb, v.accent.rgb, v.under.rgb, vec3<f32>(1.0));
+    let region = u32(clamp(round(v.color.a * 5.0), 0.0, 5.0));
+    out.color = v.color.rgb * palette[region] * v.look.yzw;
     out.fog_amount = v.look.x;
     return out;
 }

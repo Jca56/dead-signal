@@ -376,7 +376,7 @@ fn a_round_goes_on_past_the_ones_already_hit() {
     use super::figure::{Figure, Model};
     let mut world = World::new();
     let gltf = lntrn_model::Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb")).expect("shambler.glb");
-    world.insert_resource(Model::new(crate::assets::Rigged { mesh: crate::render::FigureMeshId::placeholder(), gltf, skin: 0 }).expect("the model"));
+    world.insert_resource(Model::new(crate::assets::Rigged { mesh: Vec::new(), gltf, skin: 0 }).expect("the model"));
     world.insert_resource(crate::world::Blend::default());
     world.spawn((Body::at(Vec3::new(0.0, 0.0, 10.0)), player::Player));
     // Three in a line down the range, 3 m apart.

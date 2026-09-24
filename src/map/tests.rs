@@ -155,7 +155,7 @@ fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     game.world.insert_resource(built.exits);
     game.world.insert_resource(crate::items::Meshes(crate::loot::ALL.iter().map(|&k| (k, crate::render::MeshId::placeholder())).collect()));
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb");
-    let rig = crate::assets::Rigged { mesh: crate::render::FigureMeshId::placeholder(), gltf: lntrn_model::Gltf::load(path).expect("shambler.glb"), skin: 0 };
+    let rig = crate::assets::Rigged { mesh: Vec::new(), gltf: lntrn_model::Gltf::load(path).expect("shambler.glb"), skin: 0 };
     game.world.insert_resource(crate::zombie::figure::Model::new(rig).expect("the model"));
     let (at, yaw) = built.map.spawn;
     game.spawn_player(at.x, at.z, yaw);

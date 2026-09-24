@@ -35,14 +35,7 @@ impl AppHost for DeadSignal {
         self.combat.init(&mut renderer);
         self.load_things(&mut renderer, gpu, images);
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
-            Ok(mut model) => {
-                // The soldiers: the same rig, dressed for it.
-                match assets::load_figure(&mut renderer, "shambler_soldier") {
-                    Ok(rig) => model.soldier_mesh = Some(rig.mesh),
-                    Err(e) => log_error!("shambler_soldier: {e}"),
-                }
-                self.game.world.insert_resource(model);
-            }
+            Ok(model) => self.game.world.insert_resource(model),
             Err(e) => log_error!("shambler: {e}"),
         }
         let mut rigs = std::collections::HashMap::new();
@@ -92,12 +85,11 @@ impl AppHost for DeadSignal {
             }
             self.combat.draw(renderer);
         }
-        if let Some((mesh, soldier)) = self.game.world.get_resource::<zombie::figure::Model>().map(|m| (m.mesh, m.soldier_mesh)) {
-            for (f, dressed) in self.game.world.query::<(&Figure, Option<&zombie::Soldier>)>().iter(&self.game.world) {
-                if !f.joints.is_empty() {
-                    let mesh = if dressed.is_some() { soldier.unwrap_or(mesh) } else { mesh };
-                    renderer.draw_figure(FigureDraw { mesh, model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3] });
-                }
+        let plain = zombie::looks::Looks::default().palette();
+        for (f, looks) in self.game.world.query::<(&Figure, Option<&zombie::looks::Looks>)>().iter(&self.game.world) {
+            if !f.joints.is_empty() {
+                let palette = looks.map_or(plain, |l| l.palette());
+                renderer.draw_figure(FigureDraw { parts: f.parts.clone(), model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3], palette });
             }
         }
         renderer.render(cx, &self.camera, &style::AIR, time);

@@ -6,6 +6,7 @@ use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Transform, Vec3};
 use lntrn_model::Gltf;
 
+use super::looks::{Arm, Looks};
 use crate::assets::Rigged;
 use crate::render::FigureMeshId;
 
@@ -48,12 +49,11 @@ const LIMBS: [(usize, usize, f64); 8] = [(3, 4, 0.07), (4, 5, 0.06), (6, 7, 0.07
 const HEAD_RADIUS: f64 = 0.14;
 const BODY_RADIUS: f64 = 0.21;
 
-/// The Shambler's model, shared by every one of them.
+/// The Shambler's model, shared by every one of them: every part any of
+/// them is put together from, on the one rig.
 #[derive(Resource)]
 pub struct Model {
-    pub mesh: FigureMeshId,
-    /// A dead soldier's: the same rig in fatigues and gear, if it loaded.
-    pub soldier_mesh: Option<FigureMeshId>,
+    parts: Vec<(String, FigureMeshId)>,
     gltf: Gltf,
     skin: usize,
     /// Where each of [`BONES`] is among the file's nodes.
@@ -61,12 +61,17 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(rig: Rigged<FigureMeshId>) -> Result<Self, String> {
+    pub fn new(rig: Rigged<Vec<(String, FigureMeshId)>>) -> Result<Self, String> {
         let mut bones = [0; 15];
         for (slot, name) in bones.iter_mut().zip(BONES) {
             *slot = rig.gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).ok_or_else(|| format!("shambler.glb: no bone {name}"))?;
         }
-        Ok(Self { mesh: rig.mesh, soldier_mesh: None, gltf: rig.gltf, skin: rig.skin, bones })
+        Ok(Self { parts: rig.mesh, gltf: rig.gltf, skin: rig.skin, bones })
+    }
+
+    /// The meshes of the parts `looks` is put together from.
+    pub fn meshes(&self, looks: &Looks) -> Vec<FigureMeshId> {
+        looks.parts().iter().filter_map(|want| self.parts.iter().find(|(name, _)| name == want).map(|&(_, mesh)| mesh)).collect()
     }
 
     /// Pose it: `clip` at `t` seconds. The skinning matrices, and where the
@@ -87,6 +92,11 @@ impl Model {
 /// A Shambler as drawn and hit this frame.
 #[derive(Component, Clone, Debug, Default)]
 pub struct Figure {
+    /// Its parts' meshes (found once it's first posed).
+    pub parts: Vec<FigureMeshId>,
+    /// No head to hit, and which of [`LIMBS`] are gone.
+    headless: bool,
+    lost: [bool; 8],
     /// Where it stands and faces (and how far it has sunk).
     pub model: Mat4,
     pub joints: Vec<Mat4>,
@@ -97,6 +107,17 @@ pub struct Figure {
 }
 
 impl Figure {
+    /// One that looks as `looks` says: nothing to hit where it has nothing.
+    pub fn of(looks: &Looks) -> Self {
+        let mut lost = [false; 8];
+        // Its arms, left then right: the upper arm and the forearm.
+        for (side, arm) in looks.arms.iter().enumerate() {
+            lost[side * 2] = *arm == Arm::Shoulder;
+            lost[side * 2 + 1] = *arm != Arm::Whole;
+        }
+        Self { headless: looks.headless(), lost, ..Self::default() }
+    }
+
     pub fn set(&mut self, model: Mat4, joints: Vec<Mat4>, local: [Vec3; 15], solid: bool) {
         self.points = local.map(|p| model.transform_point(p));
         self.model = model;
@@ -118,7 +139,7 @@ impl Figure {
         let p = &self.points;
         // The head: a ball over the head bone, up along it.
         let crown = p[HEAD] + (p[HEAD] - p[NECK]).normalize() * 0.08;
-        let mut best = ray_capsule(from, dir, crown, crown, HEAD_RADIUS).filter(|&t| t <= max).map(|t| (t, true));
+        let mut best = if self.headless { None } else { ray_capsule(from, dir, crown, crown, HEAD_RADIUS).filter(|&t| t <= max).map(|t| (t, true)) };
         let mut take = |hit: Option<f64>| {
             if let Some(t) = hit.filter(|&t| t <= max)
                 && best.is_none_or(|(b, _)| t < b)
@@ -127,7 +148,7 @@ impl Figure {
             }
         };
         take(ray_capsule(from, dir, p[HIPS], p[NECK], BODY_RADIUS));
-        for (a, b, r) in LIMBS {
+        for (&(a, b, r), _) in LIMBS.iter().zip(self.lost).filter(|(_, lost)| !lost) {
             take(ray_capsule(from, dir, p[a], p[b], r));
         }
         best
@@ -177,7 +198,7 @@ mod tests {
         let gltf = Gltf::load(path).expect("shambler.glb");
         let skin = 0;
         let bones = BONES.map(|name| gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).unwrap());
-        let model = Model { mesh: FigureMeshId::placeholder(), soldier_mesh: None, gltf, skin, bones };
+        let model = Model { parts: Vec::new(), gltf, skin, bones };
         let (joints, local) = model.pose(Clip::Idle, 0.0);
         let mut f = Figure::default();
         // Standing 10 m ahead of the eye, facing it (a yaw of pi).
@@ -191,5 +212,33 @@ mod tests {
         assert!(f.ray(Vec3::new(1.2, 1.2, 0.0), Vec3::new(0.0, 0.0, -1.0), 50.0).is_none(), "a shot past it misses");
         f.solid = false;
         assert!(f.ray(Vec3::new(0.0, 1.2, 0.0), Vec3::new(0.0, 0.0, -1.0), 50.0).is_none(), "the dead are not hit");
+    }
+
+    #[test]
+    fn what_is_missing_cannot_be_hit() {
+        use crate::zombie::looks::Head;
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb");
+        let gltf = Gltf::load(path).expect("shambler.glb");
+        let bones = BONES.map(|name| gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).unwrap());
+        let model = Model { parts: Vec::new(), gltf, skin: 0, bones };
+        let (joints, local) = model.pose(Clip::Idle, 0.0);
+        let at = Mat4::from_translation(Vec3::new(0.0, 0.0, -10.0)) * Mat4::from_quat(lntrn_math::Quat::from_rotation_y(std::f64::consts::PI));
+        let figure = |looks: &Looks| {
+            let mut f = Figure::of(looks);
+            f.set(at, joints.clone(), local, true);
+            f
+        };
+        // No head: a shot at the head is no headshot.
+        let whole = figure(&Looks::default());
+        let head_y = whole.points[HEAD].y + 0.08;
+        let at_head = |f: &Figure| f.ray(Vec3::new(0.0, head_y, 0.0), Vec3::new(0.0, 0.0, -1.0), 50.0);
+        assert!(at_head(&whole).is_some_and(|(_, head)| head));
+        assert!(at_head(&figure(&Looks { head: Head::Gone, ..Looks::default() })).is_none_or(|(_, head)| !head));
+        // No right arm: a shot straight down through its hand finds nothing.
+        let hand = whole.points[8];
+        let down = |f: &Figure| f.ray(hand + Vec3::new(0.0, 3.0, 0.0), Vec3::new(0.0, -1.0, 0.0), 10.0);
+        assert!(down(&whole).is_some());
+        assert!(down(&figure(&Looks { arms: [Arm::Whole, Arm::Shoulder], ..Looks::default() })).is_none());
+        assert!(down(&figure(&Looks { arms: [Arm::Shoulder, Arm::Whole], ..Looks::default() })).is_some(), "the other arm's still there");
     }
 }
