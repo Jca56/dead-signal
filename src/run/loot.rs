@@ -226,7 +226,7 @@ impl Run {
     pub(super) fn close_bag(&mut self, game: &mut Game, open: Open) {
         let mut grid = open.container.and_then(|e| game.world.get_mut::<Container>(e).map(|mut c| std::mem::replace(&mut c.grid, Grid::new(0, 0))));
         {
-            let mut shelves = Shelves { bag: &mut self.bag, loot: grid.as_mut().map(|g| ("", g)) };
+            let mut shelves = Shelves { bag: &mut self.bag, loot: grid.as_mut().map(|g| ("", g)), sell: None };
             self.bag_ui.let_go(&mut shelves);
         }
         if let (Some(e), Some(g)) = (open.container, grid)
@@ -255,7 +255,7 @@ impl Run {
             None => ("", None),
         };
         let moved = {
-            let mut shelves = Shelves { bag: &mut self.bag, loot: grid.as_mut().map(|g| (name, g)) };
+            let mut shelves = Shelves { bag: &mut self.bag, loot: grid.as_mut().map(|g| (name, g)), sell: None };
             self.bag_ui.frame(ui, &mut shelves, icons)
         };
         if let (Some(e), Some(g)) = (open.container, grid)

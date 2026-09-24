@@ -1,6 +1,6 @@
-//! The hideout, between runs, in three tabs: the stash on the left and the
-//! bag to take into the next run on the right, things dragged (or
-//! right-clicked) between them; trading (`trader.rs`); and the perks
+//! The hideout, between runs, in three tabs: the bag to take into the next
+//! run (and its weapons) on the left and the stash on the right, things
+//! dragged (or right-clicked) between them; trading (`trader.rs`); and the perks
 //! (`perks.rs`). The player's level and money over it all, and the way on
 //! (back to the title, or straight into a run with what's packed).
 
@@ -12,7 +12,7 @@ use lntrn_text::TextStyle;
 use lntrn_ui::{Key, Sense, Ui};
 
 use crate::bag_ui::{BagUi, Icons, Mode, Shelves};
-use crate::loot::bag::Bag;
+use crate::loot::grid::Grid;
 use crate::profile::Profile;
 use crate::style;
 
@@ -32,9 +32,9 @@ enum Tab {
 
 pub struct Hideout {
     grids: BagUi,
-    /// Trading: the stash and what's to be sold, and that.
+    /// Trading: the bag, the stash and what's to be sold, and that.
     trade_grids: BagUi,
-    sell: Bag,
+    sell: Grid,
     tab: Tab,
     /// A word flashed at the top ("MAKE ROOM IN THE STASH"), and till when.
     note: Option<(String, f64)>,
@@ -50,9 +50,9 @@ impl Hideout {
     /// Put down whatever is held, and put back what was to be sold
     /// (leaving the page, or the hideout).
     pub fn let_go(&mut self, profile: &mut Profile) {
-        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) };
+        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None };
         self.grids.let_go(&mut shelves);
-        let mut shelves = Shelves { bag: &mut self.sell, loot: Some(("STASH", &mut profile.stash)) };
+        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(&mut self.sell) };
         self.trade_grids.let_go(&mut shelves);
         trader::put_back(profile, &mut self.sell);
     }
@@ -119,7 +119,7 @@ impl Hideout {
         let mut leave = None;
         match self.tab {
             Tab::Stash => {
-                let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)) };
+                let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None };
                 self.grids.frame(ui, &mut shelves, icons);
             }
             Tab::Trader => {

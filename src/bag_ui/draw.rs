@@ -6,7 +6,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
-use super::{BagUi, Icons, Landing, Mode, Shelves, TITLE, Which, cell_under, corner_cell, footprint, landing, slots};
+use super::{BagUi, Icons, Landing, Shelves, TITLE, Which, cell_under, corner_cell, footprint, landing, slots};
 use crate::loot::Stack;
 use crate::loot::bag::Slot;
 use crate::loot::grid::Item;
@@ -15,15 +15,14 @@ use crate::style;
 impl BagUi {
     pub(super) fn draw(&self, ui: &mut Ui, shelves: &mut Shelves, icons: &Icons, places: &[(Which, Rect)], cell: f64) {
         let s = ui.m.scale;
-        let trade = self.mode == Mode::Trade;
         let screen = ui.clip();
         ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, 0.45));
         let title = TextStyle::new((TITLE * s) as f32).bold().family(style::FONT);
         let loot_name = shelves.loot.as_ref().map(|(name, _)| *name);
         for &(which, r) in places {
             let name = match which {
-                Which::Pack if trade => "SELL",
                 Which::Pack => "BACKPACK",
+                Which::Sell => "SELL",
                 Which::Pockets => "POCKETS",
                 Which::Loot => loot_name.unwrap_or(""),
                 Which::Slot(slot) => {
@@ -50,16 +49,11 @@ impl BagUi {
                 tile(ui, icons, *item, at, cell, 1.0);
             }
         }
-        // The value of what's carried, under the pack; trading, what's to
-        // be sold would fetch.
+        // The value of what's carried, under the pack (trading, the sale's
+        // button says what's to be sold would fetch).
         if let Some(&(_, pack)) = places.iter().find(|(w, _)| *w == Which::Pack) {
             let style = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
-            let text = if trade {
-                let paid: u32 = shelves.bag.pack.items.iter().map(|i| crate::profile::trade::sell_price(i.stack)).sum();
-                format!("SPARKS PAYS  ${paid}")
-            } else {
-                format!("VALUE  ${}", shelves.bag.value())
-            };
+            let text = format!("VALUE  ${}", shelves.bag.value());
             let w = ui.measure(&text, &style);
             let pockets_top = places.iter().find(|(w, _)| *w == Which::Pockets).map_or(pack.max.y, |(_, r)| r.min.y);
             ui.text_at(&text, &style, Vec2::new(pack.max.x - w, pockets_top), w + 10.0, style::BONE);

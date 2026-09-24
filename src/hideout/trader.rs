@@ -1,31 +1,29 @@
 //! The trader's page: Sparks, on the radio. Down the left, what they have
 //! (each a row: its picture, what and how many, how many are left, the
-//! price, a button to buy it) and a bigger stash; on the right the stash,
-//! and beside it what's to be sold, dragged (or right-clicked) in from it,
-//! and a button to sell the lot.
+//! price, a button to buy it) and a bigger stash; on the right the bag, what's
+//! to be sold (dragged in from the bag or the stash, or right-clicked), and
+//! the stash; and a button to sell the lot.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
 use super::perks::pressed;
-use crate::bag_ui::{BagUi, Icons, OFFERS_W, Shelves, Which};
-use crate::loot::bag::Bag;
+use crate::bag_ui::{BagUi, Icons, OFFERS_W, SELL_H, SELL_W, Shelves, Which};
+use crate::loot::grid::Grid;
 use crate::profile::Profile;
 use crate::profile::trade::sell_price;
 use crate::style;
 
-/// What's to be sold: a grid the size of this, cells across and down.
-pub const SELL_BOX: (u8, u8) = (6, 6);
 /// A row of the offers, logical pixels high, and the gap between rows.
 const ROW: f64 = 92.0;
 const ROW_GAP: f64 = 10.0;
 /// Money's colour.
 pub const GOLD: Color = Color::rgb(0.93, 0.76, 0.30);
 
-/// An empty box of things to be sold (a bag with nowhere but its pack).
-pub fn sell_box() -> Bag {
-    Bag::sized(SELL_BOX, (0, 0))
+/// An empty box of things to be sold.
+pub fn sell_box() -> Grid {
+    Grid::new(SELL_W, SELL_H)
 }
 
 /// `n` dollars, the thousands marked: "$12,345".
@@ -43,9 +41,9 @@ pub fn dollars(n: u32) -> String {
 
 /// Put what's in the box back in the stash (leaving the page); what won't
 /// go back (the stash filled since) is sold. What that fetched.
-pub fn put_back(profile: &mut Profile, sell: &mut Bag) -> u32 {
-    let mut unsold = crate::loot::grid::Grid::new(SELL_BOX.0, SELL_BOX.1);
-    for item in sell.pack.items.drain(..) {
+pub fn put_back(profile: &mut Profile, sell: &mut Grid) -> u32 {
+    let mut unsold = sell_box();
+    for item in sell.items.drain(..) {
         let rest = profile.stash.top_up(item.stack);
         let rest = profile.stash.place(rest);
         if rest.count > 0 {
@@ -57,7 +55,7 @@ pub fn put_back(profile: &mut Profile, sell: &mut Bag) -> u32 {
 
 /// A frame of the page, `active` unless a fade is running. A word to
 /// flash, if something was done or couldn't be.
-pub fn page(ui: &mut Ui, profile: &mut Profile, sell: &mut Bag, grids: &mut BagUi, icons: &Icons, active: bool) -> Option<String> {
+pub fn page(ui: &mut Ui, profile: &mut Profile, sell: &mut Grid, grids: &mut BagUi, icons: &Icons, active: bool) -> Option<String> {
     let s = ui.m.scale;
     let screen = ui.clip();
     let name = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
@@ -133,17 +131,17 @@ pub fn page(ui: &mut Ui, profile: &mut Profile, sell: &mut Bag, grids: &mut BagU
         }
     }
 
-    // The stash and what's to be sold, and the sale.
-    let mut shelves = Shelves { bag: sell, loot: Some(("STASH", &mut profile.stash)) };
-    let sell_at = grids.rect_of(ui, &shelves, Which::Pack);
+    // The bag, what's to be sold and the stash, and the sale.
+    let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(sell) };
+    let sell_at = grids.rect_of(ui, &shelves, Which::Sell);
     grids.frame(ui, &mut shelves, icons);
     if let Some(r) = sell_at {
-        let paid: u32 = sell.pack.items.iter().map(|i| sell_price(i.stack)).sum();
+        let paid: u32 = sell.items.iter().map(|i| sell_price(i.stack)).sum();
         let label = format!("SELL FOR  {}", dollars(paid));
         let w = ui.measure(&label, &button) + 36.0 * s;
         let b = Rect::from_min_size(Vec2::new(r.max.x - w, r.max.y + 56.0 * s), Vec2::new(w, bh));
-        if pressed(ui, "sell", b, &label, &button, !sell.pack.items.is_empty(), true, active) {
-            let got = profile.sell(&mut sell.pack);
+        if pressed(ui, "sell", b, &label, &button, !sell.items.is_empty(), true, active) {
+            let got = profile.sell(sell);
             note = Some(format!("SOLD FOR {}", dollars(got)));
         }
     }
@@ -167,13 +165,13 @@ mod tests {
     fn leaving_puts_whats_unsold_back_and_sells_what_wont_fit() {
         let mut p = Profile::new_player();
         let mut sell = sell_box();
-        sell.pack.place(Stack::one(Kind::Watch));
+        sell.place(Stack::one(Kind::Watch));
         assert_eq!(put_back(&mut p, &mut sell), 0);
         assert_eq!(p.stash.count(Kind::Watch), 1);
         // A full stash: the watch can't go back, so it's sold.
         while p.stash.place(Stack::one(Kind::Ring)).count == 0 {}
-        sell.pack.place(Stack::one(Kind::Watch));
+        sell.place(Stack::one(Kind::Watch));
         assert_eq!(put_back(&mut p, &mut sell), sell_price(Stack::one(Kind::Watch)));
-        assert!(sell.pack.items.is_empty());
+        assert!(sell.items.is_empty());
     }
 }

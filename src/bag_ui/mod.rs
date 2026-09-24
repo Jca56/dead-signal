@@ -3,7 +3,8 @@
 //! whatever is being searched. Things are dragged from place to place (R
 //! turns what's held), right-clicked straight across (between the bag and
 //! what's searched, or pack and pockets; a weapon into its empty slot, or
-//! out of it), or dragged out onto the ground.
+//! out of it), or dragged out onto the ground. Trading, there's a box of
+//! things to be sold too, between the bag and the stash.
 
 mod draw;
 mod slots;
@@ -32,14 +33,18 @@ pub enum Which {
     Pack,
     Pockets,
     Loot,
+    /// Trading: what's to be sold.
+    Sell,
     Slot(Slot),
 }
 
-/// Where things are kept while the screen is up: the bag, and what's
-/// being searched (its name and grid), if anything.
+/// Where things are kept while the screen is up: the bag, what's being
+/// searched (its name and grid), if anything, and trading, what's to be
+/// sold.
 pub struct Shelves<'a> {
     pub bag: &'a mut Bag,
     pub loot: Option<(&'static str, &'a mut Grid)>,
+    pub sell: Option<&'a mut Grid>,
 }
 
 impl Shelves<'_> {
@@ -48,6 +53,7 @@ impl Shelves<'_> {
             Which::Pack => Some(&mut self.bag.pack),
             Which::Pockets => Some(&mut self.bag.pockets),
             Which::Loot => self.loot.as_mut().map(|(_, g)| &mut **g),
+            Which::Sell => self.sell.as_deref_mut(),
             Which::Slot(_) => None,
         }
     }
@@ -77,11 +83,11 @@ pub enum Mode {
     /// In a run: the bag, and what's searched.
     #[default]
     Run,
-    /// In the hideout: the stash (the "loot" grid) on the left, the bag,
-    /// and nothing thrown on any ground.
+    /// In the hideout: the stash (the "loot" grid) where what's searched
+    /// is in a run, and nothing thrown on any ground.
     Hideout,
-    /// Trading: the stash, and beside it what's to be sold (the "pack"),
-    /// right of the trader's offers.
+    /// Trading: right of the trader's offers, the bag, what's to be sold,
+    /// and the stash.
     Trade,
 }
 
@@ -170,8 +176,11 @@ fn release(shelves: &mut Shelves, h: Held, which: Which, at: (i32, i32), over: (
 const HIDEOUT_CELL: f64 = 70.0;
 /// Room kept under the grids for the way on, logical pixels.
 const BELOW: f64 = 180.0;
-/// Trading: how wide the trader's offers are, at the left.
+/// Trading: how wide the trader's offers are, at the left, and the box of
+/// what's to be sold, cells across and down.
 pub const OFFERS_W: f64 = 660.0;
+pub const SELL_W: u8 = 6;
+pub const SELL_H: u8 = 6;
 
 impl BagUi {
     /// The screen as the hideout, or trading, has it.
@@ -180,8 +189,9 @@ impl BagUi {
     }
 
     /// A cell's side on screen, what's searched (the stash) `loot` big:
-    /// in the hideout, small enough for the stash to fit above the way on.
-    fn cell(&self, ui: &Ui, loot: Option<(u8, u8)>) -> f64 {
+    /// in the hideout, small enough for the stash to fit above the way on
+    /// (and trading, for everything to fit beside the offers).
+    fn cell(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>) -> f64 {
         let s = ui.m.scale;
         if self.mode == Mode::Run {
             return CELL * s;
@@ -189,45 +199,51 @@ impl BagUi {
         let screen = ui.clip();
         let top = screen.height() * 0.17 + TITLE * s * 1.6;
         let rows = f64::from(loot.map_or(1, |(_, h)| h.max(1)));
-        (HIDEOUT_CELL * s).min((screen.height() - top - BELOW * s) / rows)
+        let cell = (HIDEOUT_CELL * s).min((screen.height() - top - BELOW * s) / rows);
+        if self.mode != Mode::Trade {
+            return cell;
+        }
+        let (x0, x1) = self.trade_span(ui);
+        let cols = f64::from(bag.pack.w.max(bag.pockets.w) + SELL_W + loot.map_or(0, |(w, _)| w));
+        cell.min((x1 - x0 - 2.0 * GAP * s) / cols)
     }
 
-    /// The grids' and slots' places on screen: which, and its rect. In a
-    /// run the slots on the left, then the bag, what's searched on the
-    /// right; in the hideout the stash on the left, then the bag, the slots
-    /// on the right.
+    /// Trading: what the offers leave, left to right.
+    fn trade_span(&self, ui: &Ui) -> (f64, f64) {
+        let (s, screen) = (ui.m.scale, ui.clip());
+        (screen.min.x + (80.0 + OFFERS_W) * s + GAP * s, screen.max.x - 80.0 * s)
+    }
+
+    /// The grids' and slots' places on screen: which, and its rect. The
+    /// slots on the left, then the bag (the pack over the pockets), what's
+    /// searched (or the stash) on the right. Trading, right of the offers:
+    /// the bag, what's to be sold, the stash (and no slots).
     fn layout(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>, cell: f64) -> Vec<(Which, Rect)> {
         let s = ui.m.scale;
         let screen = ui.clip();
         let (gap, title) = (GAP * s, TITLE * s * 1.6);
         let size = |(w, h): (u8, u8)| Vec2::new(f64::from(w) * cell, f64::from(h) * cell);
-        if self.mode == Mode::Trade {
-            // The stash and what's to be sold, side by side, in the middle
-            // of what the offers leave.
-            let (x0, x1) = (screen.min.x + (80.0 + OFFERS_W) * s + gap, screen.max.x - 80.0 * s);
-            let stash = size(loot.unwrap_or((0, 0)));
-            let sell = size((bag.pack.w, bag.pack.h));
-            let left = (x0 + x1) * 0.5 - (stash.x + gap + sell.x) * 0.5;
-            let top = screen.min.y + screen.height() * 0.17 + title;
-            return vec![(Which::Loot, Rect::from_min_size(Vec2::new(left, top), stash)), (Which::Pack, Rect::from_min_size(Vec2::new(left + stash.x + gap, top), sell))];
-        }
         let (pack_dims, pocket_dims) = ((bag.pack.w, bag.pack.h), (bag.pockets.w, bag.pockets.h));
-        let pack_w = f64::from(pack_dims.0) * cell;
+        let bag_w = f64::from(pack_dims.0.max(pocket_dims.0)) * cell;
         let loot_w = loot.map_or(0.0, |(w, _)| gap + f64::from(w) * cell);
-        let slots_w = slots::WIDTH * cell + gap;
-        let left = screen.center().x - (slots_w + pack_w + loot_w) * 0.5;
         let top = screen.min.y + screen.height() * 0.17 + title;
-        let hideout = self.mode == Mode::Hideout;
-        let bag_x = if hideout { left + loot_w } else { left + slots_w };
-        let slots_x = if hideout { bag_x + pack_w + gap } else { left };
+        let trade = self.mode == Mode::Trade;
+        let (before, after) = if trade { (0.0, gap + f64::from(SELL_W) * cell) } else { (slots::WIDTH * cell + gap, 0.0) };
+        let centre = if trade { (self.trade_span(ui).0 + self.trade_span(ui).1) * 0.5 } else { screen.center().x };
+        let left = centre - (before + bag_w + after + loot_w) * 0.5;
+        let bag_x = left + before;
         let pack = Rect::from_min_size(Vec2::new(bag_x, top), size(pack_dims));
         let pockets = Rect::from_min_size(Vec2::new(bag_x, pack.max.y + title + gap * 0.5), size(pocket_dims));
         let mut out = vec![(Which::Pack, pack), (Which::Pockets, pockets)];
-        if let Some(dims) = loot {
-            let x = if hideout { left } else { pack.max.x + gap };
-            out.push((Which::Loot, Rect::from_min_size(Vec2::new(x, top), size(dims))));
+        if trade {
+            out.push((Which::Sell, Rect::from_min_size(Vec2::new(bag_x + bag_w + gap, top), size((SELL_W, SELL_H)))));
         }
-        out.extend(slots::layout(Vec2::new(slots_x, top), cell, s));
+        if let Some(dims) = loot {
+            out.push((Which::Loot, Rect::from_min_size(Vec2::new(bag_x + bag_w + after + gap, top), size(dims))));
+        }
+        if !trade {
+            out.extend(slots::layout(Vec2::new(left, top), cell, s));
+        }
         out
     }
 }
@@ -236,7 +252,7 @@ impl BagUi {
     /// Where `which` is on screen, as the next frame will lay it out.
     pub fn rect_of(&self, ui: &Ui, shelves: &Shelves, which: Which) -> Option<Rect> {
         let loot = shelves.loot.as_ref().map(|(_, g)| (g.w, g.h));
-        self.layout(ui, shelves.bag, loot, self.cell(ui, loot)).into_iter().find(|(w, _)| *w == which).map(|(_, r)| r)
+        self.layout(ui, shelves.bag, loot, self.cell(ui, shelves.bag, loot)).into_iter().find(|(w, _)| *w == which).map(|(_, r)| r)
     }
 
     /// Whatever is held goes back where it came from (the screen closing).
@@ -250,7 +266,7 @@ impl BagUi {
     /// taken.
     pub fn frame(&mut self, ui: &mut Ui, shelves: &mut Shelves, icons: &Icons) -> Moved {
         let loot = shelves.loot.as_ref().map(|(_, g)| (g.w, g.h));
-        let cell = self.cell(ui, loot);
+        let cell = self.cell(ui, shelves.bag, loot);
         let mut moved = Moved::default();
         let places = self.layout(ui, shelves.bag, loot, cell);
         let p = ui.state.pointer;
@@ -276,16 +292,11 @@ impl BagUi {
                     self.held = Some(Held { item, from: which, was: item, grab: p - at });
                 } else if ui.state.right_pressed
                     && self.mode == Mode::Trade
-                    && let Some((Which::Loot, i)) = under_item
+                    && let Some((which, i)) = under_item
                 {
-                    // Trading, straight across into what's to be sold (never
-                    // a weapon slot: there's none).
-                    let item = shelves.take(Which::Loot, i).expect("under the pointer");
-                    let rest = shelves.bag.pack.top_up(item.stack);
-                    let rest = shelves.bag.pack.place(rest);
-                    if rest.count > 0 {
-                        put_back(shelves, Held { item: Item { stack: rest, ..item }, from: Which::Loot, was: item, grab: Vec2::ZERO });
-                    }
+                    // Trading, straight across into what's to be sold, or out
+                    // of it back to the stash.
+                    sell_move(shelves, which, i);
                 } else if ui.state.right_pressed
                     && let Some((which, i)) = under_item
                 {
@@ -375,6 +386,23 @@ fn quick_move(shelves: &mut Shelves, from: Which, index: usize) -> u32 {
         put_back(shelves, Held { item: Item { stack: left, ..item }, from, was: item, grab: Vec2::ZERO });
     }
     item.stack.count - left.count
+}
+
+/// Trading: send the thing at `index` in `from` into what's to be sold, or
+/// (from there) back to the stash. What won't fit stays.
+fn sell_move(shelves: &mut Shelves, from: Which, index: usize) {
+    let Some(item) = shelves.take(from, index) else { return };
+    let to = if from == Which::Sell { Which::Loot } else { Which::Sell };
+    let rest = match shelves.grid(to) {
+        Some(g) => {
+            let rest = g.top_up(item.stack);
+            g.place(rest)
+        }
+        None => item.stack,
+    };
+    if rest.count > 0 {
+        put_back(shelves, Held { item: Item { stack: rest, ..item }, from, was: item, grab: Vec2::ZERO });
+    }
 }
 
 /// `h` back where it was; failing that, anywhere it goes in the bag.
