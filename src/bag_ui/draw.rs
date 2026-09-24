@@ -6,7 +6,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
-use super::{BagUi, Icons, Landing, Shelves, TITLE, Which, cell_under, corner_cell, footprint, landing, slots};
+use super::{BagUi, Icons, Landing, Shelves, TITLE, Which, cell_under, corner_cell, footprint, landing, slots, worn};
 use crate::loot::Stack;
 use crate::loot::bag::Slot;
 use crate::loot::grid::Item;
@@ -21,9 +21,21 @@ impl BagUi {
         let loot_name = shelves.loot.as_ref().map(|(name, _)| *name);
         for &(which, r) in places {
             let name = match which {
+                Which::Pack if shelves.bag.pack.w == 0 => "NO BACKPACK",
                 Which::Pack => "BACKPACK",
                 Which::Sell => "SELL",
                 Which::Pockets => "POCKETS",
+                Which::Rig if shelves.bag.rig.w == 0 => continue,
+                Which::Rig => "RIG",
+                Which::Belt if shelves.bag.belt.w == 0 => continue,
+                Which::Belt => "BELT · AMMO",
+                Which::Worn(wear) => {
+                    if wear == crate::loot::gear::Wear::ALL[0] {
+                        ui.text_at("WORN", &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, style::BONE);
+                    }
+                    worn::draw(ui, icons, wear, shelves.bag.worn(wear), r, cell);
+                    continue;
+                }
                 Which::Loot => loot_name.unwrap_or(""),
                 Which::Slot(slot) => {
                     // The column's name over the first.
@@ -36,7 +48,9 @@ impl BagUi {
                 }
             };
             ui.text_at(name, &title, Vec2::new(r.min.x, r.min.y - f64::from(title.line_height()) - 10.0 * s), r.width() * 2.0, if which == Which::Loot { style::SIGNAL } else { style::BONE });
-            ui.draw.rect(r.expand(6.0 * s), Color::rgba(0.05, 0.05, 0.05, 0.85));
+            if r.width() > 0.0 {
+                ui.draw.rect(r.expand(6.0 * s), Color::rgba(0.05, 0.05, 0.05, 0.85));
+            }
             let Some(g) = shelves.grid(which) else { continue };
             for y in 0..g.h {
                 for x in 0..g.w {
@@ -67,11 +81,16 @@ impl BagUi {
                 if let Some(&(Which::Slot(slot), r)) = places.iter().find(|(_, r)| r.contains(p)) {
                     let ok = slots::takes(h.item.stack, slot, shelves.bag.slot(slot));
                     ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
+                } else if let Some(&(Which::Worn(wear), r)) = places.iter().find(|(_, r)| r.contains(p)) {
+                    let ok = worn::takes(h.item.stack, wear);
+                    ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
                 } else if let Some(&(which, r)) = places.iter().find(|(_, r)| r.contains(p))
                     && let Some(g) = shelves.grid(which)
                 {
                     let (x, y) = corner_cell(r, p - h.grab, cell);
+                    let fits = which != Which::Belt || h.item.stack.kind.is_ammo();
                     let (spot, ok) = match landing(g, h.item, (x, y), cell_under(r, p, cell)) {
+                        _ if !fits => (footprint(r, x, y, h.item.shape(), cell), false),
                         Landing::Put(x, y) => (footprint(r, x, y, h.item.shape(), cell), true),
                         Landing::Merge(i, _) | Landing::Load(i, _) => (footprint(r, i32::from(g.items[i].x), i32::from(g.items[i].y), g.items[i].shape(), cell), true),
                         Landing::Blocked => (footprint(r, x, y, h.item.shape(), cell), false),
@@ -83,6 +102,7 @@ impl BagUi {
             None => {
                 let hovered = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
                     Which::Slot(slot) => shelves.bag.slot(slot),
+                    Which::Worn(wear) => shelves.bag.worn(wear),
                     _ => {
                         let (cx, cy) = cell_under(r, p, cell);
                         shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8).map(|i| g.items[i].stack))
@@ -108,9 +128,9 @@ pub(super) fn tile(ui: &mut Ui, icons: &Icons, item: Item, at: Vec2, cell: f64, 
     if let Some(&(flat, turned)) = icons.0.get(&item.stack.kind) {
         ui.draw.image(r.shrink(4.0 * s), if item.turned { turned } else { flat }, 0.0, Color::rgba(1.0, 1.0, 1.0, alpha));
     }
-    // How many; for a gun, the rounds in it.
-    let text = match item.stack.magazine() {
-        Some(mag) => Some(format!("{}/{mag}", item.stack.loaded)),
+    // How many; for a gun, the rounds in it; for armor, its points left.
+    let text = match item.stack.most() {
+        Some(most) => Some(format!("{}/{most}", item.stack.loaded)),
         None => (item.stack.count > 1).then(|| item.stack.count.to_string()),
     };
     if let Some(text) = text {
@@ -135,6 +155,21 @@ pub(super) fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2) {
     if let Some(slot) = Slot::of(stack.kind) {
         let rounds = stack.magazine().map_or(String::new(), |mag| format!("  ·  {}/{mag} ROUNDS", stack.loaded));
         lines.push((format!("{}{rounds}", slot.name()), &line, style::BONE));
+    }
+    // What's worn: where, its armor, its pockets or grid, how heavy.
+    if let Some(g) = stack.kind.gear() {
+        let mut bits = vec![format!("WORN ON {}", g.wear.name())];
+        if g.armor > 0 {
+            bits.push(format!("ARMOR {}/{}", stack.loaded, g.armor));
+        }
+        if let Some((w, h)) = g.grid {
+            bits.push(if g.ammo_only { format!("{w}×{h} FOR AMMO") } else { format!("{w}×{h} GRID") });
+        }
+        if g.pockets != (0, 0) {
+            bits.push("BIGGER POCKETS".to_string());
+        }
+        bits.push(["LIGHT", "MEDIUM", "HEAVY"][usize::from(g.weight.min(2))].to_string());
+        lines.push((bits.join("  ·  "), &line, style::BONE));
     }
     lines.push((worth, &line, style::BONE));
     let pad = 14.0 * s;

@@ -35,14 +35,16 @@ pub struct Profile {
 }
 
 impl Profile {
-    /// Someone new: a loaded pistol in hand, and a little in the stash to
-    /// start with.
+    /// Someone new: a loaded pistol in hand, a daypack on, and a little in
+    /// the stash to start with.
     pub fn new_player() -> Self {
         let mut stash = Grid::new(STASH.0, STASH.1);
         for stack in [Stack::new(Kind::Rounds, 60), Stack::new(Kind::Bandage, 2), Stack::one(Kind::Medkit)] {
             stash.place(stack);
         }
-        let mut loadout = Bag::empty();
+        let mut loadout = Bag::sized((0, 0), (0, 0));
+        *loadout.worn_mut(crate::loot::gear::Wear::Back) = Some(Stack::one(Kind::Daypack));
+        loadout.refit(Perks::default().fit());
         loadout.add(starting_pistol());
         Self { name: String::new(), stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default(), money: 0, stash_tier: 0, bought: trade::Bought::default() }
     }
@@ -84,23 +86,15 @@ impl Profile {
     /// if it still fits, else anywhere in it, else in the stash. Whether
     /// everything found a place (if not, nothing's been lost: the caller
     /// puts things back as they were).
-    fn refit(&mut self) -> bool {
-        let mut old = std::mem::replace(&mut self.loadout, Bag::sized(self.perks.pack(), self.perks.pockets()));
-        self.loadout.slots = std::mem::take(&mut old.slots);
-        let mut homeless = Vec::new();
-        for (from, to) in [(old.pack, &mut self.loadout.pack), (old.pockets, &mut self.loadout.pockets)] {
-            for i in from.items {
-                if !to.put(i.stack, i32::from(i.x), i32::from(i.y), i.turned) && to.place(i.stack).count > 0 {
-                    homeless.push(i.stack);
-                }
-            }
-        }
+    pub fn refit(&mut self) -> bool {
+        let homeless = self.loadout.refit(self.perks.fit());
         homeless.into_iter().all(|s| self.stash.place(s).count == 0)
     }
 
     /// A run is over, `bag` what was carried at its end. Got out: it all
     /// comes home, and the XP with it. Dead: only the pockets survive (not
-    /// the weapons in hand), and no XP.
+    /// the weapons in hand, nor anything worn), and no XP; what the pockets
+    /// held that won't go in them now (cargo pants lost) goes to the stash.
     pub fn settle(&mut self, got_out: bool, bag: Bag, earned: u32) {
         self.runs += 1;
         if got_out {
@@ -108,14 +102,17 @@ impl Profile {
             self.xp += earned;
             self.extractions += 1;
         } else {
-            self.loadout = Bag { pack: Grid::new(bag.pack.w, bag.pack.h), pockets: bag.pockets, slots: [None; 3] };
+            self.loadout = Bag { pockets: bag.pockets, ..Bag::sized((0, 0), (0, 0)) };
+            self.refit();
         }
     }
 
     /// Take the loadout into a run (it's in the run's hands now: lost with
     /// it, if it comes to that).
     pub fn take_loadout(&mut self) -> Bag {
-        std::mem::replace(&mut self.loadout, Bag::sized(self.perks.pack(), self.perks.pockets()))
+        let mut empty = Bag::sized((0, 0), (0, 0));
+        empty.refit(self.perks.fit());
+        std::mem::replace(&mut self.loadout, empty)
     }
 }
 
@@ -134,6 +131,9 @@ mod tests {
     fn points_buy_ranks_and_a_refund_never_loses_a_thing() {
         let mut p = Profile::new_player();
         assert_eq!(p.points_left(), 1, "a point at level 1");
+        // A rucksack on (6×4), for Pack Mule to grow.
+        *p.loadout.worn_mut(crate::loot::gear::Wear::Back) = Some(Stack::one(Kind::Rucksack));
+        assert!(p.refit());
         assert!(p.raise(Perk::PackMule));
         assert_eq!(p.loadout.pack.w, 7, "the pack grew");
         assert!(!p.raise(Perk::PackMule), "rank 2 costs 2");
@@ -149,12 +149,13 @@ mod tests {
         assert!(p.lower(Perk::PackMule));
         assert_eq!((p.loadout.pack.w, p.loadout.pack.h), (7, 4));
         assert_eq!(p.loadout.count(Kind::Watch) + p.stash.count(Kind::Watch), 5, "none lost");
-        // A full pack and a full stash: the refund is refused, and nothing
-        // moves.
+        // A full pack (and pockets, where what no longer fits would go
+        // next) and a full stash: the refund is refused, and nothing moves.
         let mut p2 = p.clone();
         p2.stash = Grid::new(super::STASH.0, super::STASH.1);
         while p2.stash.place(Stack::one(Kind::Ring)).count == 0 {}
         while p2.loadout.pack.place(Stack::one(Kind::Ring)).count == 0 {}
+        while p2.loadout.pockets.place(Stack::one(Kind::Ring)).count == 0 {}
         let before = p2.clone();
         assert!(!p2.lower(Perk::PackMule));
         assert_eq!(p2, before);

@@ -107,7 +107,9 @@ impl Run {
         {
             v.jolt(booms.shake);
         }
-        let hurt = booms.scorched + booms.blasted;
+        // Armor takes a blast; fire goes round it.
+        let blasted = (booms.blasted - f64::from(self.bag.soak(booms.blasted.round() as u32))).max(0.0);
+        let hurt = booms.scorched + blasted;
         if hurt <= 0.0 || god {
             return false;
         }

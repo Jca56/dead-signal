@@ -132,7 +132,7 @@ pub fn page(ui: &mut Ui, profile: &mut Profile, sell: &mut Grid, grids: &mut Bag
     }
 
     // The bag, what's to be sold and the stash, and the sale.
-    let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(sell) };
+    let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(sell), fit: profile.perks.fit() };
     let sell_at = grids.rect_of(ui, &shelves, Which::Sell);
     grids.frame(ui, &mut shelves, icons);
     if let Some(r) = sell_at {

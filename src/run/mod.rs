@@ -74,6 +74,8 @@ pub struct Run {
     /// sprint's been toggled on (sprint set to toggle).
     keys: Keys,
     sprinting: bool,
+    /// Till a heavy sprint's next footfall is heard.
+    footfall_in: f64,
     /// The throwable picked, and a throw being aimed.
     throwable: Option<crate::throw::Throwable>,
     aiming: Option<throwing::Aiming>,
@@ -157,6 +159,13 @@ impl Run {
         let (feel, keys, toggle_crouch, toggle_sprint) = game.world.get_resource::<Settings>().map_or((Default::default(), Keys::default(), true, false), |s| (s.feel(), s.keys, s.toggle_crouch, s.toggle_sprint));
         self.keys = keys;
         self.bag_ui.slot_keys = keys.slot_names();
+        // What's worn weighs on the sprint, the breath and the feet; the
+        // armor worn has room for a plate or it hasn't.
+        let (fast, breath, _) = crate::loot::gear::burden(self.bag.weight());
+        game.world.insert_resource(crate::player::Load(fast));
+        self.vitals.breath = breath;
+        let (armor, most) = self.bag.armor();
+        self.vitals.armor_room = most - armor;
         if let Some(mut view) = game.player_view_mut() {
             view.feel = feel;
         }
@@ -222,7 +231,7 @@ impl Run {
 
         // Patching up: 4 a bandage, 5 a medkit, from what's carried. Firing,
         // striking or a blow stops it (the kit is kept).
-        for (key, kit) in [(Action::Bandage, Kit::Bandage), (Action::Medkit, Kit::Medkit)] {
+        for (key, kit) in [(Action::Bandage, Kit::Bandage), (Action::Medkit, Kit::Medkit), (Action::Plate, Kit::Plate)] {
             if keys.pressed(ui, key) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
                 combat.play(Sfx::Heal, 0.8);
             }
@@ -282,11 +291,16 @@ impl Run {
                 continue;
             }
             self.stats.times_hit += 1;
-            self.stats.damage_taken += blow.damage.min(self.vitals.hp);
-            if let Some(a) = blow.leaves {
+            // Armor takes it first; while there's any, claws don't cut.
+            let (armored, _) = self.bag.armor();
+            let damage = (blow.damage - f64::from(self.bag.soak(blow.damage.round() as u32))).max(0.0);
+            self.stats.damage_taken += damage.min(self.vitals.hp);
+            if let Some(a) = blow.leaves
+                && !(a == crate::vitals::Affliction::Bleed && armored > 0)
+            {
                 self.vitals.afflict(a);
             }
-            if self.vitals.hurt(blow.damage) {
+            if self.vitals.hurt(damage) {
                 let side = if self.stats.times_hit.is_multiple_of(2) { 1.0 } else { -1.0 };
                 self.end(game, Outcome::Died(side), combat);
                 return;
@@ -303,12 +317,26 @@ impl Run {
         // Health, stamina, the kit being applied, the count.
         let sprinting = game.player().is_some_and(|(b, _)| b.sprinting && b.speed_flat() > 0.5);
         let change = self.vitals.update(dt, sprinting);
+        // Heavy gear, sprinting: footfalls the dead near hear.
+        let (_, _, heard) = crate::loot::gear::burden(self.bag.weight());
+        self.footfall_in -= dt;
+        if sprinting
+            && heard > 0.0
+            && self.footfall_in <= 0.0
+            && let Some((body, _)) = game.player()
+        {
+            self.footfall_in = 0.35;
+            crate::zombie::footfall(&mut game.world, body.pos, heard);
+        }
         if let Some((kit, healed)) = change.healed {
             self.bag.remove(kit.kind(), 1);
             self.stats.healed += healed;
             match kit {
                 Kit::Bandage => self.stats.bandages_used += 1,
                 Kit::Medkit => self.stats.medkits_used += 1,
+                Kit::Plate => {
+                    self.bag.mend(crate::loot::gear::PLATE);
+                }
             }
         }
         self.stats.healed += change.regenerated;
@@ -375,6 +403,9 @@ impl Run {
         let interact = self.keys.name(Action::Interact);
         // The kits, and the throwable picked, each with its key.
         let mut kits = vec![(self.keys.name(Action::Medkit), "MEDKIT", self.bag.count(Kind::Medkit)), (self.keys.name(Action::Bandage), "BANDAGE", self.bag.count(Kind::Bandage))];
+        if self.bag.count(Kind::ArmorPlate) > 0 {
+            kits.insert(0, (self.keys.name(Action::Plate), "ARMOR PLATE", self.bag.count(Kind::ArmorPlate)));
+        }
         if let Some((what, n)) = self.picked() {
             kits.insert(0, (self.keys.name(Action::Throw), what.kind().def().name, n));
         }
@@ -406,6 +437,7 @@ impl Run {
                 crosshair: game.world.get_resource::<Settings>().is_none_or(|s| s.crosshair),
                 bleeding: v.bleeding,
                 poison: v.poison,
+                armor: self.bag.armor(),
             },
         );
         let o = self.out_hud(game);

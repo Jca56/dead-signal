@@ -32,6 +32,7 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 from item_kit import *  # noqa: E402,F403
 import items_guns  # noqa: E402
 import items_throw  # noqa: E402
+import items_gear  # noqa: E402
 
 
 def bandage():
@@ -262,6 +263,7 @@ def main():
     items_guns.rounds_556()
     items_throw.molotov()
     items_throw.pipe_bomb()
+    items_gear.all_gear()
     knife()
     machete()
     axe()

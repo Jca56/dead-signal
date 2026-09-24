@@ -2,6 +2,7 @@
 //! draws a few things from its own table, likelier things more often.
 
 use super::grid::Grid;
+use super::lines::*;
 use super::{Dice, Kind, Stack};
 
 /// Where things are found.
@@ -43,233 +44,7 @@ pub enum Source {
 pub const CONTAINERS: [Source; 15] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet, Source::HunterCabinet, Source::ToolLocker, Source::SupplyCase, Source::AmmoCage];
 
 /// One line of a table: what, how likely against the rest, how many.
-type Line = (Kind, u32, (u32, u32));
-
-const CRATE: &[Line] = &[
-    (Kind::Rounds, 30, (8, 16)),
-    (Kind::Bandage, 20, (1, 2)),
-    (Kind::Beans, 20, (1, 1)),
-    (Kind::Water, 15, (1, 1)),
-    (Kind::Cash, 8, (1, 2)),
-    (Kind::Pills, 5, (1, 1)),
-    (Kind::Fuel, 4, (1, 1)),
-    (Kind::Shells, 12, (4, 10)),
-    (Kind::Molotov, 5, (1, 1)),
-];
-
-const LOCKER: &[Line] = &[
-    (Kind::Rounds, 25, (10, 20)),
-    (Kind::Bandage, 15, (1, 3)),
-    (Kind::Medkit, 10, (1, 1)),
-    (Kind::Pills, 12, (1, 1)),
-    (Kind::Cash, 10, (1, 3)),
-    (Kind::Watch, 8, (1, 1)),
-    (Kind::Radio, 8, (1, 1)),
-    (Kind::Ring, 2, (1, 1)),
-    (Kind::Pistol, 5, (1, 1)),
-    (Kind::Shells, 8, (4, 10)),
-    (Kind::Knife, 5, (1, 1)),
-    (Kind::Smg, 2, (1, 1)),
-];
-
-// A map has a score of wrecks: their gold is rare.
-const CAR: &[Line] = &[
-    (Kind::Fuel, 36, (1, 1)),
-    (Kind::Battery, 28, (1, 1)),
-    (Kind::Cash, 30, (1, 3)),
-    (Kind::Beans, 20, (1, 1)),
-    (Kind::Water, 20, (1, 1)),
-    (Kind::Rounds, 20, (8, 16)),
-    (Kind::Watch, 12, (1, 1)),
-    (Kind::Radio, 12, (1, 1)),
-    (Kind::Chain, 1, (1, 1)),
-    (Kind::Pistol, 4, (1, 1)),
-    (Kind::Shotgun, 2, (1, 1)),
-    (Kind::Shells, 10, (4, 10)),
-    (Kind::Machete, 3, (1, 1)),
-    (Kind::Molotov, 5, (1, 1)),
-];
-
-const CAGE: &[Line] = &[
-    (Kind::Medkit, 20, (1, 1)),
-    (Kind::Rounds, 20, (20, 30)),
-    (Kind::Ring, 7, (1, 1)),
-    (Kind::Chain, 7, (1, 1)),
-    (Kind::Watch, 14, (1, 1)),
-    (Kind::Radio, 8, (1, 1)),
-    (Kind::Battery, 6, (1, 1)),
-    (Kind::GoldBar, 6, (1, 1)),
-    (Kind::Shotgun, 5, (1, 1)),
-    (Kind::Shells, 14, (8, 16)),
-    (Kind::Rifle, 4, (1, 1)),
-    (Kind::RifleRounds, 10, (6, 12)),
-    (Kind::Knife, 6, (1, 1)),
-    (Kind::Smg, 4, (1, 1)),
-    (Kind::AssaultRifle, 2, (1, 1)),
-    (Kind::Rounds556, 10, (10, 20)),
-    (Kind::PipeBomb, 5, (1, 2)),
-];
-
-const FRIDGE: &[Line] = &[
-    (Kind::Water, 35, (1, 1)),
-    (Kind::Beans, 25, (1, 1)),
-    (Kind::Pills, 8, (1, 1)),
-];
-
-const CABINET: &[Line] = &[
-    (Kind::Bandage, 20, (1, 2)),
-    (Kind::Rounds, 15, (6, 12)),
-    (Kind::Pills, 12, (1, 1)),
-    (Kind::Cash, 12, (1, 2)),
-    (Kind::Beans, 10, (1, 1)),
-    (Kind::Watch, 5, (1, 1)),
-    (Kind::Molotov, 3, (1, 1)),
-];
-
-// Houses are full of desks and wardrobes: their gold is rarer than a
-// locker's.
-const DESK: &[Line] = &[
-    (Kind::Cash, 50, (1, 3)),
-    (Kind::Rounds, 30, (6, 12)),
-    (Kind::Pills, 16, (1, 1)),
-    (Kind::Watch, 20, (1, 1)),
-    (Kind::Radio, 16, (1, 1)),
-    (Kind::Chain, 1, (1, 1)),
-    (Kind::Pistol, 4, (1, 1)),
-];
-
-const WARDROBE: &[Line] = &[
-    (Kind::Cash, 36, (1, 2)),
-    (Kind::Rounds, 30, (8, 16)),
-    (Kind::Bandage, 24, (1, 2)),
-    (Kind::Watch, 16, (1, 1)),
-    (Kind::Medkit, 10, (1, 1)),
-    (Kind::Ring, 1, (1, 1)),
-    (Kind::Chain, 1, (1, 1)),
-    (Kind::Pistol, 3, (1, 1)),
-    (Kind::Shotgun, 2, (1, 1)),
-    (Kind::Shells, 6, (4, 8)),
-];
-
-const SHELF: &[Line] = &[
-    (Kind::Beans, 30, (1, 1)),
-    (Kind::Water, 25, (1, 1)),
-    (Kind::Bandage, 15, (1, 3)),
-    (Kind::Pills, 8, (1, 1)),
-    (Kind::Rounds, 8, (8, 16)),
-    (Kind::Fuel, 3, (1, 1)),
-    (Kind::Battery, 2, (1, 1)),
-    (Kind::Shells, 6, (4, 10)),
-];
-
-const REGISTER: &[Line] = &[
-    (Kind::Cash, 60, (1, 5)),
-    (Kind::Watch, 5, (1, 1)),
-    (Kind::Rounds, 10, (8, 16)),
-];
-
-const CORPSE: &[Line] = &[
-    (Kind::Rounds, 35, (4, 8)),
-    (Kind::Bandage, 20, (1, 1)),
-    (Kind::Cash, 20, (1, 2)),
-    (Kind::Pills, 10, (1, 1)),
-    (Kind::Watch, 5, (1, 1)),
-    (Kind::Ring, 2, (1, 1)),
-    (Kind::Shells, 10, (2, 5)),
-    (Kind::Knife, 3, (1, 1)),
-];
-
-// A farmhouse's: the long gun that was kept there, likely as not.
-const GUN_CABINET: &[Line] = &[
-    (Kind::Shotgun, 30, (1, 1)),
-    (Kind::Shells, 40, (5, 12)),
-    (Kind::Rounds, 20, (10, 20)),
-    (Kind::Pistol, 10, (1, 1)),
-    (Kind::Cash, 8, (1, 2)),
-    (Kind::Rifle, 4, (1, 1)),
-    (Kind::RifleRounds, 8, (4, 10)),
-];
-
-// The hunter's: their rifle, and what it takes.
-const HUNTER_CABINET: &[Line] = &[
-    (Kind::Rifle, 40, (1, 1)),
-    (Kind::RifleRounds, 45, (6, 14)),
-    (Kind::Shells, 15, (5, 10)),
-    (Kind::Shotgun, 8, (1, 1)),
-    (Kind::Cash, 6, (1, 3)),
-    (Kind::FireAxe, 10, (1, 1)),
-];
-
-// A barn's: what the farm cut with, and what it ran on.
-const TOOL_LOCKER: &[Line] = &[
-    (Kind::Machete, 25, (1, 1)),
-    (Kind::FireAxe, 20, (1, 1)),
-    (Kind::Fuel, 20, (1, 1)),
-    (Kind::Battery, 10, (1, 1)),
-    (Kind::Shells, 8, (4, 10)),
-    (Kind::Rounds, 8, (8, 16)),
-    (Kind::Knife, 5, (1, 1)),
-    (Kind::Molotov, 8, (1, 2)),
-    (Kind::PipeBomb, 5, (1, 1)),
-];
-
-const SUPPLY_CASE: &[Line] = &[
-    (Kind::Medkit, 20, (1, 1)),
-    (Kind::Bandage, 20, (1, 3)),
-    (Kind::Pills, 15, (1, 1)),
-    (Kind::Rounds, 15, (10, 20)),
-    (Kind::RifleRounds, 12, (6, 12)),
-    (Kind::Radio, 6, (1, 1)),
-    (Kind::Cash, 6, (1, 3)),
-    (Kind::Battery, 4, (1, 1)),
-    (Kind::Knife, 4, (1, 1)),
-    (Kind::Smg, 3, (1, 1)),
-    (Kind::Rounds556, 18, (12, 24)),
-    (Kind::PipeBomb, 5, (1, 1)),
-];
-
-// The richest rounds on the map, and the guns to fire them.
-const AMMO_CAGE: &[Line] = &[
-    (Kind::Rounds, 25, (20, 30)),
-    (Kind::Shells, 20, (10, 20)),
-    (Kind::RifleRounds, 20, (10, 20)),
-    (Kind::Pistol, 8, (1, 1)),
-    (Kind::Rifle, 7, (1, 1)),
-    (Kind::Shotgun, 7, (1, 1)),
-    (Kind::Medkit, 8, (1, 1)),
-    (Kind::Knife, 6, (1, 1)),
-    (Kind::Smg, 6, (1, 1)),
-    (Kind::AssaultRifle, 7, (1, 1)),
-    (Kind::Rounds556, 25, (20, 30)),
-    (Kind::PipeBomb, 8, (1, 2)),
-    (Kind::Molotov, 5, (1, 2)),
-];
-
-const SOLDIER: &[Line] = &[
-    (Kind::Rounds, 25, (6, 12)),
-    (Kind::RifleRounds, 12, (3, 8)),
-    (Kind::Rounds556, 22, (10, 24)),
-    (Kind::Bandage, 15, (1, 2)),
-    (Kind::Shells, 8, (3, 6)),
-    (Kind::Cash, 6, (1, 3)),
-    (Kind::Medkit, 5, (1, 1)),
-    (Kind::Knife, 5, (1, 1)),
-    (Kind::ArmoryKey, 2, (1, 1)),
-    (Kind::PipeBomb, 3, (1, 1)),
-];
-
-const JUGGERNAUT: &[Line] = &[
-    (Kind::GoldBar, 10, (1, 1)),
-    (Kind::Rifle, 6, (1, 1)),
-    (Kind::Shotgun, 6, (1, 1)),
-    (Kind::RifleRounds, 12, (8, 15)),
-    (Kind::Shells, 10, (6, 12)),
-    (Kind::Medkit, 12, (1, 1)),
-    (Kind::Cash, 12, (3, 6)),
-    (Kind::ArmoryKey, 4, (1, 1)),
-    (Kind::AssaultRifle, 6, (1, 1)),
-    (Kind::Rounds556, 12, (15, 30)),
-];
+pub(super) type Line = (Kind, u32, (u32, u32));
 
 /// How many things a Juggernaut had on it, fewest and most.
 pub const JUGGERNAUT_DROPS: (u32, u32) = (2, 3);
@@ -405,9 +180,11 @@ pub fn draw(source: Source, dice: &mut Dice) -> Stack {
     for &(kind, weight, (lo, hi)) in table {
         if pick < weight {
             let stack = Stack::new(kind, dice.range(lo, hi));
-            return match stack.magazine() {
-                Some(mag) => Stack { loaded: dice.range(0, mag), ..stack },
-                None => stack,
+            // A gun found with what was left in it; armor, worn some.
+            return match (stack.magazine(), stack.armor()) {
+                (Some(mag), _) => Stack { loaded: dice.range(0, mag), ..stack },
+                (None, Some(most)) => Stack { loaded: dice.range(most / 2, most), ..stack },
+                _ => stack,
             };
         }
         pick -= weight;
@@ -438,7 +215,9 @@ mod tests {
         let mut dice = Dice(0x1234_5678);
         for source in CONTAINERS.into_iter().chain([Source::Corpse, Source::Soldier, Source::Juggernaut]) {
             let mut seen = std::collections::HashSet::new();
-            for _ in 0..300 {
+            // (Enough searches that the rarest line, one in a hundred and
+            // fifty draws, turns up.)
+            for _ in 0..1500 {
                 let g = fill(source, &mut dice);
                 assert!(!g.items.is_empty(), "{source:?} came up empty");
                 for i in &g.items {

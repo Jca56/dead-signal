@@ -328,6 +328,16 @@ const MUFFLED: f64 = 0.6;
 /// A noise at `at`, heard `range` metres off (less, under a roof): the dead
 /// in earshot may come, and it heats things up.
 pub fn noise(world: &mut World, at: Vec3, range: f64) {
+    sound_off(world, at, range, true);
+}
+
+/// A small noise (a heavy footfall): the dead in earshot may come, but it
+/// doesn't heat things up.
+pub fn footfall(world: &mut World, at: Vec3, range: f64) {
+    sound_off(world, at, range, false);
+}
+
+fn sound_off(world: &mut World, at: Vec3, range: f64, heats: bool) {
     // (The dev's: nothing's heard.)
     if world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.ignored) {
         return;
@@ -335,7 +345,7 @@ pub fn noise(world: &mut World, at: Vec3, range: f64) {
     let roofed = world.get_resource::<Solid>().is_some_and(|s| s.0.raycast(at, Vec3::Y, 25.0).is_some());
     let range = if roofed { range * MUFFLED } else { range };
     world.resource_mut::<Noises>().shots.push((at, range));
-    if let Some(mut heat) = world.get_resource_mut::<Heat>() {
+    if heats && let Some(mut heat) = world.get_resource_mut::<Heat>() {
         heat.0 += range / HEAT_PER;
     }
 }

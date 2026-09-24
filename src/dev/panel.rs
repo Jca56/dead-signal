@@ -205,7 +205,7 @@ impl DevPanel {
 
 /// Every kind of thing, by what it is: two columns of groups, each its
 /// name over a row of buttons.
-const GROUPS: [(&str, &[Kind]); 8] = [
+const GROUPS: [(&str, &[Kind]); 11] = [
     ("GUNS", &[Kind::Pistol, Kind::Shotgun, Kind::Rifle, Kind::Smg, Kind::AssaultRifle]),
     ("AMMO", &[Kind::Rounds, Kind::Shells, Kind::RifleRounds, Kind::Rounds556]),
     ("THROWABLES", &[Kind::Molotov, Kind::PipeBomb]),
@@ -214,6 +214,9 @@ const GROUPS: [(&str, &[Kind]); 8] = [
     ("VALUABLES", &[Kind::Cash, Kind::Watch, Kind::Ring, Kind::Chain, Kind::GoldBar]),
     ("SUPPLIES", &[Kind::Beans, Kind::Water, Kind::Radio, Kind::Battery, Kind::Fuel]),
     ("KEYS", &[Kind::Key, Kind::ArmoryKey]),
+    ("ARMOR", &[Kind::BikeHelmet, Kind::MilitaryHelmet, Kind::LightVest, Kind::PlateCarrier, Kind::ArmorPlate]),
+    ("RIGS, BELTS, PANTS", &[Kind::ChestRig, Kind::ArmoredRig, Kind::Bandolier, Kind::CargoPants]),
+    ("BACKPACKS", &[Kind::Daypack, Kind::Rucksack, Kind::HikingPack, Kind::MilitaryRuck]),
 ];
 
 /// Every kind of thing, in its group, a button each with its picture:
@@ -224,13 +227,14 @@ fn items(ui: &mut Ui, icons: &Icons, area: Rect, active: bool) -> Option<DevActi
     let label = TextStyle::new((19.0 * s) as f32).bold().family(style::FONT);
     let gap = 12.0 * s;
     let column_w = (area.width() - 40.0 * s) * 0.5;
-    // As big as fits: five across a column, the four groups a column down.
+    // As big as fits: five across a column, half the groups a column down.
+    let per = GROUPS.len().div_ceil(2);
     let w = ((column_w - gap * 4.0) / 5.0).min(200.0 * s);
     let head_h = f64::from(heading.line_height()) + 8.0 * s;
-    let h = ((area.height() / 4.0 - head_h - 16.0 * s).min(w * 0.72)).max(60.0 * s);
+    let h = ((area.height() / per as f64 - head_h - 16.0 * s).min(w * 0.72)).max(50.0 * s);
     let mut asked = None;
     for (g, (name, kinds)) in GROUPS.iter().enumerate() {
-        let (col, row) = (g / 4, g % 4);
+        let (col, row) = (g / per, g % per);
         let at = area.min + Vec2::new(col as f64 * (column_w + 40.0 * s), row as f64 * (head_h + h + 16.0 * s));
         ui.text_at(name, &heading, at, column_w, GOLD);
         for (i, &kind) in kinds.iter().enumerate() {

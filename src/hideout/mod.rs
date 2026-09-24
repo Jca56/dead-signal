@@ -58,9 +58,9 @@ impl Hideout {
     /// Put down whatever is held, and put back what was to be sold
     /// (leaving the page, or the hideout).
     pub fn let_go(&mut self, profile: &mut Profile) {
-        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None };
+        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None, fit: profile.perks.fit() };
         self.grids.let_go(&mut shelves);
-        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(&mut self.sell) };
+        let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(&mut self.sell), fit: profile.perks.fit() };
         self.trade_grids.let_go(&mut shelves);
         trader::put_back(profile, &mut self.sell);
     }
@@ -127,8 +127,10 @@ impl Hideout {
         let mut leave = None;
         match self.tab {
             Tab::Stash => {
-                let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None };
-                self.grids.frame(ui, &mut shelves, icons);
+                let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None, fit: profile.perks.fit() };
+                if let Some(why) = self.grids.frame(ui, &mut shelves, icons).said {
+                    self.note = Some((why.to_string(), ui.now() + 2.5));
+                }
             }
             Tab::Trader => {
                 if let Some(note) = trader::page(ui, profile, &mut self.sell, &mut self.trade_grids, icons, active) {

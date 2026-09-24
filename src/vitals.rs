@@ -43,6 +43,8 @@ pub enum Affliction {
 pub enum Kit {
     Bandage,
     Medkit,
+    /// An armor plate slotted into what's worn: armor back, not health.
+    Plate,
 }
 
 impl Kit {
@@ -51,6 +53,7 @@ impl Kit {
         match self {
             Kit::Bandage => 25.0,
             Kit::Medkit => 60.0,
+            Kit::Plate => 0.0,
         }
     }
 
@@ -58,6 +61,7 @@ impl Kit {
         match self {
             Kit::Bandage => 2.0,
             Kit::Medkit => 4.0,
+            Kit::Plate => 3.0,
         }
     }
 
@@ -66,6 +70,7 @@ impl Kit {
         match self {
             Kit::Bandage => crate::loot::Kind::Bandage,
             Kit::Medkit => crate::loot::Kind::Medkit,
+            Kit::Plate => crate::loot::Kind::ArmorPlate,
         }
     }
 }
@@ -102,6 +107,10 @@ pub struct Vitals {
     /// Cuts bleeding, and seconds of poison left.
     pub bleeding: u8,
     pub poison: f64,
+    /// How fast a sprint spends breath, a multiple of the usual (heavy gear
+    /// more), and room left in the armor worn (a plate helps if there is).
+    pub breath: f64,
+    pub armor_room: u32,
 }
 
 impl Default for Vitals {
@@ -115,7 +124,7 @@ impl Vitals {
     pub fn with(perks: &Perks) -> Self {
         let (max_hp, lungs) = (perks.max_hp(), perks.lungs());
         let max_stamina = 100.0 * lungs;
-        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), kit_heals: perks.kit_heals(), bleeding: 0, poison: 0.0 }
+        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), kit_heals: perks.kit_heals(), bleeding: 0, poison: 0.0, breath: 1.0, armor_room: 0 }
     }
 
     fn regen_cap(&self) -> f64 {
@@ -174,7 +183,10 @@ impl Vitals {
 
     /// Whether `kit` would do any good: health to heal, or what it cures.
     fn helps(&self, kit: Kit) -> bool {
-        self.hp < self.max_hp || self.bleeding > 0 || (kit == Kit::Medkit && self.poison > 0.0)
+        match kit {
+            Kit::Plate => self.armor_room > 0,
+            _ => self.hp < self.max_hp || self.bleeding > 0 || (kit == Kit::Medkit && self.poison > 0.0),
+        }
     }
 
     /// Start applying `kit`, if one is `carried`, it would help, and
@@ -205,7 +217,7 @@ impl Vitals {
         }
         // Stamina.
         if sprinting {
-            self.stamina = (self.stamina - SPRINT_COST * dt).max(0.0);
+            self.stamina = (self.stamina - SPRINT_COST * self.breath * dt).max(0.0);
             self.since_sprint = 0.0;
             if self.stamina == 0.0 {
                 self.winded = true;
@@ -248,7 +260,9 @@ impl Vitals {
                 self.hp = (self.hp + self.heals(kit)).min(self.max_hp);
                 self.healing = None;
                 // Either stops the bleeding; a medkit takes the poison too.
-                self.bleeding = 0;
+                if kit != Kit::Plate {
+                    self.bleeding = 0;
+                }
                 if kit == Kit::Medkit {
                     self.poison = 0.0;
                 }

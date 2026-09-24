@@ -4,6 +4,8 @@
 //! (`tables.rs`).
 
 pub mod bag;
+pub mod gear;
+mod lines;
 pub mod grid;
 pub mod tables;
 
@@ -75,9 +77,22 @@ pub enum Kind {
     Rounds556,
     Molotov,
     PipeBomb,
+    BikeHelmet,
+    MilitaryHelmet,
+    LightVest,
+    PlateCarrier,
+    ChestRig,
+    ArmoredRig,
+    Daypack,
+    Rucksack,
+    HikingPack,
+    MilitaryRuck,
+    CargoPants,
+    Bandolier,
+    ArmorPlate,
 }
 
-pub const ALL: [Kind; 29] = [
+pub const ALL: [Kind; 42] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -107,6 +122,19 @@ pub const ALL: [Kind; 29] = [
     Kind::Rounds556,
     Kind::Molotov,
     Kind::PipeBomb,
+    Kind::BikeHelmet,
+    Kind::MilitaryHelmet,
+    Kind::LightVest,
+    Kind::PlateCarrier,
+    Kind::ChestRig,
+    Kind::ArmoredRig,
+    Kind::Daypack,
+    Kind::Rucksack,
+    Kind::HikingPack,
+    Kind::MilitaryRuck,
+    Kind::CargoPants,
+    Kind::Bandolier,
+    Kind::ArmorPlate,
 ];
 
 impl Kind {
@@ -143,6 +171,19 @@ impl Kind {
             Kind::Rounds556 => "rounds_556",
             Kind::Molotov => "molotov",
             Kind::PipeBomb => "pipe_bomb",
+            Kind::BikeHelmet => "bike_helmet",
+            Kind::MilitaryHelmet => "military_helmet",
+            Kind::LightVest => "light_vest",
+            Kind::PlateCarrier => "plate_carrier",
+            Kind::ChestRig => "chest_rig",
+            Kind::ArmoredRig => "armored_rig",
+            Kind::Daypack => "daypack",
+            Kind::Rucksack => "rucksack",
+            Kind::HikingPack => "hiking_pack",
+            Kind::MilitaryRuck => "military_ruck",
+            Kind::CargoPants => "cargo_pants",
+            Kind::Bandolier => "bandolier",
+            Kind::ArmorPlate => "armor_plate",
         }
     }
 
@@ -214,6 +255,19 @@ impl Kind {
             Kind::Rounds556 => d("5.56 ROUNDS", (1, 1), 30, Uncommon, 5, "ITEM_Rounds556"),
             Kind::Molotov => d("MOLOTOV", (2, 1), 2, Uncommon, 45, "ITEM_Molotov"),
             Kind::PipeBomb => d("PIPE BOMB", (2, 1), 2, Rare, 90, "ITEM_PipeBomb"),
+            Kind::BikeHelmet => d("BIKE HELMET", (2, 2), 1, Common, 40, "ITEM_BikeHelmet"),
+            Kind::MilitaryHelmet => d("MILITARY HELMET", (2, 2), 1, Rare, 180, "ITEM_MilitaryHelmet"),
+            Kind::LightVest => d("LIGHT VEST", (3, 3), 1, Uncommon, 150, "ITEM_LightVest"),
+            Kind::PlateCarrier => d("PLATE CARRIER", (3, 3), 1, Epic, 450, "ITEM_PlateCarrier"),
+            Kind::ChestRig => d("CHEST RIG", (3, 2), 1, Uncommon, 120, "ITEM_ChestRig"),
+            Kind::ArmoredRig => d("ARMORED RIG", (3, 3), 1, Rare, 320, "ITEM_ArmoredRig"),
+            Kind::Daypack => d("DAYPACK", (3, 3), 1, Common, 60, "ITEM_Daypack"),
+            Kind::Rucksack => d("RUCKSACK", (3, 4), 1, Uncommon, 140, "ITEM_Rucksack"),
+            Kind::HikingPack => d("HIKING PACK", (4, 4), 1, Rare, 260, "ITEM_HikingPack"),
+            Kind::MilitaryRuck => d("MILITARY RUCK", (4, 5), 1, Epic, 420, "ITEM_MilitaryRuck"),
+            Kind::CargoPants => d("CARGO PANTS", (2, 2), 1, Uncommon, 90, "ITEM_CargoPants"),
+            Kind::Bandolier => d("BANDOLIER", (2, 1), 1, Uncommon, 70, "ITEM_Bandolier"),
+            Kind::ArmorPlate => d("ARMOR PLATE", (2, 2), 1, Uncommon, 70, "ITEM_ArmorPlate"),
         }
     }
 }
@@ -236,9 +290,25 @@ impl Stack {
         Self::new(kind, 1)
     }
 
-    /// A gun with `loaded` rounds in it.
+    /// A gun with `loaded` rounds in it (or armor with that many points
+    /// left).
     pub fn gun(kind: Kind, loaded: u32) -> Self {
         Self { loaded, ..Self::one(kind) }
+    }
+
+    /// `count` of `kind` as new: a gun loaded, armor whole.
+    pub fn fresh(kind: Kind, count: u32) -> Self {
+        Self { loaded: Self::one(kind).most().unwrap_or(0), ..Self::new(kind, count) }
+    }
+
+    /// The most armor points it has, if it's armor.
+    pub fn armor(self) -> Option<u32> {
+        self.kind.gear().map(|g| g.armor).filter(|&a| a > 0)
+    }
+
+    /// The most it keeps in `loaded`: a gun's magazine, armor's points.
+    pub fn most(self) -> Option<u32> {
+        self.magazine().or(self.armor())
     }
 
     /// As many as `count`, but otherwise the same (a gun's rounds kept).
@@ -268,8 +338,8 @@ impl Stack {
     /// What it's called, with how many when more than one could be.
     pub fn label(self) -> String {
         let def = self.kind.def();
-        if let Some(mag) = self.magazine() {
-            format!("{}  {}/{}", def.name, self.loaded, mag)
+        if let Some(most) = self.most() {
+            format!("{}  {}/{}", def.name, self.loaded, most)
         } else if def.stack > 1 {
             format!("{}  ×{}", def.name, self.count)
         } else {

@@ -29,6 +29,19 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | 5.56 ROUNDS | 1×1 | 30 | Uncommon | $5 | cage, supply case, ammo cage, soldiers, juggernaut | Military surplus. The surplus part is new. |
 | MOLOTOV | 2×1 | 2 | Uncommon | $45 | crate, car, drawers, tool locker, ammo cage | A bottle, a rag, and a bad idea done well. Hold G to aim, let go to throw: a pool of fire that the dead walk into and keep burning after. |
 | PIPE BOMB | 2×1 | 2 | Rare | $90 | cage, tool locker, supply case, ammo cage, soldiers | It beeps, and every one of the dead near enough drops what it's doing to go and listen. Then it stops beeping. |
+| BIKE HELMET | 2×2 | 1 | Common | $40 | crate, locker, car, wardrobe, shelf | Worn on the head: 15 armor. Better than a bare skull; not by a lot. |
+| MILITARY HELMET | 2×2 | 1 | Rare | $180 | cage, supply case, ammo cage, soldiers | Worn on the head: 40 armor. Medium weight. Its last owner didn't need it anymore, and neither did their head. |
+| LIGHT VEST | 3×3 | 1 | Uncommon | $150 | locker, car, cage, wardrobe, supply case | Worn on the chest: 40 armor. Medium weight. Soft, and stops most of a swipe. |
+| PLATE CARRIER | 3×3 | 1 | Epic | $450 | cage, ammo cage, juggernaut | Worn on the chest: 80 armor. Heavy: a slower sprint, a shorter breath, louder feet. Worth it. |
+| CHEST RIG | 3×2 | 1 | Uncommon | $120 | locker, cage, supply case | Worn on the chest: a 4×2 grid of pouches. No armor, all pockets. |
+| ARMORED RIG | 3×3 | 1 | Rare | $320 | cage, supply case, ammo cage | Worn on the chest: 50 armor and a 3×2 grid of pouches. Medium weight. The best of both, most of each. |
+| DAYPACK | 3×3 | 1 | Common | $60 | crate, locker, car, wardrobe, shelf | Worn on the back: a 4×3 backpack. School's out forever. |
+| RUCKSACK | 3×4 | 1 | Uncommon | $140 | locker, car, cage, wardrobe, supply case | Worn on the back: a 6×4 backpack. |
+| HIKING PACK | 4×4 | 1 | Rare | $260 | cage, wardrobe | Worn on the back: a 7×5 backpack. Medium weight. A sleeping roll on top nobody will sleep on again. |
+| MILITARY RUCK | 4×5 | 1 | Epic | $420 | cage, ammo cage | Worn on the back: an 8×6 backpack. Medium weight. Carries a whole run home. |
+| CARGO PANTS | 2×2 | 1 | Uncommon | $90 | locker, drawers, wardrobe, shelf, soldiers | Worn on the legs: pockets one bigger each way. What's in your pockets is kept even if you die, so these are worth more than they look. |
+| BANDOLIER | 2×1 | 1 | Uncommon | $70 | locker, gun cabinet, hunter's cabinet, ammo cage, soldiers | Worn on the belt: a 4×1 grid that holds rounds only, to hand for reloading. |
+| ARMOR PLATE | 2×2 | 1 | Uncommon | $70 | cage, supply case, ammo cage, soldiers, juggernaut | Hold 6 to slot it in: 40 armor back on what you wear. |
 | TACTICAL KNIFE | 2×1 | 1 | Uncommon | $90 | locker, cage, tool locker, supply case, ammo cage, zombies, soldiers | Quiet work. One that never saw you coming never will. |
 | MACHETE | 3×1 | 1 | Uncommon | $110 | car, tool locker | For brush, once. Swing it again and it comes back the other way. |
 | FIRE AXE | 4×1 | 1 | Rare | $160 | hunter's cabinet, tool locker | Break glass in case of emergency. Everything is the emergency now. |
@@ -68,7 +81,7 @@ Searching makes noise the dead hear within 14 m. About 1 in 5 zombies drops some
 
 ## Trading
 
-Sparks, on the radio (the hideout's TRADER tab), buys anything for 60% of its value (a gun's loaded rounds counted too) and cash at its full face value. Always in stock, at full value: 9mm rounds ×30, 12ga shells ×20, bandages ×3, a medkit. Three rarer offers come in with every run, only so many of each, from: a loaded pistol (2), a loaded shotgun (1), a loaded hunting rifle (1), .308 rounds ×20 (2), a tactical knife (2), a machete (1), a fire axe (1), the cage key (1, $400: it opens the best there is), the armory key (1, $500), a loaded SMG (1), a loaded assault rifle (1), 5.56 rounds ×30 (2), Molotovs ×2 (2), or pipe bombs ×2 (1).
+Sparks, on the radio (the hideout's TRADER tab), buys anything for 60% of its value (a gun's loaded rounds counted too) and cash at its full face value. Always in stock, at full value: 9mm rounds ×30, 12ga shells ×20, bandages ×3, a medkit. Three rarer offers come in with every run, only so many of each, from: a loaded pistol (2), a loaded shotgun (1), a loaded hunting rifle (1), .308 rounds ×20 (2), a tactical knife (2), a machete (1), a fire axe (1), the cage key (1, $400: it opens the best there is), the armory key (1, $500), a loaded SMG (1), a loaded assault rifle (1), 5.56 rounds ×30 (2), Molotovs ×2 (2), pipe bombs ×2 (1), a light vest (1), a military helmet (1), a chest rig (1), a rucksack (1), a hiking pack (1), or an armor plate (3).
 
 | Stash | Price |
 |---|---|

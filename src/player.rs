@@ -315,9 +315,21 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
     body.airborne = if grounded { 0.0 } else { body.airborne + dt };
 }
 
-fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, mut players: Query<(&mut Body, &View), With<Player>>) {
+/// How much of a sprint the player's gear leaves them, a share (heavy gear
+/// slows it).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct Load(pub f64);
+
+impl Default for Load {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
+fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, load: Option<Res<Load>>, mut players: Query<(&mut Body, &View), With<Player>>) {
+    let gait = Gait { sprint: WALK + (SPRINT - WALK) * load.map_or(1.0, |l| l.0), ..PLAYER_GAIT };
     for (mut body, view) in &mut players {
-        step_body(&mut body, view.yaw, &mut controls, &solid.0, &PLAYER_GAIT, STEP);
+        step_body(&mut body, view.yaw, &mut controls, &solid.0, &gait, STEP);
     }
 }
 

@@ -69,4 +69,26 @@ fn balance_md_matches_the_game() {
         assert!((num(&row["Every"]) - (t.swipe.time + t.swipe.cooldown)).abs() < 0.01, "{name} swipes every {}", row["Every"]);
     }
     assert_eq!(dead.len(), 4);
+    // Everything worn.
+    let gear = table("| Gear | Worn on |");
+    for kind in crate::loot::ALL {
+        let Some(g) = kind.gear() else { continue };
+        let name = kind.def().name;
+        let row = gear.iter().find(|r| r["Gear"] == name).unwrap_or_else(|| panic!("no row for {name}"));
+        assert_eq!(row["Worn on"], g.wear.name(), "{name} worn on");
+        assert_eq!(num(&row["Armor"]), f64::from(g.armor), "{name} armor");
+        assert_eq!(num(&row["Weight"]), f64::from(g.weight), "{name} weight");
+        let grid = g.grid.map_or("none".to_string(), |(w, h)| format!("{w}×{h}"));
+        assert!(g.pockets != (0, 0) || row["Grid"].starts_with(&grid), "{name} grid {} vs {grid}", row["Grid"]);
+    }
+    assert_eq!(gear.len(), crate::loot::ALL.iter().filter(|k| k.gear().is_some()).count(), "a row a piece of gear");
+    // The sprint as heavy gear leaves it.
+    let weights = table("| Weight | Sprint speed |");
+    for row in weights {
+        let (fast, breath, heard) = crate::loot::gear::burden(num(&row["Weight"]) as u32);
+        let sprint = crate::player::WALK + (crate::player::SPRINT - crate::player::WALK) * fast;
+        assert!((num(&row["Sprint speed"]) - sprint).abs() < 0.05, "{} sprint {sprint:.2}", row["Weight"]);
+        assert!((num(&row["Stamina a second sprinting"]) - 20.0 * breath).abs() < 0.05, "{} breath {:.1}", row["Weight"], 20.0 * breath);
+        assert_eq!(row["A sprinting footfall heard"] == "silent", heard == 0.0);
+    }
 }

@@ -80,8 +80,16 @@ impl Ending {
         let (loot, kept): (Vec<Stack>, Vec<Stack>) = match outcome {
             Outcome::Extracted(_) => (bag.everything().collect(), Vec::new()),
             Outcome::Died(_) => {
-                let lost = bag.slots.iter().flatten().copied().chain(bag.pack.items.iter().map(|i| i.stack));
-                (lost.collect(), bag.pockets.items.iter().map(|i| i.stack).collect())
+                // All but the pockets: the weapons, what's worn, the pack,
+                // the rig and the belt.
+                let pockets: Vec<Stack> = bag.pockets.items.iter().map(|i| i.stack).collect();
+                let mut lost: Vec<Stack> = bag.everything().collect();
+                for p in &pockets {
+                    if let Some(i) = lost.iter().position(|s| s == p) {
+                        lost.remove(i);
+                    }
+                }
+                (lost, pockets)
             }
         };
         let value = loot.iter().map(|s| s.value()).sum();

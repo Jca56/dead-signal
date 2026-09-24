@@ -120,6 +120,47 @@ Kills by fire or blast count as the player's (with drops as usual).
 
 ---
 
+## Armor and gear
+
+Five things worn: head, chest, back, legs, belt. Everything worn is lost on death, like the bag.
+
+| Gear | Worn on | Armor | Grid | Weight |
+|---|---|---|---|---|
+| BIKE HELMET | HEAD | 15 | none | 0 |
+| MILITARY HELMET | HEAD | 40 | none | 1 |
+| LIGHT VEST | CHEST | 40 | none | 1 |
+| PLATE CARRIER | CHEST | 80 | none | 2 |
+| CHEST RIG | CHEST | 0 | 4×2 | 0 |
+| ARMORED RIG | CHEST | 50 | 3×2 | 1 |
+| DAYPACK | BACK | 0 | 4×3 | 0 |
+| RUCKSACK | BACK | 0 | 6×4 | 0 |
+| HIKING PACK | BACK | 0 | 7×5 | 1 |
+| MILITARY RUCK | BACK | 0 | 8×6 | 1 |
+| CARGO PANTS | LEGS | 0 | pockets +1×+1 | 0 |
+| BANDOLIER | BELT | 0 | 4×1, rounds only | 0 |
+
+- **Armor points:** a blue bar that soaks blows and blasts before health does: the chest's first, then the helmet's. While there's any armor left, a Ripper's claws don't cut.
+- **What goes round armor:** bleeding, poison and fire go straight to health.
+- **Armor plates:** hold 6 to slot one in: 40 points back (the chest first), in 3 s. It only works with room in the armor.
+- **Found armor:** comes worn, with 50–100% of its points.
+- **The backpack grid is the pack worn:** none, no backpack. Pack Mule adds to any pack: +1 across, then +1 down, then +1 across.
+- **Pockets:** 2×2 (Deep Pockets bigger), plus cargo pants'. Pockets survive death.
+- **Rounds** go to the bandolier first, and reloading draws from the pockets, the belt and the rig before the pack.
+- **Starting out:** someone new starts wearing a daypack.
+
+**Weight** (all that's worn, added up, counted to 6):
+
+| Weight | Sprint speed | Stamina a second sprinting | A sprinting footfall heard |
+|---|---|---|---|
+| 0 | 9.0 m/s | 20 | silent |
+| 2 | 8.8 m/s | 24.8 | 7 m |
+| 4 | 8.6 m/s | 29.6 | 14 m |
+| 6 | 8.4 m/s | 34.4 | 21 m |
+
+Footfalls draw the dead near, but add no heat.
+
+---
+
 ## The dead
 
 | Kind | HP | Walk / hunting / lunge (m/s) | Sight | Swipe | Every | What it leaves | Drops |

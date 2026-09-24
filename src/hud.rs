@@ -44,6 +44,8 @@ pub struct Hud<'a> {
     /// Cuts bleeding, and seconds of poison left.
     pub bleeding: u8,
     pub poison: f64,
+    /// Armor points left, and the most (none worn: no bar).
+    pub armor: (u32, u32),
 }
 
 const HEALTH: Color = Color::rgb(0.62, 0.11, 0.08);
@@ -52,6 +54,7 @@ const STAMINA: Color = Color::rgb(0.66, 0.63, 0.47);
 const WINDED: Color = Color::rgb(0.52, 0.32, 0.13);
 const TROUGH: Color = Color::rgba(0.0, 0.0, 0.0, 0.55);
 const POISON: Color = Color::rgb(0.45, 0.72, 0.22);
+const ARMOR: Color = Color::rgb(0.26, 0.52, 0.86);
 
 pub fn draw(ui: &mut Ui, h: &Hud) {
     let s = ui.m.scale;
@@ -123,7 +126,22 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     let tw = ui.measure(&text, &numbers);
     let th = f64::from(numbers.line_height());
     ui.text_at(&text, &numbers, Vec2::new(left + (width - tw) * 0.5, health_top + (health_h - th) * 0.5), width, style::BONE);
-    // What's still hurting, over the health: a chip each.
+    // Armor, over the health: a blue bar, its points in it.
+    let (armor, most) = h.armor;
+    let mut above = health_top;
+    if most > 0 {
+        let armor_h = 26.0 * s;
+        let bar = Rect::from_min_size(Vec2::new(left, health_top - 8.0 * s - armor_h), Vec2::new(width, armor_h));
+        ui.draw.rect(bar, TROUGH);
+        ui.draw.rect(Rect::from_min_size(bar.min, Vec2::new(width * f64::from(armor) / f64::from(most), armor_h)), ARMOR);
+        ui.draw.stroke_rect(bar, 2.0 * s, 0.0, Color::rgba(0.0, 0.0, 0.0, 0.8));
+        let small = TextStyle::new((20.0 * s) as f32).bold().family(style::FONT);
+        let text = format!("ARMOR  {armor} / {most}");
+        let tw = ui.measure(&text, &small);
+        ui.text_at(&text, &small, Vec2::new(left + (width - tw) * 0.5, bar.min.y + (armor_h - f64::from(small.line_height())) * 0.5), width, style::BONE);
+        above = bar.min.y;
+    }
+    // What's still hurting, over that: a chip each.
     let chip = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
     let chip_h = f64::from(chip.line_height()) + 10.0 * s;
     let mut cx = left;
@@ -136,7 +154,7 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
     .flatten()
     {
         let w = ui.measure(&text, &chip) + 24.0 * s;
-        let r = Rect::from_min_size(Vec2::new(cx, health_top - 12.0 * s - chip_h), Vec2::new(w, chip_h));
+        let r = Rect::from_min_size(Vec2::new(cx, above - 12.0 * s - chip_h), Vec2::new(w, chip_h));
         ui.draw.rect(r, Color::rgba(colour.r * 0.35, colour.g * 0.35, colour.b * 0.35, 0.85));
         ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(colour.r, colour.g, colour.b, beat));
         ui.text_at(&text, &chip, r.min + Vec2::new(12.0 * s, 5.0 * s), w, style::BONE);

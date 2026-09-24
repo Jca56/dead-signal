@@ -19,11 +19,12 @@ use super::trade::{Bought, STASH_TIERS};
 use super::{Profile, starting_pistol};
 use super::perks::Perks;
 use crate::loot::bag::{Bag, Slot};
+use crate::loot::gear::Wear;
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
 
 /// The save's layout; a newer one won't be read by an older game.
-const VERSION: i64 = 3;
+const VERSION: i64 = 4;
 /// How many save slots there are; and the developer's slot (`dev.toml`),
 /// for trying things out, apart from them.
 pub const SLOTS: u8 = 3;
@@ -34,7 +35,7 @@ fn stack_to_doc(stack: Stack) -> Doc {
     let mut m = Doc::map();
     m.set("kind", stack.kind.key().into());
     m.set("count", i64::from(stack.count).into());
-    if stack.magazine().is_some() {
+    if stack.most().is_some() {
         m.set("loaded", i64::from(stack.loaded).into());
     }
     m
@@ -46,7 +47,7 @@ fn stack_from_doc(item: &Doc) -> Option<Stack> {
     let kind = item.get("kind").and_then(Doc::as_str).and_then(Kind::from_key)?;
     let count = item.get("count").and_then(Doc::as_i64).unwrap_or(1).clamp(1, i64::from(kind.def().stack)) as u32;
     let stack = Stack::new(kind, count);
-    let loaded = item.get("loaded").and_then(Doc::as_i64).unwrap_or(0).clamp(0, i64::from(stack.magazine().unwrap_or(0))) as u32;
+    let loaded = item.get("loaded").and_then(Doc::as_i64).unwrap_or(0).clamp(0, i64::from(stack.most().unwrap_or(0))) as u32;
     Some(Stack { loaded, ..stack })
 }
 
@@ -101,6 +102,15 @@ pub fn to_text(p: &Profile) -> String {
     d.set("stash", grid_to_doc(&p.stash));
     d.set("pack", grid_to_doc(&p.loadout.pack));
     d.set("pockets", grid_to_doc(&p.loadout.pockets));
+    d.set("rig", grid_to_doc(&p.loadout.rig));
+    d.set("belt", grid_to_doc(&p.loadout.belt));
+    let mut worn = Doc::map();
+    for wear in Wear::ALL {
+        if let Some(stack) = p.loadout.worn(wear) {
+            worn.set(wear.save_key(), stack_to_doc(stack));
+        }
+    }
+    d.set("worn", worn);
     let mut slots = Doc::map();
     for slot in Slot::ALL {
         if let Some(stack) = p.loadout.slot(slot) {
@@ -133,7 +143,7 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
     let mut p = Profile {
         name: d.get("name").and_then(Doc::as_str).map(clean_name).unwrap_or_default(),
         stash: grid_from_doc(d.get("stash"), STASH_TIERS[usize::from(stash_tier)].0),
-        loadout: Bag { pack: grid_from_doc(d.get("pack"), perks.pack()), pockets: grid_from_doc(d.get("pockets"), perks.pockets()), slots: [None; 3] },
+        loadout: Bag::sized((0, 0), (0, 0)),
         perks,
         xp: num("xp"),
         runs: num("runs"),
@@ -155,6 +165,25 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
     // From before there were weapons: the pistol everyone starts with.
     if version < 2 && p.loadout.slot(Slot::Sidearm).is_none() {
         *p.loadout.slot_mut(Slot::Sidearm) = Some(starting_pistol());
+    }
+    // What's worn (only where it's worn; else it's kept in the stash); from
+    // before there was anything to wear, the rucksack the old backpack was.
+    for wear in Wear::ALL {
+        let Some(stack) = d.get("worn").and_then(|m| m.get(wear.save_key())).and_then(stack_from_doc) else { continue };
+        if stack.kind.gear().is_some_and(|g| g.wear == wear) {
+            *p.loadout.worn_mut(wear) = Some(stack.with_count(1));
+        } else {
+            p.stash.place(stack);
+        }
+    }
+    if version < 4 {
+        *p.loadout.worn_mut(Wear::Back) = Some(Stack::one(Kind::Rucksack));
+    }
+    // The grids as big as all that makes them, and what was in them.
+    p.loadout.refit(p.perks.fit());
+    let bag = &mut p.loadout;
+    for (key, grid) in [("pack", &mut bag.pack), ("pockets", &mut bag.pockets), ("rig", &mut bag.rig), ("belt", &mut bag.belt)] {
+        *grid = grid_from_doc(d.get(key), (grid.w, grid.h));
     }
     Ok(p)
 }
@@ -290,7 +319,13 @@ mod tests {
         p.runs = 7;
         p.extractions = 3;
         p.perks.set(super::super::perks::Perk::DeepPockets, 2);
-        p.loadout = Bag::sized(p.perks.pack(), p.perks.pockets());
+        p.loadout = Bag::sized((0, 0), (0, 0));
+        for (wear, stack) in [(Wear::Back, Stack::one(Kind::HikingPack)), (Wear::Chest, Stack::gun(Kind::ArmoredRig, 33)), (Wear::Legs, Stack::one(Kind::CargoPants)), (Wear::Belt, Stack::one(Kind::Bandolier))] {
+            *p.loadout.worn_mut(wear) = Some(stack);
+        }
+        assert!(p.loadout.refit(p.perks.fit()).is_empty());
+        p.loadout.rig.put(Stack::fresh(Kind::LightVest, 1), 0, 0, false);
+        p.loadout.belt.put(Stack::new(Kind::Shells, 12), 3, 0, false);
         p.stash.put(Stack::one(Kind::Battery), 6, 6, false);
         p.stash.put(Stack::one(Kind::Medkit), 9, 0, true);
         p.loadout.pack.put(Stack::new(Kind::Cash, 4), 1, 2, false);

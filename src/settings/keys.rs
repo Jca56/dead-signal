@@ -25,6 +25,7 @@ pub enum Action {
     Melee,
     Bandage,
     Medkit,
+    Plate,
     Throw,
     NextThrowable,
     Interact,
@@ -48,7 +49,7 @@ pub enum Bind {
 }
 
 impl Action {
-    pub const ALL: [Action; 22] = [
+    pub const ALL: [Action; 23] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -66,6 +67,7 @@ impl Action {
         Action::Melee,
         Action::Bandage,
         Action::Medkit,
+        Action::Plate,
         Action::Throw,
         Action::NextThrowable,
         Action::Interact,
@@ -93,6 +95,7 @@ impl Action {
             Action::Melee => "melee",
             Action::Bandage => "bandage",
             Action::Medkit => "medkit",
+            Action::Plate => "armor_plate",
             Action::Throw => "throw",
             Action::NextThrowable => "next_throwable",
             Action::Interact => "interact",
@@ -121,6 +124,7 @@ impl Action {
             Action::Melee => "MELEE WEAPON",
             Action::Bandage => "USE BANDAGE",
             Action::Medkit => "USE MEDKIT",
+            Action::Plate => "USE ARMOR PLATE",
             Action::Throw => "THROW (HOLD TO AIM)",
             Action::NextThrowable => "NEXT THROWABLE",
             Action::Interact => "INTERACT / SEARCH",
@@ -150,6 +154,7 @@ impl Action {
             Action::Melee => c('3'),
             Action::Bandage => c('4'),
             Action::Medkit => c('5'),
+            Action::Plate => c('6'),
             Action::Throw => c('g'),
             Action::NextThrowable => c('t'),
             Action::Interact => c('e'),

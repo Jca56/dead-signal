@@ -60,10 +60,7 @@ impl DeadSignal {
         let player = self.game.player();
         match action {
             DevAction::Give(kind) => {
-                let stack = match kind.weapon() {
-                    Some(w) => Stack::gun(kind, w.spec().mag),
-                    None => Stack::new(kind, kind.def().stack),
-                };
+                let stack = Stack::fresh(kind, kind.def().stack);
                 if self.screen == Screen::Run {
                     let rest = self.run.bag.add(stack);
                     if rest.count > 0

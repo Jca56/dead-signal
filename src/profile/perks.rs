@@ -21,7 +21,8 @@ pub const ALL: [Perk; 8] = [Perk::Tough, Perk::Lungs, Perk::Medic, Perk::LightFe
 pub const RANKS: u8 = 3;
 
 /// The backpack's and the pockets' size at each rank of theirs.
-const PACK: [(u8, u8); 4] = [(6, 4), (7, 4), (7, 5), (8, 5)];
+/// What Pack Mule adds to any backpack worn, across and down, by rank.
+const PACK_BONUS: [(u8, u8); 4] = [(0, 0), (1, 0), (1, 1), (2, 1)];
 const POCKETS: [(u8, u8); 4] = [(2, 2), (3, 2), (3, 3), (4, 3)];
 
 impl Perk {
@@ -62,8 +63,8 @@ impl Perk {
             Perk::Medic => format!("Kits {} faster, heal +{}", pct(0.25), pct(0.2)),
             Perk::LightFeet => format!("Seen {} less far", pct(0.15)),
             Perk::PackMule => {
-                let (w, h) = PACK[usize::from(rank)];
-                format!("Backpack {w}×{h}")
+                let (w, h) = PACK_BONUS[usize::from(rank)];
+                format!("Any backpack +{w} across, +{h} down")
             }
             Perk::DeepPockets => {
                 let (w, h) = POCKETS[usize::from(rank)];
@@ -144,12 +145,10 @@ impl Perks {
         1.0 - 0.2 * self.r(Perk::LightFeet)
     }
 
-    pub fn pack(&self) -> (u8, u8) {
-        PACK[usize::from(self.rank(Perk::PackMule))]
-    }
-
-    pub fn pockets(&self) -> (u8, u8) {
-        POCKETS[usize::from(self.rank(Perk::DeepPockets))]
+    /// What these perks make of what's worn: more backpack, bigger
+    /// pockets.
+    pub fn fit(&self) -> crate::loot::bag::Fit {
+        crate::loot::bag::Fit { pack_bonus: PACK_BONUS[usize::from(self.rank(Perk::PackMule))], pockets: POCKETS[usize::from(self.rank(Perk::DeepPockets))] }
     }
 
     /// How fast a reload runs, and a search: multiples of the usual.
@@ -182,10 +181,9 @@ mod tests {
         // Two blows of a rank-2 brawler kill (150 health, 50 a blow).
         assert!(50.0 * p.melee() * 2.0 >= 150.0);
         assert!(50.0 * Perks::default().melee() * 2.0 < 150.0);
-        assert_eq!(Perks::default().pack(), crate::loot::bag::PACK);
-        assert_eq!(Perks::default().pockets(), crate::loot::bag::POCKETS);
+        assert_eq!(Perks::default().fit(), crate::loot::bag::Fit::default());
         p.set(Perk::PackMule, 9);
-        assert_eq!(p.pack(), (8, 5), "ranks stop at three");
+        assert_eq!(p.fit().pack_bonus, (2, 1), "ranks stop at three");
         for perk in ALL {
             for rank in 0..=RANKS {
                 assert!(!perk.does(rank).is_empty());

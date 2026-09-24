@@ -49,7 +49,7 @@
 
 ## Phase 8: Stuff and things (idk what to call this phase)
 
-- [ ] 18. Body slots and armor.
+- [x] 18. Body slots and armor.
   - Chest slot for armor with pockets or gun slots
   - Head slot for helmets
   - Pants slot for armored pants? With bigger pockets?

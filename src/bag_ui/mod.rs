@@ -7,7 +7,9 @@
 //! things to be sold too, between the bag and the stash.
 
 mod draw;
+mod layout;
 mod slots;
+mod worn;
 
 use std::collections::HashMap;
 
@@ -15,7 +17,8 @@ use lntrn_app::lntrn_render::ImageHandle;
 use lntrn_math::{Rect, Vec2};
 use lntrn_ui::{Key, Ui};
 
-use crate::loot::bag::{Bag, Slot};
+use crate::loot::bag::{Bag, Fit, Slot};
+use crate::loot::gear::Wear;
 use crate::loot::grid::{Grid, Item};
 use crate::loot::{Kind, Stack};
 
@@ -36,6 +39,10 @@ pub enum Which {
     /// Trading: what's to be sold.
     Sell,
     Slot(Slot),
+    /// A chest rig's grid, and a bandolier's (rounds only).
+    Rig,
+    Belt,
+    Worn(Wear),
 }
 
 /// Where things are kept while the screen is up: the bag, what's being
@@ -45,6 +52,8 @@ pub struct Shelves<'a> {
     pub bag: &'a mut Bag,
     pub loot: Option<(&'static str, &'a mut Grid)>,
     pub sell: Option<&'a mut Grid>,
+    /// What the player's perks make of what's worn.
+    pub fit: Fit,
 }
 
 impl Shelves<'_> {
@@ -54,7 +63,9 @@ impl Shelves<'_> {
             Which::Pockets => Some(&mut self.bag.pockets),
             Which::Loot => self.loot.as_mut().map(|(_, g)| &mut **g),
             Which::Sell => self.sell.as_deref_mut(),
-            Which::Slot(_) => None,
+            Which::Rig => Some(&mut self.bag.rig),
+            Which::Belt => Some(&mut self.bag.belt),
+            Which::Slot(_) | Which::Worn(_) => None,
         }
     }
 
@@ -62,6 +73,7 @@ impl Shelves<'_> {
     fn take(&mut self, which: Which, index: usize) -> Option<Item> {
         match which {
             Which::Slot(slot) => self.bag.slot_mut(slot).take().map(|stack| Item { stack, x: 0, y: 0, turned: false }),
+            Which::Worn(wear) => self.bag.take_off(wear, self.fit).ok().map(|stack| Item { stack, x: 0, y: 0, turned: false }),
             _ => self.grid(which).map(|g| g.take(index)),
         }
     }
@@ -110,6 +122,8 @@ impl Default for BagUi {
 pub struct Moved {
     pub dropped: Vec<Stack>,
     pub taken: Vec<Stack>,
+    /// Why something wouldn't go (gear that won't go on or come off).
+    pub said: Option<&'static str>,
 }
 
 /// Where something held would go, let go of over a grid.
@@ -153,6 +167,11 @@ fn landing(grid: &Grid, held: Item, (x, y): (i32, i32), (cx, cy): (i32, i32)) ->
 /// much as lands there does; the rest goes back where it came from. How
 /// many landed.
 fn release(shelves: &mut Shelves, h: Held, which: Which, at: (i32, i32), over: (i32, i32)) -> u32 {
+    // A bandolier holds rounds, nothing else.
+    if which == Which::Belt && !h.item.stack.kind.is_ammo() {
+        put_back(shelves, h);
+        return 0;
+    }
     let grid = shelves.grid(which).expect("a grid on screen");
     let landed = match landing(grid, h.item, at, over) {
         Landing::Put(x, y) => {
@@ -194,65 +213,6 @@ impl BagUi {
     pub fn new(mode: Mode) -> Self {
         Self { held: None, mode, slot_keys: ["1", "2", "3"].map(String::from) }
     }
-
-    /// A cell's side on screen, what's searched (the stash) `loot` big:
-    /// in the hideout, small enough for the stash to fit above the way on
-    /// (and trading, for everything to fit beside the offers).
-    fn cell(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>) -> f64 {
-        let s = ui.m.scale;
-        if self.mode == Mode::Run {
-            return CELL * s;
-        }
-        let screen = ui.clip();
-        let top = screen.height() * 0.17 + TITLE * s * 1.6;
-        let rows = f64::from(loot.map_or(1, |(_, h)| h.max(1)));
-        let cell = (HIDEOUT_CELL * s).min((screen.height() - top - BELOW * s) / rows);
-        if self.mode != Mode::Trade {
-            return cell;
-        }
-        let (x0, x1) = self.trade_span(ui);
-        let cols = f64::from(bag.pack.w.max(bag.pockets.w) + SELL_W + loot.map_or(0, |(w, _)| w));
-        cell.min((x1 - x0 - 2.0 * GAP * s) / cols)
-    }
-
-    /// Trading: what the offers leave, left to right.
-    fn trade_span(&self, ui: &Ui) -> (f64, f64) {
-        let (s, screen) = (ui.m.scale, ui.clip());
-        (screen.min.x + (80.0 + OFFERS_W) * s + GAP * s, screen.max.x - 80.0 * s)
-    }
-
-    /// The grids' and slots' places on screen: which, and its rect. The
-    /// slots on the left, then the bag (the pack over the pockets), what's
-    /// searched (or the stash) on the right. Trading, right of the offers:
-    /// the bag, what's to be sold, the stash (and no slots).
-    fn layout(&self, ui: &Ui, bag: &Bag, loot: Option<(u8, u8)>, cell: f64) -> Vec<(Which, Rect)> {
-        let s = ui.m.scale;
-        let screen = ui.clip();
-        let (gap, title) = (GAP * s, TITLE * s * 1.6);
-        let size = |(w, h): (u8, u8)| Vec2::new(f64::from(w) * cell, f64::from(h) * cell);
-        let (pack_dims, pocket_dims) = ((bag.pack.w, bag.pack.h), (bag.pockets.w, bag.pockets.h));
-        let bag_w = f64::from(pack_dims.0.max(pocket_dims.0)) * cell;
-        let loot_w = loot.map_or(0.0, |(w, _)| gap + f64::from(w) * cell);
-        let top = screen.min.y + screen.height() * 0.17 + title;
-        let trade = self.mode == Mode::Trade;
-        let (before, after) = if trade { (0.0, gap + f64::from(SELL_W) * cell) } else { (slots::WIDTH * cell + gap, 0.0) };
-        let centre = if trade { (self.trade_span(ui).0 + self.trade_span(ui).1) * 0.5 } else { screen.center().x };
-        let left = centre - (before + bag_w + after + loot_w) * 0.5;
-        let bag_x = left + before;
-        let pack = Rect::from_min_size(Vec2::new(bag_x, top), size(pack_dims));
-        let pockets = Rect::from_min_size(Vec2::new(bag_x, pack.max.y + title + gap * 0.5), size(pocket_dims));
-        let mut out = vec![(Which::Pack, pack), (Which::Pockets, pockets)];
-        if trade {
-            out.push((Which::Sell, Rect::from_min_size(Vec2::new(bag_x + bag_w + gap, top), size((SELL_W, SELL_H)))));
-        }
-        if let Some(dims) = loot {
-            out.push((Which::Loot, Rect::from_min_size(Vec2::new(bag_x + bag_w + after + gap, top), size(dims))));
-        }
-        if !trade {
-            out.extend(slots::layout(Vec2::new(left, top), cell, s));
-        }
-        out
-    }
 }
 
 impl BagUi {
@@ -279,6 +239,7 @@ impl BagUi {
         let p = ui.state.pointer;
         let under_item = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
             Which::Slot(slot) => shelves.bag.slot(slot).map(|_| (which, 0)),
+            Which::Worn(wear) => shelves.bag.worn(wear).map(|_| (which, 0)),
             _ => {
                 let (cx, cy) = cell_under(r, p, cell);
                 shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8)).map(|i| (which, i))
@@ -297,6 +258,11 @@ impl BagUi {
                         _ => r.min + Vec2::new(f64::from(item.x), f64::from(item.y)) * cell,
                     };
                     self.held = Some(Held { item, from: which, was: item, grab: p - at });
+                } else if ui.state.pressed
+                    && let Some((Which::Worn(_), _)) = under_item
+                {
+                    // It won't come off: what's in it has nowhere to go.
+                    moved.said = Some(crate::loot::bag::NO_ROOM);
                 } else if ui.state.right_pressed
                     && self.mode == Mode::Trade
                     && let Some((which, i)) = under_item
@@ -304,6 +270,20 @@ impl BagUi {
                     // Trading, straight across into what's to be sold, or out
                     // of it back to the stash.
                     sell_move(shelves, which, i);
+                } else if ui.state.right_pressed
+                    && let Some((which, i)) = under_item
+                    && (matches!(which, Which::Worn(_)) || shelves.grid(which).is_some_and(|g| g.items[i].stack.kind.gear().is_some()))
+                {
+                    // Gear: put on, or taken off.
+                    let stack = shelves.grid(which).map(|g| g.items[i].stack);
+                    let (n, said) = worn::quick(shelves, which, i);
+                    moved.said = moved.said.or(said);
+                    if which == Which::Loot
+                        && n > 0
+                        && let Some(stack) = stack
+                    {
+                        moved.taken.push(stack);
+                    }
                 } else if ui.state.right_pressed
                     && let Some((which, i)) = under_item
                 {
@@ -330,6 +310,11 @@ impl BagUi {
                         Some(&(which, r)) => {
                             let landed = match which {
                                 Which::Slot(slot) => slots::release(shelves, h, slot),
+                                Which::Worn(wear) => {
+                                    let (landed, said) = worn::release(shelves, h, wear);
+                                    moved.said = moved.said.or(said);
+                                    landed
+                                }
                                 _ => release(shelves, h, which, corner_cell(r, p - h.grab, cell), cell_under(r, p, cell)),
                             };
                             if h.from == Which::Loot && which != Which::Loot && landed > 0 {
@@ -424,6 +409,7 @@ fn put_back(shelves: &mut Shelves, h: Held) {
             }
             empty
         }
+        Which::Worn(wear) => shelves.bag.worn(wear).is_none() && shelves.bag.wear(stack, shelves.fit).is_ok(),
         _ => shelves.grid(h.from).is_some_and(|g| g.put(stack, i32::from(h.was.x), i32::from(h.was.y), h.was.turned)),
     };
     if !back {
