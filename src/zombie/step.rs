@@ -25,11 +25,15 @@ pub(super) fn think(
     let tick = horde.tick;
     let new = std::mem::take(&mut *noises);
     let fresh = |at: u32| tick.wrapping_sub(at) < FAR_EVERY;
-    horde.shots.retain(|(at, _)| fresh(*at));
+    horde.shots.retain(|(at, _, _)| fresh(*at));
     horde.snarls.retain(|(at, _)| fresh(*at));
-    horde.shots.extend(new.shots.into_iter().map(|n| (tick, n)));
+    for n in new.shots {
+        horde.heard += 1;
+        let id = horde.heard;
+        horde.shots.push((tick, id, n));
+    }
     horde.snarls.extend(new.snarls.into_iter().map(|n| (tick, n)));
-    let shots: Vec<(Vec3, f64)> = horde.shots.iter().map(|(_, n)| *n).collect();
+    let shots: Vec<(u32, Vec3, f64)> = horde.shots.iter().map(|&(_, id, (at, range))| (id, at, range)).collect();
     let snarls: Vec<(Vec3, Vec3)> = horde.snarls.iter().map(|(_, n)| *n).collect();
     let searches = std::cell::Cell::new(SEARCHES);
     let senses = Senses { solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: stealth.map_or(1.0, |s| s.0) };

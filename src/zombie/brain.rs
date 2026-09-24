@@ -22,12 +22,17 @@ use crate::sound::Sfx;
 const LOOK_EVERY: f64 = 0.1;
 /// How far it sees, and how wide (either side of straight ahead).
 pub const SIGHT: f64 = 25.0;
-const SIGHT_HALF: f64 = 55.0;
+pub(super) const SIGHT_HALF: f64 = 55.0;
 /// Closer than this it knows you're there, whichever way it faces.
-const CLOSE: f64 = 2.5;
-/// How far a shot is heard, and another's snarl on seeing the player.
-pub const HEARING: f64 = 80.0;
+pub(super) const CLOSE: f64 = 2.5;
+/// How far another's snarl on seeing the player is heard.
 pub const ALERT_RANGE: f64 = 15.0;
+/// A noise far off (past this share of how far it carries) is heeded by
+/// fewer, down to this share at the very edge; and it's only known
+/// roughly where from: off by up to this share of the way.
+pub(super) const HEARD_SURELY: f64 = 0.5;
+pub(super) const HEARD_AT_EDGE: f64 = 1.0 / 3.0;
+pub(super) const HEARD_ROUGHLY: f64 = 0.25;
 /// How far above its feet the player's feet can be and still be struck
 /// (standing on a crate: the swipe takes the legs), and how far below.
 pub(super) const REACH_UP: f64 = 1.0;
@@ -54,8 +59,8 @@ pub(super) const GATHER: f64 = 3.0;
 pub(super) const ARRIVE: f64 = 0.3;
 pub(super) const LOOK_AHEAD: f64 = 0.7;
 /// Its eyes, and where it looks for yours, above the feet.
-const EYE: f64 = 1.55;
-const PLAYER_EYE: f64 = 1.5;
+pub(super) const EYE: f64 = 1.55;
+pub(super) const PLAYER_EYE: f64 = 1.5;
 /// A stride of its walk animation covers this much ground, and of its
 /// run (a Ripper's).
 const STRIDE: f64 = 1.1;
@@ -96,9 +101,10 @@ pub struct Senses<'a> {
     pub nav: Option<&'a NavGrid>,
     /// Where the player stands, if there is one.
     pub player: Option<Vec3>,
-    /// Noises made since the last step (a shot, a rummage): where, and
-    /// how far off they're heard.
-    pub noises: &'a [(Vec3, f64)],
+    /// Noises made lately (a shot, a rummage): each its number (every
+    /// noise is only heeded or not once), where, and how far off it's
+    /// heard.
+    pub noises: &'a [(u32, Vec3, f64)],
     /// Snarls since the last step: where from, and where the player was.
     pub alerts: &'a [(Vec3, Vec3)],
     /// How many more may find their way this step, shared by the crowd:
@@ -146,8 +152,8 @@ pub struct Zombie {
     /// Where the leg of the route it's on began.
     pub(super) leg_from: Vec3,
     /// Till it next looks, and whether it saw the player when it last did.
-    look_in: f64,
-    in_sight: bool,
+    pub(super) look_in: f64,
+    pub(super) in_sight: bool,
     /// What it's after can't be got to (up on a car, say): the way found
     /// ends short of it.
     pub(super) cut_off: bool,
@@ -155,6 +161,8 @@ pub struct Zombie {
     last_seen: Option<Vec3>,
     unseen: f64,
     cooldown: f64,
+    /// The last noise it's listened to (each is heeded or not, once).
+    pub(super) heard: u32,
     /// Till a Spitter may spit again, and a Juggernaut charge again.
     pub(super) spit_in: f64,
     pub(super) charge_in: f64,
@@ -179,7 +187,7 @@ impl Zombie {
     /// One of `kind` facing `yaw`, its own ways from `seed`.
     pub fn of(kind: Kind, yaw: f64, seed: u32) -> Self {
         let t = kind.traits();
-        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, spit_in: 0.0, charge_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, heard: 0, spit_in: 0.0, charge_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
         let (lo, hi, lunge) = if z.rand() < t.fast_share { t.fast } else { t.pace };
         let walk = lo + (hi - lo) * z.rand();
@@ -268,26 +276,6 @@ impl Zombie {
         }
     }
 
-    /// Whether it sees a player standing at `player`, as far as `reach`
-    /// of its sight.
-    fn sees(&self, body: &Body, player: Vec3, solids: &Solids, reach: f64) -> bool {
-        let to = Vec2::new(player.x - body.pos.x, player.z - body.pos.z);
-        let d = to.length();
-        if d > SIGHT * reach * self.kind.traits().sight {
-            return false;
-        }
-        if d > CLOSE {
-            let facing = Vec2::new(-self.yaw.sin(), -self.yaw.cos());
-            if facing.dot(to * (1.0 / d)) < SIGHT_HALF.to_radians().cos() {
-                return false;
-            }
-        }
-        let eye = body.pos + Vec3::new(0.0, EYE, 0.0);
-        let look = player + Vec3::new(0.0, PLAYER_EYE, 0.0) - eye;
-        let len = look.length();
-        solids.raycast(eye, look * (1.0 / len), (len - 0.3).max(0.0)).is_none()
-    }
-
     /// One fixed step of thought.
     pub fn think(&mut self, body: &Body, s: &Senses, dt: f64) -> Intent {
         let mut out = Intent::default();
@@ -324,10 +312,10 @@ impl Zombie {
             }
             self.last_seen = Some(p);
             self.unseen = 0.0;
-        } else if let Some(&(shot, _)) = s.noises.iter().find(|(at, range)| (*at - body.pos).length() <= *range)
-            && !matches!(self.state, State::Hunt | State::Attack { .. } | State::Stagger { .. })
+        } else if let Some(at) = self.listen(body.pos, s.noises)
+            && matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. })
         {
-            self.state = State::Investigate { at: shot, looked: 0.0 };
+            self.state = State::Investigate { at, looked: 0.0 };
         } else if let Some(&(_, seen_at)) = s.alerts.iter().find(|(from, _)| flat_dist(*from, body.pos) <= ALERT_RANGE)
             && matches!(self.state, State::Wander { .. } | State::Search(_))
         {

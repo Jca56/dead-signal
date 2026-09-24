@@ -3,8 +3,10 @@
 //! every place, and wanderers in the woods between; never close to where
 //! the player starts; the dead at the crash and the camp soldiers, mostly.
 //! Then, as the run goes on, a trickle keeps some of
-//! them near the player: whenever fewer are close than the kills so far
-//! call for, a new one comes in from out of sight. When the dead surge
+//! them near the player: whenever fewer are close than the noise they've
+//! made lately calls for (its heat: loud, and more come; quiet a while,
+//! and it cools), a new one comes in from out of sight, well off. What's
+//! killed stays killed a while: the trickle is slow. When the dead surge
 //! (the way out is being worked), they come fast and many. The special
 //! dead: packs of Rippers hunt the woods from the start, Spitters haunt a
 //! few of the outposts, and now and then one of either comes in with the
@@ -64,23 +66,27 @@ fn outpost(kind: Kind) -> bool {
 }
 /// Nothing starts nearer the player than this, metres.
 const CLEAR_OF_START: f64 = 45.0;
-/// What counts as near the player, how many should be near to begin with,
-/// and the most near as the kills mount (one more each two kills); while
-/// the dead surge, the most there are near.
-const NEAR: f64 = 80.0;
+/// What counts as near the player, how many should be near when all's
+/// quiet, and the most near however loud it gets (one more for each of
+/// heat); while the dead surge, the most there are near.
+const NEAR: f64 = 100.0;
 const NEAR_FIRST: usize = 8;
 const NEAR_MOST: usize = 30;
 const NEAR_SURGE: usize = 45;
+/// Heat halves every so many seconds.
+const COOLS: f64 = 40.0;
 /// Seconds between newcomers, and before trying again when there was
 /// nowhere out of sight to put one; and between newcomers while the dead
-/// surge.
-const TRICKLE: f64 = 1.5;
+/// surge. Newcomers come from this far off (nearer in a surge).
+const TRICKLE: f64 = 4.0;
 const RETRY: f64 = 0.25;
 const SURGE_TRICKLE: f64 = 0.3;
+const COMES_FROM: (f64, f64) = (60.0, 90.0);
+const SURGES_FROM: (f64, f64) = (35.0, 60.0);
 
-/// How many should be near the player, `kills` into a run.
-pub fn near_budget(kills: u32) -> usize {
-    (NEAR_FIRST + kills as usize / 2).min(NEAR_MOST)
+/// How many should be near the player, with `heat` from the noise lately.
+pub fn near_budget(heat: f64) -> usize {
+    (NEAR_FIRST + heat.max(0.0) as usize).min(NEAR_MOST)
 }
 
 #[derive(Default)]
@@ -194,17 +200,22 @@ impl Director {
             super::spawn_kind(world, at, yaw, kind, theme);
         }
         self.dice = Dice(seed.rotate_left(7) | 1);
+        world.insert_resource(super::Heat::default());
         self.peak = near(world, eye);
         self.wait = TRICKLE;
     }
 
     /// Bring one in near the player, out of sight, if fewer are near than
     /// there should be and it's time.
-    pub fn update(&mut self, world: &mut World, kills: u32, eye: Vec3, forward: Vec3, dt: f64) {
+    pub fn update(&mut self, world: &mut World, eye: Vec3, forward: Vec3, dt: f64) {
         self.wait -= dt;
+        let heat = world.get_resource_mut::<super::Heat>().map_or(0.0, |mut h| {
+            h.0 *= 0.5f64.powf(dt / COOLS);
+            h.0
+        });
         let close = near(world, eye);
         self.peak = self.peak.max(close);
-        let want = if self.surge { NEAR_SURGE } else { near_budget(kills) };
+        let want = if self.surge { NEAR_SURGE } else { near_budget(heat) };
         if close >= want || self.wait > 0.0 || super::alive(world) >= MOST {
             return;
         }
@@ -217,7 +228,8 @@ impl Director {
         } else {
             Dead::Shambler
         };
-        self.wait = if !super::spawn_unseen(world, eye, forward, kind) {
+        let from = if self.surge { SURGES_FROM } else { COMES_FROM };
+        self.wait = if !super::spawn_unseen(world, eye, forward, kind, from) {
             RETRY
         } else if self.surge {
             SURGE_TRICKLE
@@ -232,10 +244,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_near_budget_grows_with_kills_and_stops_at_a_crowd() {
-        assert_eq!(near_budget(0), NEAR_FIRST);
-        assert_eq!(near_budget(2), NEAR_FIRST + 1);
-        assert_eq!(near_budget(1000), NEAR_MOST);
+    fn the_near_budget_grows_with_the_heat_and_stops_at_a_crowd() {
+        assert_eq!(near_budget(0.0), NEAR_FIRST);
+        assert_eq!(near_budget(3.4), NEAR_FIRST + 3);
+        assert_eq!(near_budget(1000.0), NEAR_MOST);
         const { assert!(NEAR_SURGE > NEAR_MOST && MOST > FIRST) };
     }
 

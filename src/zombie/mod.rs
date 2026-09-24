@@ -11,6 +11,7 @@ pub mod kind;
 pub mod looks;
 pub mod nav;
 pub mod spit;
+mod senses;
 mod special;
 mod steer;
 mod step;
@@ -40,9 +41,6 @@ const ELBOW: f64 = 3.0;
 /// How hard a blow shoves one, m/s (about a metre back); a shot's is its
 /// gun's (`weapon/spec.rs`).
 const BLOW_SHOVE: f64 = 7.0;
-/// Where a new one comes from: this far off, and out of sight.
-const SPAWN_NEAR: f64 = 35.0;
-const SPAWN_FAR: f64 = 60.0;
 /// The far dead take their steps less often (and longer, so they go as
 /// far): every step within `CLOSE` of the player, every `MID_EVERY` out to
 /// `MID`, every `FAR_EVERY` past that. Only the close ones keep out of
@@ -128,7 +126,9 @@ pub struct Horde {
     /// What was heard over the last few steps (shots, snarls), and on
     /// which: kept long enough for the far dead, who step less often, to
     /// hear them on their next.
-    shots: Vec<(u32, (Vec3, f64))>,
+    shots: Vec<(u32, u32, (Vec3, f64))>,
+    /// Noises heard so far (each one's number).
+    heard: u32,
     snarls: Vec<(u32, (Vec3, Vec3))>,
 }
 
@@ -179,7 +179,7 @@ pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Them
 /// Put a Shambler somewhere the player at `eye`, looking along `forward`,
 /// can't see: on walkable ground, 35–60 m off, behind something or behind
 /// them. Whether there was such a place.
-pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3, kind: Kind) -> bool {
+pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3, kind: Kind, (near, far): (f64, f64)) -> bool {
     let spot = {
         let (Some(nav), solid) = (world.resource::<Nav>().0.as_ref(), &world.resource::<Solid>().0) else { return false };
         let mut seed = world.resource::<Horde>().seed ^ 0x9E37_79B9;
@@ -192,7 +192,7 @@ pub fn spawn_unseen(world: &mut World, eye: Vec3, forward: Vec3, kind: Kind) -> 
         let mut found = None;
         for _ in 0..200 {
             let a = rand() * std::f64::consts::TAU;
-            let r = SPAWN_NEAR + (SPAWN_FAR - SPAWN_NEAR) * rand();
+            let r = near + (far - near) * rand();
             // Near the player's own level: on the ground, or a floor of a
             // house.
             let p = Vec3::new(eye.x + a.cos() * r, eye.y - 1.6, eye.z + a.sin() * r);
@@ -311,9 +311,25 @@ pub fn plated(world: &World, e: Entity, dir: Vec3, limb: bool) -> bool {
     world.get::<Zombie>(e).is_some_and(|z| z.plating(dir, limb) < 1.0)
 }
 
-/// A noise at `at`, heard `range` metres off.
+/// How loud the player's been lately, in more of the dead drawn near: each
+/// noise adds to it (as far as it carries), and it cools (`director.rs`).
+#[derive(Resource, Default)]
+pub struct Heat(pub f64);
+
+/// A noise's metres heard for each of the dead it draws near.
+const HEAT_PER: f64 = 40.0;
+/// Under a roof, a noise carries this share as far.
+const MUFFLED: f64 = 0.6;
+
+/// A noise at `at`, heard `range` metres off (less, under a roof): the dead
+/// in earshot may come, and it heats things up.
 pub fn noise(world: &mut World, at: Vec3, range: f64) {
+    let roofed = world.get_resource::<Solid>().is_some_and(|s| s.0.raycast(at, Vec3::Y, 25.0).is_some());
+    let range = if roofed { range * MUFFLED } else { range };
     world.resource_mut::<Noises>().shots.push((at, range));
+    if let Some(mut heat) = world.get_resource_mut::<Heat>() {
+        heat.0 += range / HEAT_PER;
+    }
 }
 
 #[cfg(test)]

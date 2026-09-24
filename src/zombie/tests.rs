@@ -2,7 +2,7 @@
 
 use lntrn_math::Vec3;
 
-use super::brain::{ALERT_RANGE, HEARING, Senses, State, Zombie};
+use super::brain::{ALERT_RANGE, Senses, State, Zombie};
 use super::figure::Clip;
 use super::nav::NavGrid;
 use crate::collide::{Solids, box_tris};
@@ -19,10 +19,13 @@ pub(super) fn floor() -> Solids {
 /// Step a Shambler for `seconds` with the player standing at `player`; the
 /// blows it landed.
 pub(super) fn run(z: &mut Zombie, body: &mut Body, solids: &Solids, nav: Option<&NavGrid>, player: Option<Vec3>, noises: &[(Vec3, f64)], seconds: f64) -> usize {
+    // Every noise its own number, as the world gives them.
+    static HEARD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let noises: Vec<(u32, Vec3, f64)> = noises.iter().map(|&(at, range)| (HEARD.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1, at, range)).collect();
     let mut blows = 0;
     let steps = (seconds / STEP) as usize;
     for i in 0..steps {
-        let heard = if i == 0 { noises } else { &[] };
+        let heard: &[(u32, Vec3, f64)] = if i == 0 { &noises } else { &[] };
         let senses = Senses { solids, nav, player, noises: heard, alerts: &[], searches: &std::cell::Cell::new(u32::MAX), sight: 1.0 };
         let mut intent = z.think(body, &senses, STEP);
         blows += usize::from(intent.hit.is_some());
@@ -68,17 +71,44 @@ fn light_feet_go_unseen_farther_off() {
 
 #[test]
 fn it_hears_a_shot_within_earshot_only() {
+    const EARSHOT: f64 = 80.0;
     let s = floor();
     let behind = |d: f64| Vec3::new(0.0, 0.0, d);
     let mut z = Zombie::new(0.0, 3);
     let mut body = Body::at(Vec3::ZERO);
-    run(&mut z, &mut body, &s, None, None, &[(behind(HEARING + 1.0), HEARING)], 0.1);
+    run(&mut z, &mut body, &s, None, None, &[(behind(EARSHOT + 1.0), EARSHOT)], 0.1);
     assert!(matches!(z.state, State::Wander { .. }), "heard it too far off");
-    run(&mut z, &mut body, &s, None, None, &[(behind(HEARING - 1.0), HEARING)], 0.1);
+    // Near enough, always heard, and it goes that way.
+    run(&mut z, &mut body, &s, None, None, &[(behind(EARSHOT * 0.3), EARSHOT)], 0.1);
     assert!(matches!(z.state, State::Investigate { .. }), "didn't hear it: {:?}", z.state);
-    // And goes that way.
     run(&mut z, &mut body, &s, None, None, &[], 3.0);
     assert!(body.pos.z > 2.0, "went toward the shot: {:?}", body.pos);
+}
+
+#[test]
+fn far_off_fewer_heed_a_shot_and_only_roughly_where() {
+    const EARSHOT: f64 = 100.0;
+    let s = floor();
+    let heed = |d: f64| -> Vec<Vec3> {
+        (1..=300u32)
+            .filter_map(|seed| {
+                let mut z = Zombie::new(0.0, seed * 7919);
+                let mut body = Body::at(Vec3::ZERO);
+                run(&mut z, &mut body, &s, None, None, &[(Vec3::new(0.0, 0.0, d), EARSHOT)], STEP);
+                match z.state {
+                    State::Investigate { at, .. } => Some(at),
+                    _ => None,
+                }
+            })
+            .collect()
+    };
+    let near = heed(40.0);
+    assert_eq!(near.len(), 300, "all heed it near");
+    let edge = heed(95.0);
+    assert!((60..170).contains(&edge.len()), "{} of 300 heed it at the edge", edge.len());
+    // Where they think it was: off by up to a quarter of the way.
+    let off = |v: &[Vec3], d: f64| v.iter().map(|a| ((a.x).powi(2) + (a.z - d).powi(2)).sqrt()).fold(0.0f64, f64::max);
+    assert!(off(&near, 40.0) <= 10.0 + 1e-6 && off(&edge, 95.0) > 8.0, "{} {}", off(&near, 40.0), off(&edge, 95.0));
 }
 
 #[test]
@@ -353,7 +383,7 @@ fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
     let (feet, forward) = (Vec3::new(0.0, 0.0, 6.0), Vec3::new(0.0, 0.0, -1.0));
     let eye = feet + Vec3::new(0.0, 1.6, 0.0);
     for _ in 0..5 {
-        assert!(super::spawn_unseen(&mut world, eye, forward, super::kind::Kind::Shambler), "nowhere to come from");
+        assert!(super::spawn_unseen(&mut world, eye, forward, super::kind::Kind::Shambler, (35.0, 60.0)), "nowhere to come from");
     }
     let bodies: Vec<Vec3> = world.query::<&Body>().iter(&world).map(|b| b.pos).collect();
     let nav = world.resource::<super::Nav>().0.as_ref().expect("the grid");
@@ -416,4 +446,24 @@ fn a_takedown_kills_only_one_that_never_saw_it_coming() {
     // And a blow to the head, half again.
     assert_eq!(super::brain::dealt(80.0, true, true), 120.0);
     assert_eq!(super::brain::dealt(80.0, false, true), 80.0);
+}
+
+#[test]
+fn a_noise_heats_things_up_and_a_roof_muffles_it() {
+    use bevy_ecs::prelude::*;
+    let mut s = floor();
+    // A roof over (10, 0) only.
+    s.add(&box_tris(Vec3::new(5.0, 4.0, -5.0), Vec3::new(15.0, 4.3, 5.0)));
+    let mut world = World::new();
+    world.insert_resource(crate::world::Solid(s));
+    world.insert_resource(super::Noises::default());
+    world.insert_resource(super::Heat::default());
+    super::noise(&mut world, Vec3::new(-10.0, 1.6, 0.0), 120.0);
+    super::noise(&mut world, Vec3::new(10.0, 1.6, 0.0), 120.0);
+    let shots = &world.resource::<super::Noises>().shots;
+    assert_eq!(shots[0].1, 120.0);
+    assert!((shots[1].1 - 72.0).abs() < 1e-9, "muffled under the roof: {}", shots[1].1);
+    let heat = world.resource::<super::Heat>().0;
+    assert!((heat - (120.0 + 72.0) / 40.0).abs() < 1e-9, "{heat}");
+    assert!(super::director::near_budget(heat) > super::director::near_budget(0.0));
 }

@@ -259,7 +259,7 @@ impl Run {
         // More of the dead, as the kills mount (and all of them, surging).
         if let Some((eye, forward)) = Self::watching(game) {
             self.director.surge = self.out.surging;
-            self.director.update(&mut game.world, self.stats.kills(), eye, forward, dt);
+            self.director.update(&mut game.world, eye, forward, dt);
             self.stats.biggest_horde = self.director.peak as u32;
         }
 
