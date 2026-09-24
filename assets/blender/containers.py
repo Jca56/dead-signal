@@ -1,6 +1,7 @@
 """Things to search: a wooden crate, a metal locker, a wrecked car, a
-locked supply cage and a gun cabinet, each its own object (CONTAINER_Crate,
-CONTAINER_Locker, CONTAINER_Car, CONTAINER_Cage, CONTAINER_GunCabinet);
+locked supply cage, a gun cabinet and a military supply case, each its own
+object (CONTAINER_Crate, CONTAINER_Locker, CONTAINER_Car, CONTAINER_Cage,
+CONTAINER_GunCabinet, CONTAINER_SupplyCase);
 and in houses and stores (`indoor_containers.py`) a fridge, a chest
 of drawers (CONTAINER_Cabinet), a desk, a wardrobe, a store's shelving
 and its till counter (CONTAINER_Register): each standing on its origin with its front (the
@@ -242,6 +243,29 @@ def gun_cabinet(opened):
     p.finish()
 
 
+CASE_OLIVE = (0.30, 0.32, 0.22)
+CASE_DARK = (0.18, 0.19, 0.14)
+STENCIL = (0.80, 0.72, 0.30)
+
+
+def supply_case(opened):
+    """A military hard case, 1.0 × 0.55 × 0.5, latched, stencilled; opened,
+    its lid swung up and back."""
+    p = named("CONTAINER_SupplyCase", opened)
+    w, d, h = 1.0, 0.55, 0.5
+    p.box((-w / 2, -d / 2, 0.0), (w / 2, d / 2, h * 0.7), CASE_OLIVE)
+    lid = p.box((-w / 2, -d / 2, h * 0.7), (w / 2, d / 2, h), CASE_OLIVE)
+    lid += p.box((-0.3, -0.08, h), (0.3, 0.08, h + 0.01), STENCIL)
+    for x in (-0.36, 0.36):
+        p.box((x - 0.05, d / 2, h * 0.55), (x + 0.05, d / 2 + 0.03, h * 0.85), CASE_DARK)
+    for x in (-0.52, 0.5):
+        p.box((x, -0.1, h * 0.3), (x + 0.02, 0.1, h * 0.45), CASE_DARK)
+    if opened:
+        p.box((-w / 2 + 0.04, -d / 2 + 0.04, h * 0.7 - 0.01), (w / 2 - 0.04, d / 2 - 0.04, h * 0.7 + 0.001), HOLLOW)
+        swing(lid, (0.0, -d / 2, h * 0.7), "X", 105.0)
+    p.finish()
+
+
 def hulls():
     hull("CONTAINER_Crate", [((-0.5, -0.35, 0.0), (0.5, 0.35, 0.62))])
     hull("CONTAINER_Locker", [((-0.3, -0.25, 0.0), (0.3, 0.27, 1.92))])
@@ -252,6 +276,7 @@ def hulls():
     hull("CONTAINER_Shelf", [((-0.9, -0.3, 0.0), (0.9, 0.3, 1.6))])
     hull("CONTAINER_Register", [((-1.03, -0.43, 0.0), (1.03, 0.43, 1.0))])
     hull("CONTAINER_GunCabinet", [((-0.42, -0.24, 0.0), (0.42, 0.25, 1.95))])
+    hull("CONTAINER_SupplyCase", [((-0.5, -0.28, 0.0), (0.5, 0.3, 0.5))])
     lean = Matrix.Rotation(math.radians(-2.5), 4, "X") @ Matrix.Rotation(math.radians(-1.5), 4, "Y")
     hull("CONTAINER_Car", [((-2.2, -0.875, 0.05), (2.2, 0.875, 0.82)), ((-1.0, -0.78, 0.82), (0.75, 0.78, 1.32))], lean)
     w, d, h, t = 1.6, 1.0, 2.0, 0.05
@@ -278,6 +303,7 @@ def main():
         shelf(opened)
         register(opened)
         gun_cabinet(opened)
+        supply_case(opened)
     hulls()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"containers: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")

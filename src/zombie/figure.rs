@@ -52,6 +52,8 @@ const BODY_RADIUS: f64 = 0.21;
 #[derive(Resource)]
 pub struct Model {
     pub mesh: FigureMeshId,
+    /// A dead soldier's: the same rig in fatigues and gear, if it loaded.
+    pub soldier_mesh: Option<FigureMeshId>,
     gltf: Gltf,
     skin: usize,
     /// Where each of [`BONES`] is among the file's nodes.
@@ -64,7 +66,7 @@ impl Model {
         for (slot, name) in bones.iter_mut().zip(BONES) {
             *slot = rig.gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).ok_or_else(|| format!("shambler.glb: no bone {name}"))?;
         }
-        Ok(Self { mesh: rig.mesh, gltf: rig.gltf, skin: rig.skin, bones })
+        Ok(Self { mesh: rig.mesh, soldier_mesh: None, gltf: rig.gltf, skin: rig.skin, bones })
     }
 
     /// Pose it: `clip` at `t` seconds. The skinning matrices, and where the
@@ -175,7 +177,7 @@ mod tests {
         let gltf = Gltf::load(path).expect("shambler.glb");
         let skin = 0;
         let bones = BONES.map(|name| gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).unwrap());
-        let model = Model { mesh: FigureMeshId::placeholder(), gltf, skin, bones };
+        let model = Model { mesh: FigureMeshId::placeholder(), soldier_mesh: None, gltf, skin, bones };
         let (joints, local) = model.pose(Clip::Idle, 0.0);
         let mut f = Figure::default();
         // Standing 10 m ahead of the eye, facing it (a yaw of pi).

@@ -85,6 +85,12 @@ impl DeadSignal {
                 e.insert(Blink { period: 3.2, lit: vec![(0.0, 0.18), (0.42, 0.55)] });
             }
         }
+        // What's to be shot at on the range.
+        for &(kind, base) in &map.targets {
+            if let Some(&mesh) = self.target_meshes.get(&kind) {
+                game.world.spawn((Placed(base), Model(mesh), Look::default(), crate::targets::Target::new(kind, base), OnMap));
+            }
+        }
         let field = std::sync::Arc::new(map.field.clone());
         game.world.insert_resource(Solid(solids));
         game.world.insert_resource(Ground::Field(field));

@@ -66,3 +66,18 @@ fn the_swipe_reaches_forward_and_death_lies_down() {
         assert!(p.y > -0.12 && p.y < 0.5, "{bone} at {} when lying", p.y);
     }
 }
+
+#[test]
+fn a_dead_soldier_is_the_same_rig_dressed_differently() {
+    let plain = shambler();
+    let soldier = Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler_soldier.glb")).expect("shambler_soldier.glb");
+    // The same bones in the same order: the one set of poses moves both.
+    let names = |g: &Gltf| g.skins[0].joints.iter().map(|&j| g.nodes[j].name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(&plain), names(&soldier));
+    for bone in ["head", "hand.R", "foot.L"] {
+        assert!((at(&plain, "Walk", 0.3, bone) - at(&soldier, "Walk", 0.3, bone)).length() < 1e-4, "{bone} walks apart");
+    }
+    // More to it: the helmet, the vest, the pack.
+    let faces = |g: &Gltf| g.meshes.iter().map(|m| m.primitives.iter().map(|p| p.indices.len()).sum::<usize>()).sum::<usize>();
+    assert!(faces(&soldier) > faces(&plain));
+}

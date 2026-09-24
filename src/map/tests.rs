@@ -57,8 +57,9 @@ fn maps_are_laid_out_whole_and_sound() {
             let far = Vec2::new(x - spawn.x, z - spawn.z).length();
             assert!(far > 160.0, "seed {seed}: the {way:?} is only {far:.0} m from the spawn");
         }
-        // Nothing grows on a road, a plot, or where a container stands.
-        for p in map.scenery.iter().filter(|p| !matches!(p.what, Scenery::Pole | Scenery::Tower | Scenery::Beacon | Scenery::Furn(_))) {
+        // Nothing grows on a road, a plot, or where a container stands (what
+        // the places are built and fitted with is another thing).
+        for p in map.scenery.iter().filter(|p| !matches!(p.what, Scenery::Pole | Scenery::Tower | Scenery::Beacon | Scenery::Furn(_) | Scenery::Fixture(_))) {
             let at = Vec2::new(p.at.x, p.at.z);
             assert!(network.off_road(at) > 3.0, "seed {seed}: a {:?} on a road at {at:?}", p.what);
             assert!(map.sites.iter().all(|s| s.plot.outside(at) > 2.0), "seed {seed}: a {:?} on a plot at {at:?}", p.what);
@@ -267,5 +268,21 @@ fn farms_and_cabins_are_built_on_the_level_with_a_gun_cabinet() {
         }
         // And none left out in the open.
         assert!(!map.containers.iter().any(|(s, (x, z, _, _))| *s == Source::GunCabinet && !map.buildings.iter().any(|b| b.covers(Vec2::new(*x, *z), 0.0))), "seed {seed}");
+    }
+}
+
+#[test]
+fn what_is_set_under_a_roof_rests_on_the_floor_not_the_roof() {
+    use crate::loot::tables::Source;
+    for seed in [777, 20260923, 31337] {
+        let b = build::build(seed, &crate::testing::kit(), &|_| {});
+        let mut seen = 0;
+        for c in b.containers.iter().filter(|c| matches!(c.source, Source::SupplyCase | Source::Cage)) {
+            let mid = (c.lo + c.hi) * 0.5;
+            let ground = b.map.field.height_at(mid.x, mid.z).unwrap();
+            assert!(c.lo.y - ground < 1.0, "seed {seed}: a {:?} {:.2} m up (on a roof?) at {mid:?}", c.source, c.lo.y - ground);
+            seen += 1;
+        }
+        assert!(seen >= 4, "seed {seed}: only {seen} cases and cages");
     }
 }

@@ -4,7 +4,9 @@ the left hanging; a torn shirt and filthy trousers over grey-green skin.
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/shambler.py
 
-Writes assets/models/shambler.glb: one skinned mesh on a 17-bone rig and
+Writes assets/models/shambler.glb, and the same dead soldier in fatigues,
+a helmet, a vest and a pack, on the very same rig and animations, as
+assets/models/shambler_soldier.glb: one skinned mesh on a 17-bone rig and
 six animations, keyed straight onto the bones:
 
     Walk    0.8 s  a dragging shamble, one stride a cycle (loops)
@@ -31,11 +33,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from kit import Builder, norm  # noqa: E402
 
-OUT = os.path.join(HERE, "..", "models", "shambler.glb")
+MODELS = os.path.join(HERE, "..", "models")
 FPS = 30
-
-bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.context.scene.render.fps = FPS
 
 SKIN = (0.42, 0.47, 0.38)
 SKIN_DARK = (0.30, 0.34, 0.28)
@@ -45,6 +44,13 @@ TROUSERS = (0.27, 0.23, 0.18)
 TROUSERS_DARK = (0.21, 0.18, 0.14)
 SHOE = (0.12, 0.10, 0.09)
 SOCKET = (0.10, 0.09, 0.08)
+# A soldier's: fatigues, and the gear over them.
+FATIGUES = (0.29, 0.31, 0.22)
+FATIGUES_DARK = (0.22, 0.24, 0.17)
+BLOOD = (0.26, 0.10, 0.08)
+HELMET = (0.24, 0.26, 0.18)
+VEST = (0.20, 0.21, 0.16)
+PACK = (0.26, 0.25, 0.18)
 
 
 def v(x, y, z):
@@ -90,9 +96,11 @@ def limb(b, points, colours, cap_start=False, cap_end=True, ref=Vector((1, 0, 0)
     b.tube(rings, colours, cap_start=cap_start, cap_end=cap_end)
 
 
-def body(b):
+def body(b, soldier=False):
     j = {name: (h, t) for name, (h, t, _) in BONES.items()}
     fwd = Vector((0, 1, 0))
+    # A soldier wears fatigues where the others wear a shirt and trousers.
+    SHIRT, SHIRT_STAIN, TROUSERS, TROUSERS_DARK = (FATIGUES, BLOOD, FATIGUES, FATIGUES_DARK) if soldier else (globals()["SHIRT"], globals()["SHIRT_STAIN"], globals()["TROUSERS"], globals()["TROUSERS_DARK"])
     # Torso, hips to neck: trousers, a belt line, a filthy shirt.
     limb(b, [
         (v(0, 0.02, 0.86), (0.16, 0.11), {"hips": 1.0}),
@@ -139,11 +147,34 @@ def body(b):
             (ft[0].lerp(ft[1], 0.5) + Vector((0, 0, 0.0)), (0.055, 0.04), {fo: 1.0}),
             (ft[1] + Vector((0, 0.02, -0.005)), (0.045, 0.028), {fo: 1.0}),
         ], [SHOE, SHOE], cap_start=True, cap_end=True, ref=Vector((0, 0, 1)))
+    if soldier:
+        gear(b)
 
 
-def build():
+def gear(b):
+    """A soldier's: a helmet over the skull, a vest round the chest, a pack
+    on the back."""
+    fwd = Vector((0, 1, 0))
+    limb(b, [
+        (v(0, 0.29, 1.66), (0.125, 0.135), {"head": 1.0}),
+        (v(0, 0.29, 1.74), (0.12, 0.13), {"head": 1.0}),
+        (v(0, 0.29, 1.81), (0.07, 0.08), {"head": 1.0}),
+    ], [HELMET, HELMET], cap_start=True, cap_end=True, ref=fwd)
+    limb(b, [
+        (v(0, 0.06, 1.12), (0.18, 0.13), {"hips": 0.4, "spine": 0.6}),
+        (v(0, 0.10, 1.30), (0.215, 0.145), {"spine": 0.5, "chest": 0.5}),
+        (v(0, 0.14, 1.42), (0.225, 0.135), {"chest": 1.0}),
+    ], [VEST, VEST], cap_start=True, cap_end=True)
+    limb(b, [
+        (v(0, -0.04, 1.14), (0.14, 0.07), {"spine": 1.0}),
+        (v(0, 0.0, 1.30), (0.15, 0.08), {"spine": 0.4, "chest": 0.6}),
+        (v(0, 0.03, 1.42), (0.13, 0.07), {"chest": 1.0}),
+    ], [PACK, PACK], cap_start=True, cap_end=True)
+
+
+def build(soldier=False):
     b = Builder()
-    body(b)
+    body(b, soldier)
     mesh = bpy.data.meshes.new("Shambler")
     b.bm.to_mesh(mesh)
     b.bm.free()
@@ -321,11 +352,15 @@ def stash(rig, acts):
         track.strips.new(act.name, int(act.frame_range[0]), act)
 
 
-def main():
-    rig, obj = build()
+def model(name, soldier):
+    """Build and write one of the dead, from an empty scene."""
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.context.scene.render.fps = FPS
+    rig, obj = build(soldier)
     stash(rig, actions(rig))
+    out = os.path.abspath(os.path.join(MODELS, f"{name}.glb"))
     bpy.ops.export_scene.gltf(
-        filepath=os.path.abspath(OUT),
+        filepath=out,
         export_format="GLB",
         export_yup=True,
         export_apply=False,
@@ -336,7 +371,12 @@ def main():
         export_vertex_color="ACTIVE",
         export_normals=True,
     )
-    print(f"shambler: {len(obj.data.polygons)} faces, {len(rig.data.bones)} bones -> {os.path.abspath(OUT)}")
+    print(f"{name}: {len(obj.data.polygons)} faces, {len(rig.data.bones)} bones -> {out}")
+
+
+def main():
+    model("shambler", False)
+    model("shambler_soldier", True)
 
 
 main()

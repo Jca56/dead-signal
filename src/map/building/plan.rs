@@ -44,6 +44,12 @@ pub enum Kind {
     /// both ends; a hunter's cabin, of logs.
     Barn,
     Cabin,
+    /// At the places out of town (`country.rs`): a gas station's garage
+    /// (one bay, a wide door), a range's office, its armory (concrete,
+    /// windowless).
+    Garage,
+    Office,
+    Armory,
 }
 
 /// What a room is for.
@@ -61,6 +67,10 @@ pub enum Use {
     Den,
     /// A barn's floor: hay, tools.
     Barn,
+    /// A garage's bay; an office; an armory, its ammunition caged.
+    Garage,
+    Office,
+    Armory,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -401,7 +411,7 @@ pub(super) fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Pla
     let front: Vec<usize> = (0..plan.walls.len())
         .filter(|&i| {
             let w = plan.walls[i];
-            w.storey == 0 && w.along_x && w.at == 0 && w.sides[1].is_some_and(|r| matches!(plan.rooms[r].use_, Use::Living | Use::Den | Use::Hall | Use::Shop))
+            w.storey == 0 && w.along_x && w.at == 0 && w.sides[1].is_some_and(|r| matches!(plan.rooms[r].use_, Use::Living | Use::Den | Use::Hall | Use::Shop | Use::Office | Use::Armory))
         })
         .collect();
     // (Whichever stretch of the front has room for it; failing that, any

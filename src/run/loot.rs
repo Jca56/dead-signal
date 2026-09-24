@@ -99,9 +99,10 @@ impl Run {
             Aimed::Container(e) => {
                 let c = game.world.get::<Container>(e)?;
                 let (name, searched, locked) = (c.source.name(), c.searched, c.locked);
+                let key = containers::key_for(c.source);
                 Some(if searched {
                     ("E", format!("OPEN {name}"))
-                } else if locked && self.bag.count(Kind::Key) == 0 {
+                } else if locked && key.is_none_or(|k| self.bag.count(k) == 0) {
                     ("", format!("{name} · LOCKED"))
                 } else if locked {
                     ("E", format!("UNLOCK {name}"))
@@ -158,12 +159,13 @@ impl Run {
             }
             return;
         }
-        let has_key = self.bag.count(Kind::Key) > 0;
+        let key = containers::key_for(source);
+        let has_key = key.is_some_and(|k| self.bag.count(k) > 0);
         if locked && !has_key {
             self.search = None;
             if e_pressed(ui) {
                 combat.play(Sfx::Rattle, 0.8);
-                self.note = Some(("NEEDS CAGE KEY", NOTE_FOR));
+                self.note = Some((if key == Some(Kind::ArmoryKey) { "NEEDS ARMORY KEY" } else { "NEEDS CAGE KEY" }, NOTE_FOR));
             }
             return;
         }
@@ -188,13 +190,13 @@ impl Run {
         }
         // Done: unlocked (the key used up) and searched, and open.
         self.search = None;
-        if locked {
-            self.bag.remove(Kind::Key, 1);
+        if locked && let Some(k) = key {
+            self.bag.remove(k, 1);
             combat.play(Sfx::Unlock, 0.9);
         }
         containers::open_up(&mut game.world, e);
         self.stats.containers_searched += 1;
-        self.stats.cages_opened += u32::from(source == crate::loot::tables::Source::Cage);
+        self.stats.cages_opened += u32::from(locked);
         self.open_bag(cx, Some(e));
     }
 

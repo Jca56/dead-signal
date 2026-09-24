@@ -113,6 +113,9 @@ pub struct DeadSignal {
     kit: Kit,
     scenery: HashMap<Scenery, (MeshId, Vec3, f64)>,
     container_meshes: HashMap<Source, (MeshId, MeshId)>,
+    /// A target of each kind's mesh (the proving ground's dummies and
+    /// plates).
+    target_meshes: HashMap<crate::targets::Kind, MeshId>,
     /// Where the meshes that stay end and a map's begin.
     mark: Mark,
     /// The next map, being built; built, waiting to go in; in, and whether
@@ -160,6 +163,7 @@ impl DeadSignal {
             kit: Kit::default(),
             scenery: HashMap::new(),
             container_meshes: HashMap::new(),
+            target_meshes: HashMap::new(),
             mark: Mark::default(),
             building: None,
             loading_since: Instant::now(),

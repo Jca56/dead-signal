@@ -26,12 +26,19 @@ pub enum Source {
     HunterCabinet,
     /// In a barn: tools, and what cuts.
     ToolLocker,
-    /// On one of the dead, sometimes.
+    /// Spilled from a wreck: kit and rounds for the soldiers it carried.
+    SupplyCase,
+    /// The proving ground's armory: rounds and guns, locked (the armory
+    /// key opens it).
+    AmmoCage,
+    /// On one of the dead, sometimes; on a dead soldier, more often, and
+    /// better.
     Corpse,
+    Soldier,
 }
 
 /// Every container there is (not the dead).
-pub const CONTAINERS: [Source; 13] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet, Source::HunterCabinet, Source::ToolLocker];
+pub const CONTAINERS: [Source; 15] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet, Source::HunterCabinet, Source::ToolLocker, Source::SupplyCase, Source::AmmoCage];
 
 /// One line of a table: what, how likely against the rest, how many.
 type Line = (Kind, u32, (u32, u32));
@@ -194,8 +201,44 @@ const TOOL_LOCKER: &[Line] = &[
     (Kind::Knife, 5, (1, 1)),
 ];
 
-/// How one of the dead carries something at all.
+const SUPPLY_CASE: &[Line] = &[
+    (Kind::Medkit, 20, (1, 1)),
+    (Kind::Bandage, 20, (1, 3)),
+    (Kind::Pills, 15, (1, 1)),
+    (Kind::Rounds, 15, (10, 20)),
+    (Kind::RifleRounds, 12, (6, 12)),
+    (Kind::Radio, 6, (1, 1)),
+    (Kind::Cash, 6, (1, 3)),
+    (Kind::Battery, 4, (1, 1)),
+    (Kind::Knife, 4, (1, 1)),
+];
+
+// The richest rounds on the map, and the guns to fire them.
+const AMMO_CAGE: &[Line] = &[
+    (Kind::Rounds, 25, (20, 30)),
+    (Kind::Shells, 20, (10, 20)),
+    (Kind::RifleRounds, 20, (10, 20)),
+    (Kind::Pistol, 8, (1, 1)),
+    (Kind::Rifle, 7, (1, 1)),
+    (Kind::Shotgun, 7, (1, 1)),
+    (Kind::Medkit, 8, (1, 1)),
+    (Kind::Knife, 6, (1, 1)),
+];
+
+const SOLDIER: &[Line] = &[
+    (Kind::Rounds, 25, (6, 12)),
+    (Kind::RifleRounds, 12, (3, 8)),
+    (Kind::Bandage, 15, (1, 2)),
+    (Kind::Shells, 8, (3, 6)),
+    (Kind::Cash, 6, (1, 3)),
+    (Kind::Medkit, 5, (1, 1)),
+    (Kind::Knife, 5, (1, 1)),
+    (Kind::ArmoryKey, 2, (1, 1)),
+];
+
+/// How one of the dead carries something at all; one of the soldiers.
 pub const CORPSE_CHANCE: f64 = 0.2;
+pub const SOLDIER_CHANCE: f64 = 0.35;
 
 impl Source {
     fn table(self) -> &'static [Line] {
@@ -213,6 +256,9 @@ impl Source {
             Source::GunCabinet => GUN_CABINET,
             Source::HunterCabinet => HUNTER_CABINET,
             Source::ToolLocker => TOOL_LOCKER,
+            Source::SupplyCase => SUPPLY_CASE,
+            Source::AmmoCage => AMMO_CAGE,
+            Source::Soldier => SOLDIER,
             Source::Corpse => CORPSE,
         }
     }
@@ -238,6 +284,9 @@ impl Source {
             Source::Register => (1, 1),
             Source::GunCabinet | Source::HunterCabinet => (2, 3),
             Source::ToolLocker => (2, 3),
+            Source::SupplyCase => (2, 3),
+            Source::AmmoCage => (3, 5),
+            Source::Soldier => (1, 1),
             Source::Corpse => (1, 1),
         }
     }
@@ -257,6 +306,9 @@ impl Source {
             Source::Register => (3, 2),
             Source::GunCabinet | Source::HunterCabinet => (5, 3),
             Source::ToolLocker => (4, 4),
+            Source::SupplyCase => (4, 3),
+            Source::AmmoCage => (5, 4),
+            Source::Soldier => (2, 2),
             Source::Corpse => (2, 2),
         }
     }
@@ -276,6 +328,9 @@ impl Source {
             Source::GunCabinet => "GUN CABINET",
             Source::HunterCabinet => "HUNTER'S GUN CABINET",
             Source::ToolLocker => "TOOL LOCKER",
+            Source::SupplyCase => "SUPPLY CASE",
+            Source::AmmoCage => "AMMO CAGE",
+            Source::Soldier => "REMAINS",
             Source::Corpse => "REMAINS",
         }
     }
@@ -294,6 +349,9 @@ impl Source {
             Source::Shelf => 2.0,
             Source::Register => 1.5,
             Source::GunCabinet | Source::HunterCabinet | Source::ToolLocker => 2.0,
+            Source::SupplyCase => 1.5,
+            Source::AmmoCage => 3.0,
+            Source::Soldier => 0.0,
             Source::Corpse => 0.0,
         }
     }
@@ -338,7 +396,7 @@ mod tests {
     #[test]
     fn every_table_draws_what_it_lists_and_fills_its_grid() {
         let mut dice = Dice(0x1234_5678);
-        for source in CONTAINERS.into_iter().chain([Source::Corpse]) {
+        for source in CONTAINERS.into_iter().chain([Source::Corpse, Source::Soldier]) {
             let mut seen = std::collections::HashSet::new();
             for _ in 0..300 {
                 let g = fill(source, &mut dice);

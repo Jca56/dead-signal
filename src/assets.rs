@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn every_model_file_loads() {
         let dir = root().join("models");
-        for name in ["title_scene", "proving_ground", "items", "containers", "exits"] {
+        for name in ["title_scene", "proving_ground", "items", "containers", "exits", "sites", "furniture", "scenery"] {
             let gltf = Gltf::load(dir.join(format!("{name}.glb"))).unwrap_or_else(|e| panic!("{name}: {e}"));
             let made: usize = gltf.meshes.iter().map(|m| faceted(&gltf, m).len()).sum();
             assert!(made > 0, "{name} made nothing");

@@ -1,7 +1,7 @@
 """Everything that can be carried: supplies (ITEM_Bandage, ITEM_Medkit,
 ITEM_Ammo), food and water (ITEM_Beans, ITEM_Water), valuables (ITEM_Pills,
 ITEM_Cash, ITEM_Watch, ITEM_Ring, ITEM_Chain, ITEM_Radio, ITEM_Battery,
-ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key), the weapons
+ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key) and the armory's (ITEM_ArmoryKey), the weapons
 (ITEM_Pistol, ITEM_Shotgun, ITEM_Rifle, ITEM_Knife, ITEM_Machete, ITEM_Axe)
 and the guns' rounds (ITEM_Shells, ITEM_RifleRounds). Each its own object
 sitting on its origin, for the game to set down wherever it likes and to
@@ -397,6 +397,17 @@ def axe():
     p.finish()
 
 
+def armory_key():
+    """A heavy steel key, its ring, a red tag."""
+    p = Part("ITEM_ArmoryKey")
+    p.hoop((-0.045, 0, 0.008), 0.026, 0.01, SILVER, segments=10)
+    p.box((0.025, 0, 0.008), (0.09, 0.018, 0.016), SILVER)
+    for x, h in ((0.05, 0.024), (0.066, 0.032), (0.082, 0.02)):
+        p.box((x, -0.012 - h / 2, 0.008), (0.014, h, 0.016), SILVER)
+    p.box((-0.08, 0.04, 0.005), (0.06, 0.05, 0.01), AXE_RED, turn=0.4)
+    p.finish()
+
+
 def gold_bar():
     p = Part("ITEM_GoldBar")
     m = Matrix.Translation((0, 0, 0.03)) @ Matrix.Diagonal((0.1, 0.045, 0.03, 1.0))
@@ -433,6 +444,7 @@ def main():
     knife()
     machete()
     axe()
+    armory_key()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"items: {len(bpy.data.objects)} -> {os.path.abspath(OUT)}")
 

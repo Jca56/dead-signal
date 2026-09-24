@@ -70,7 +70,7 @@ pub fn real_world() -> Solids {
 /// What maps are built from, from the game's own files.
 pub fn kit() -> Kit {
     let mut kit = Kit { containers: crate::containers::shapes(), exits: crate::exits::tests::shapes(), ..Kit::default() };
-    for file in ["scenery", "furniture"] {
+    for file in ["scenery", "furniture", "sites"] {
         let path = format!("{}/assets/models/{file}.glb", env!("CARGO_MANIFEST_DIR"));
         let g = lntrn_model::Gltf::load(&path).expect("a model file");
         for what in crate::map::scatter::Scenery::all() {

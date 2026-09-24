@@ -22,7 +22,7 @@ impl DeadSignal {
         // The scenery and the furniture: each piece's mesh and the ball it
         // lies in, and what's solid of it.
         let mut props = Vec::new();
-        for file in ["scenery", "furniture"] {
+        for file in ["scenery", "furniture", "sites"] {
             match assets::load(renderer, file) {
                 Ok(p) => props.extend(p),
                 Err(e) => log_error!("{file}: {e}"),
@@ -63,6 +63,21 @@ impl DeadSignal {
                 }
             }
             Err(e) => log_error!("containers: {e}"),
+        }
+        // The proving ground's targets: one of each kind, from the range
+        // they were first made for.
+        match assets::load(renderer, "proving_ground") {
+            Ok(props) => {
+                for (kind, name) in [(crate::targets::Kind::Dummy, "TARGET_Dummy_1"), (crate::targets::Kind::Plate, "TARGET_Plate_1")] {
+                    match props.iter().find(|p| p.name == name).and_then(|p| p.mesh) {
+                        Some(mesh) => {
+                            self.target_meshes.insert(kind, mesh);
+                        }
+                        None => log_error!("proving_ground: no {name}"),
+                    }
+                }
+            }
+            Err(e) => log_error!("proving_ground: {e}"),
         }
         match assets::load(renderer, "exits") {
             Ok(props) => {

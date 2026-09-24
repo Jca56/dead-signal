@@ -16,6 +16,7 @@ its back against a wall at -Y and its front (what faces the room) at +Y:
     FURN_HayBale    a bale of straw, lying long
     FURN_HayStack   bales stacked three high against a wall
     FURN_WoodStove  a squat cast-iron stove, its pipe up to the ceiling
+    FURN_Workbench  a heavy workbench, a vise, tools on a pegboard
 
 and what the game bumps into for each (FURN_*_Hull): plain boxes.
 
@@ -307,6 +308,22 @@ def wood_stove():
     p.finish()
 
 
+def workbench():
+    w, d = 1.8, 0.7
+    p = piece("FURN_Workbench", [((-w / 2, -d / 2, 0.0), (w / 2, d / 2, 0.95))])
+    p.box((-w / 2, -d / 2, 0.88), (w / 2, d / 2, 0.95), WOOD_DARK)
+    legs(p, -w / 2, w / 2, -d / 2, d / 2, 0.88, t=0.08)
+    p.box((-w / 2 + 0.08, -d / 2 + 0.08, 0.2), (w / 2 - 0.08, d / 2 - 0.08, 0.24), WOOD)
+    # The vise at one end, a pegboard of tools at the back.
+    p.box((0.55, 0.1, 0.95), (0.8, 0.3, 1.1), STEEL)
+    p.box((-w / 2, -d / 2, 0.95), (w / 2, -d / 2 + 0.03, 1.8), WOOD_PALE)
+    for k in range(5):
+        x = -0.7 + k * 0.32
+        p.box((x, -d / 2 + 0.03, 1.2 + (k % 2) * 0.15), (x + 0.05, -d / 2 + 0.06, 1.6), STEEL if k % 2 else DARK)
+    p.box((-0.5, -0.1, 0.95), (-0.1, 0.1, 1.02), (0.62, 0.12, 0.08))
+    p.finish()
+
+
 def main():
     bed()
     sofa()
@@ -322,6 +339,7 @@ def main():
     hay_bale()
     hay_stack()
     wood_stove()
+    workbench()
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     tris = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
     print(f"furniture: {len(bpy.data.objects)} objects, {tris} faces -> {os.path.abspath(OUT)}")

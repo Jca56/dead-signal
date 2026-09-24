@@ -26,7 +26,7 @@ pub fn model_name(source: Source) -> &'static str {
         Source::Crate => "CONTAINER_Crate",
         Source::Locker | Source::ToolLocker => "CONTAINER_Locker",
         Source::Car => "CONTAINER_Car",
-        Source::Cage => "CONTAINER_Cage",
+        Source::Cage | Source::AmmoCage => "CONTAINER_Cage",
         Source::Fridge => "CONTAINER_Fridge",
         Source::Cabinet => "CONTAINER_Cabinet",
         Source::Desk => "CONTAINER_Desk",
@@ -34,7 +34,8 @@ pub fn model_name(source: Source) -> &'static str {
         Source::Shelf => "CONTAINER_Shelf",
         Source::Register => "CONTAINER_Register",
         Source::GunCabinet | Source::HunterCabinet => "CONTAINER_GunCabinet",
-        Source::Corpse => "",
+        Source::SupplyCase => "CONTAINER_SupplyCase",
+        Source::Corpse | Source::Soldier => "",
     }
 }
 
@@ -48,6 +49,15 @@ fn surface(source: Source) -> Surface {
 /// Whether the cage's key can turn up in it.
 pub fn holds_keys(source: Source) -> bool {
     matches!(source, Source::Locker | Source::Car | Source::Desk | Source::Wardrobe)
+}
+
+/// The key that opens it, if it's locked.
+pub fn key_for(source: Source) -> Option<Kind> {
+    match source {
+        Source::Cage => Some(Kind::Key),
+        Source::AmmoCage => Some(Kind::ArmoryKey),
+        _ => None,
+    }
 }
 
 #[derive(Component, Clone, Debug)]
@@ -168,28 +178,35 @@ pub fn open_up(world: &mut World, e: Entity) {
 /// the cage locked, its key in one locker, car, desk or wardrobe.
 pub fn fill(world: &mut World, seed: u32) {
     let mut dice = Dice(seed | 1);
-    let mut holders = Vec::new();
+    let (mut holders, mut cases) = (Vec::new(), Vec::new());
     for (e, mut c, model) in world.query::<(Entity, &mut Container, Option<&mut Model>)>().iter_mut(world) {
         c.grid = tables::fill(c.source, &mut dice);
         c.searched = false;
-        c.locked = c.source == Source::Cage;
+        c.locked = key_for(c.source).is_some();
         if let (Some((shut, _)), Some(mut model)) = (c.looks, model) {
             model.0 = shut;
         }
         if holds_keys(c.source) {
             holders.push(e);
         }
+        if c.source == Source::SupplyCase {
+            cases.push(e);
+        }
     }
-    if holders.is_empty() {
-        return;
-    }
-    holders.sort();
-    let e = holders[dice.next() as usize % holders.len()];
-    if let Some(mut c) = world.get_mut::<Container>(e) {
-        // The key goes in even if something has to make way for it.
-        if c.grid.place(Stack::one(Kind::Key)).count > 0 {
-            c.grid.items.pop();
-            c.grid.place(Stack::one(Kind::Key));
+    // The cage's key in one of the places it can be, the armory's in one of
+    // the wreck's cases (the dead soldiers carry it too, now and then).
+    for (mut holders, key) in [(holders, Kind::Key), (cases, Kind::ArmoryKey)] {
+        if holders.is_empty() {
+            continue;
+        }
+        holders.sort();
+        let e = holders[dice.next() as usize % holders.len()];
+        if let Some(mut c) = world.get_mut::<Container>(e) {
+            // The key goes in even if something has to make way for it.
+            if c.grid.place(Stack::one(key)).count > 0 {
+                c.grid.items.pop();
+                c.grid.place(Stack::one(key));
+            }
         }
     }
 }

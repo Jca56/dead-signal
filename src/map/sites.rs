@@ -39,15 +39,15 @@ impl Kind {
 
     /// Its plot's size, half each way (across, along), and how far it
     /// eases back into the land.
-    fn size(self) -> (Vec2, f64) {
+    pub(crate) fn size(self) -> (Vec2, f64) {
         match self {
             Kind::Town => (Vec2::new(55.0, 85.0), 26.0),
             Kind::Gas => (Vec2::new(22.0, 16.0), 10.0),
             Kind::Farm => (Vec2::new(32.0, 28.0), 12.0),
             Kind::Military => (Vec2::new(30.0, 26.0), 12.0),
             Kind::Cabin => (Vec2::new(10.0, 9.0), 8.0),
-            Kind::Crash => (Vec2::new(18.0, 12.0), 8.0),
-            Kind::Pad => (Vec2::new(16.0, 16.0), 10.0),
+            Kind::Crash => (Vec2::new(24.0, 18.0), 8.0),
+            Kind::Pad => (Vec2::new(22.0, 26.0), 10.0),
             Kind::Radio => (Vec2::new(14.0, 14.0), 10.0),
         }
     }

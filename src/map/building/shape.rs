@@ -82,6 +82,8 @@ fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
         Use::Back => [0.44, 0.43, 0.40],
         Use::Living | Use::Hall | Use::Den => [0.47, 0.35, 0.23],
         Use::Barn => [0.46, 0.40, 0.26],
+        Use::Garage | Use::Armory => [0.44, 0.43, 0.40],
+        Use::Office => [0.40, 0.36, 0.30],
     }
 }
 
@@ -91,9 +93,9 @@ fn pick<const N: usize>(dice: &mut Dice, from: [Rgb; N]) -> Rgb {
 
 /// Build the blocks of `plan`.
 pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
-    let store = plan.kind == Kind::Store;
     let siding = match plan.kind {
-        Kind::Store => pick(dice, STORE_WALLS),
+        Kind::Store | Kind::Garage => pick(dice, STORE_WALLS),
+        Kind::Armory => CONCRETE,
         Kind::Barn => BARN_RED[0],
         Kind::Cabin => LOGS[0],
         _ => pick(dice, SIDINGS),
@@ -111,12 +113,13 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         .iter()
         .map(|r| match (plan.kind, r.use_) {
             (Kind::Cabin | Kind::Barn, _) => LOG_INSIDE,
+            (Kind::Garage | Kind::Armory, _) => CONCRETE,
             (_, Use::Bath) => [0.70, 0.74, 0.74],
             _ => pick(dice, PAINTS),
         })
         .collect();
     let floors: Vec<Rgb> = plan.rooms.iter().map(|r| floor_of(r.use_, dice)).collect();
-    let wall_stuff = Stuff::Solid(if store { Surface::Stone } else { Surface::Wood });
+    let wall_stuff = Stuff::Solid(if matches!(plan.kind, Kind::Store | Kind::Garage | Kind::Armory) { Surface::Stone } else { Surface::Wood });
     let mut blocks = Vec::new();
     let mut add = |lo: Vec3, hi: Vec3, colour: Rgb, stuff: Stuff| blocks.push(Block { lo: lo.min(hi), hi: lo.max(hi), colour, stuff });
     let (w, d) = (f64::from(plan.w), f64::from(plan.d));

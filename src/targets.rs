@@ -16,7 +16,7 @@ const RISE_TIME: f64 = 1.0;
 /// How far over a beaten dummy lies, radians.
 const LIE: f64 = 1.45;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
     Dummy,
     Plate,

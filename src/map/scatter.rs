@@ -7,6 +7,7 @@ use lntrn_math::{Vec2, Vec3};
 
 use super::building::Building;
 use super::building::furnish::Furn;
+use super::outposts::Fixture;
 use super::noise::Noise;
 use super::roads::{Kind as RoadKind, Network};
 use super::sites::{Kind as SiteKind, Site};
@@ -29,6 +30,8 @@ pub enum Scenery {
     Beacon,
     /// Furniture, indoors.
     Furn(Furn),
+    /// What the places out of town are fitted with (`sites.glb`).
+    Fixture(Fixture),
 }
 
 impl Scenery {
@@ -39,6 +42,7 @@ impl Scenery {
         all.extend((0..2).map(Scenery::Dead));
         all.extend((0..4).map(Scenery::Rock));
         all.extend(Furn::ALL.map(Scenery::Furn));
+        all.extend(Fixture::ALL.map(Scenery::Fixture));
         all
     }
 
@@ -53,6 +57,7 @@ impl Scenery {
             Scenery::Tower => "SCENE_Tower".into(),
             Scenery::Beacon => "SCENE_Beacon".into(),
             Scenery::Furn(f) => f.name().into(),
+            Scenery::Fixture(f) => f.name().into(),
         }
     }
 
@@ -63,6 +68,7 @@ impl Scenery {
             Scenery::Rock(_) => Surface::Stone,
             Scenery::Tower | Scenery::Beacon => Surface::Metal,
             Scenery::Furn(Furn::Bathtub | Furn::Toilet | Furn::Basin | Furn::Stove) => Surface::Stone,
+            Scenery::Fixture(f) => f.surface(),
             _ => Surface::Wood,
         }
     }
@@ -201,12 +207,14 @@ pub struct Things {
 /// Containers at every place (the cage at the camp), wrecks along the
 /// highway and jammed across its far end (`jammed` is the end that isn't
 /// the way out), and boxes of rounds and kits about the places.
-pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site], exits: &[exits::Spot], buildings: &[Building], out_end: usize) -> Things {
+#[allow(clippy::too_many_arguments)]
+pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site], exits: &[exits::Spot], buildings: &[Building], fixtures: &[(Vec2, f64)], out_end: usize) -> Things {
     let mut containers: Vec<(Source, Spot)> = Vec::new();
     let mut pickups: Vec<crate::items::Spot> = Vec::new();
     // (Nothing left out where a building stands, or its porch or steps.)
     let walled = |p: Vec2| {
-        buildings.iter().any(|b| {
+        fixtures.iter().any(|(c, r)| (p - *c).length() < *r)
+            || buildings.iter().any(|b| {
             let f = b.footprint();
             let (lo, hi) = f.iter().fold((Vec2::splat(f64::INFINITY), Vec2::splat(f64::NEG_INFINITY)), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
             p.x > lo.x - 2.5 && p.x < hi.x + 2.5 && p.y > lo.y - 2.5 && p.y < hi.y + 2.5
@@ -221,18 +229,17 @@ pub fn things(dice: &mut Dice, field: &Field, network: &Network, sites: &[Site],
         let (crates, cars, pick) = match site.kind {
             // (The town's things are in its buildings.)
             SiteKind::Town => (0, 0, 1),
-            SiteKind::Military => (3, 1, 3),
+            // (What's at the camp, the gas station, the crash and the
+            // range is in their layouts, `outposts.rs`.)
+            SiteKind::Military => (0, 1, 3),
             SiteKind::Farm => (2, 1, 2),
-            SiteKind::Gas => (2, 2, 2),
+            SiteKind::Gas => (0, 0, 2),
             SiteKind::Cabin => (1, 0, 1),
-            SiteKind::Crash => (3, 0, 2),
-            SiteKind::Pad => (2, 0, 1),
+            SiteKind::Crash => (0, 0, 2),
+            SiteKind::Pad => (0, 0, 1),
             SiteKind::Radio => (1, 0, 1),
         };
-        let mut wanted: Vec<Source> = std::iter::repeat_n(Source::Crate, crates).chain(std::iter::repeat_n(Source::Car, cars)).collect();
-        if site.kind == SiteKind::Military {
-            wanted.push(Source::Cage);
-        }
+        let wanted: Vec<Source> = std::iter::repeat_n(Source::Crate, crates).chain(std::iter::repeat_n(Source::Car, cars)).collect();
         for source in wanted {
             for _ in 0..40 {
                 // Off the town's main street, and clear of its middle

@@ -392,14 +392,15 @@ impl Combat {
         Met { something: true, target: false, head: false }
     }
 
-    /// Now and then one of the dead had something on it: left where it
-    /// fell.
+    /// Now and then one of the dead had something on it (a soldier more
+    /// often, and better): left where it fell.
     fn drop_something(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
-        if self.loot.unit() >= tables::CORPSE_CHANCE {
+        let (source, chance) = if game.world.get::<zombie::Soldier>(e).is_some() { (Source::Soldier, tables::SOLDIER_CHANCE) } else { (Source::Corpse, tables::CORPSE_CHANCE) };
+        if self.loot.unit() >= chance {
             return;
         }
         let Some(at) = game.world.get::<Body>(e).map(|b| b.pos) else { return };
-        let stack = tables::draw(Source::Corpse, &mut self.loot);
+        let stack = tables::draw(source, &mut self.loot);
         let yaw = self.loot.unit() * std::f64::consts::TAU;
         items::set_down(&mut game.world, stack, at + Vec3::new(0.0, 0.8, 0.0), yaw);
     }

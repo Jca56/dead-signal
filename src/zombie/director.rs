@@ -1,7 +1,8 @@
 //! How many of the dead are about, and where. A run starts with the whole
 //! map peopled: a crowd in the town (some of them upstairs), a group at
 //! every place, and wanderers in the woods between; never close to where
-//! the player starts. Then, as the run goes on, a trickle keeps some of
+//! the player starts; the dead at the crash and the camp soldiers, mostly.
+//! Then, as the run goes on, a trickle keeps some of
 //! them near the player: whenever fewer are close than the kills so far
 //! call for, a new one comes in from out of sight. When the dead surge
 //! (the way out is being worked), they come fast and many.
@@ -25,6 +26,15 @@ fn at_place(kind: Kind) -> usize {
         Kind::Farm | Kind::Gas => 14,
         Kind::Crash => 12,
         Kind::Cabin | Kind::Pad | Kind::Radio => 10,
+    }
+}
+/// The share of the dead at a place that are soldiers.
+fn soldiers(kind: Kind) -> f64 {
+    match kind {
+        Kind::Military => 0.8,
+        Kind::Crash => 0.7,
+        Kind::Pad => 0.3,
+        _ => 0.0,
     }
 }
 /// Nothing starts nearer the player than this, metres.
@@ -98,7 +108,7 @@ impl Director {
                     let local = Vec2::new((dice.unit() * 2.0 - 1.0) * site.plot.half.x, (dice.unit() * 2.0 - 1.0) * site.plot.half.y);
                     let p = site.plot.world(local);
                     if let Some(at) = stand(&mut dice, p.x, p.y, site.plot.height) {
-                        spots.push(at);
+                        spots.push((at, dice.unit() < soldiers(site.kind)));
                         placed += 1;
                     }
                 }
@@ -113,14 +123,14 @@ impl Director {
                 if let Some(base) = ground(x, z)
                     && let Some(at) = stand(&mut dice, x, z, base)
                 {
-                    spots.push(at);
+                    spots.push((at, false));
                 }
             }
             spots
         };
-        for at in spots {
+        for (at, soldier) in spots {
             let yaw = dice.unit() * std::f64::consts::TAU;
-            super::spawn(world, at, yaw);
+            super::spawn_as(world, at, yaw, soldier);
         }
         self.peak = near(world, eye);
         self.wait = TRICKLE;

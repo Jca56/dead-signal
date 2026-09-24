@@ -253,14 +253,27 @@ pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
     frame.add_systems((pose, bury));
 }
 
+/// One of the dead in soldier's fatigues and gear (they carry more, and
+/// better).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Soldier;
+
 /// Put a Shambler at `at`, facing `yaw`.
 pub fn spawn(world: &mut World, at: Vec3, yaw: f64) {
+    spawn_as(world, at, yaw, false);
+}
+
+/// Put a Shambler at `at`, facing `yaw`, a dead soldier if `soldier`.
+pub fn spawn_as(world: &mut World, at: Vec3, yaw: f64, soldier: bool) {
     let seed = {
         let mut h = world.resource_mut::<Horde>();
         h.seed = h.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         h.seed
     };
-    world.spawn((Zombie::new(yaw, seed), Body::at(at), Figure::default(), Beat::new(seed % 64)));
+    let mut e = world.spawn((Zombie::new(yaw, seed), Body::at(at), Figure::default(), Beat::new(seed % 64)));
+    if soldier {
+        e.insert(Soldier);
+    }
 }
 
 /// Put a Shambler somewhere the player at `eye`, looking along `forward`,

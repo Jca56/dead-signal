@@ -69,9 +69,10 @@ pub enum Kind {
     Knife,
     Machete,
     FireAxe,
+    ArmoryKey,
 }
 
-pub const ALL: [Kind; 23] = [
+pub const ALL: [Kind; 24] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -95,6 +96,7 @@ pub const ALL: [Kind; 23] = [
     Kind::Knife,
     Kind::Machete,
     Kind::FireAxe,
+    Kind::ArmoryKey,
 ];
 
 impl Kind {
@@ -125,6 +127,7 @@ impl Kind {
             Kind::Knife => "tactical_knife",
             Kind::Machete => "machete",
             Kind::FireAxe => "fire_axe",
+            Kind::ArmoryKey => "armory_key",
         }
     }
 
@@ -188,6 +191,7 @@ impl Kind {
             Kind::Knife => d("TACTICAL KNIFE", (2, 1), 1, Uncommon, 90, "ITEM_Knife"),
             Kind::Machete => d("MACHETE", (3, 1), 1, Uncommon, 110, "ITEM_Machete"),
             Kind::FireAxe => d("FIRE AXE", (4, 1), 1, Rare, 160, "ITEM_Axe"),
+            Kind::ArmoryKey => d("ARMORY KEY", (1, 1), 1, Rare, 40, "ITEM_ArmoryKey"),
         }
     }
 }
@@ -309,7 +313,8 @@ mod tests {
             assert_eq!(row[3].to_uppercase(), rarity, "{} rarity", d.name);
             assert_eq!(row[4], format!("${}", d.value), "{} value", d.name);
             assert!(!row[6].is_empty(), "{} has no flavor", d.name);
-            if kind == Kind::Key {
+            // (The keys are put somewhere once a run, not rolled for.)
+            if matches!(kind, Kind::Key | Kind::ArmoryKey) {
                 continue;
             }
             let mut found: Vec<&str> = [
@@ -326,7 +331,10 @@ mod tests {
                 (Source::GunCabinet, "gun cabinet"),
                 (Source::HunterCabinet, "hunter's cabinet"),
                 (Source::ToolLocker, "tool locker"),
+                (Source::SupplyCase, "supply case"),
+                (Source::AmmoCage, "ammo cage"),
                 (Source::Corpse, "zombies"),
+                (Source::Soldier, "soldiers"),
             ]
                 .iter()
                 .filter(|(s, _)| s.holds(kind))
