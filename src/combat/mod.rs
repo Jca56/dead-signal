@@ -75,8 +75,8 @@ struct Met {
 
 /// What's been heard of a shot's pellets (or a swing's rays) landing so
 /// far: one tick for hitting something (any kill ticks again), one thud,
-/// however many land; and which of the dead have been struck (none is
-/// struck twice).
+/// however many land; and which of the dead the pellet or swing has struck
+/// (none twice by one pellet, nor by one swing).
 #[derive(Default)]
 struct Heard {
     confirmed: bool,
@@ -205,6 +205,8 @@ impl Combat {
                     let mut heard = Heard::default();
                     let mut met = Met::default();
                     for _ in 0..shot.pellets {
+                        // Each pellet may strike the one the last struck.
+                        heard.struck.clear();
                         let dir = self.scatter(&aim, spread);
                         let m = self.strike(game, &aim, dir, &hit, &mut heard, stats);
                         met.target |= m.target;
@@ -388,4 +390,44 @@ fn aim(view: &View, body: &Body, alpha: f64) -> Aim {
     let dir = Vec3::new(-sy * cp, sp, -cy * cp);
     let right = Vec3::new(cy, 0.0, -sy);
     Aim { eye: head::eye_position(view, body, alpha), dir, right, up: right.cross(dir) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A shotgun fired from the hip into one of the dead, `metres` off:
+    /// the health it took.
+    fn blast(metres: f64) -> f64 {
+        let mut game = Game::new();
+        let gltf = lntrn_model::Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb")).expect("shambler.glb");
+        game.world.insert_resource(zombie::figure::Model::new(crate::assets::Rigged { mesh: Vec::new(), gltf, skin: 0 }).expect("the model"));
+        game.spawn_player(0.0, 0.0, 0.0);
+        // Aimed at its chest, not over its shoulders.
+        game.player_view_mut().unwrap().pitch = -(0.5f64 / metres).atan();
+        zombie::spawn_kind(&mut game.world, Vec3::new(0.0, 0.0, -metres), 0.0, zombie::kind::Kind::Shambler, zombie::looks::Theme::Townsfolk);
+        game.tick(0.0);
+        let hp = |game: &mut Game| game.world.query::<&zombie::brain::Zombie>().iter(&game.world).map(|z| z.hp).sum::<f64>();
+        let before = hp(&mut game);
+        let mut combat = Combat::new();
+        combat.take_up(Some(Slot::Primary), Weapon::Shotgun, 5);
+        let mut stats = Stats::default();
+        // Up into the hands, then the trigger pulled once.
+        for frame in 0..90 {
+            let trigger = Trigger { fire: frame == 60, ..Trigger::default() };
+            combat.frame(&mut game, trigger, 1.0 / 60.0, &mut stats);
+        }
+        assert_eq!(stats.shots, 1);
+        before - hp(&mut game)
+    }
+
+    #[test]
+    fn every_pellet_of_a_blast_can_strike_the_one_in_front() {
+        let pellet = Weapon::Shotgun.spec().shot.unwrap().damage;
+        let taken = blast(2.5);
+        assert!(taken > pellet * 5.0, "point blank took only {taken:.0}, a pellet is {pellet:.0}");
+        // Out to six metres from the hip, one drops a Shambler.
+        let hp = zombie::kind::Kind::Shambler.traits().hp;
+        assert!(blast(6.0) >= hp, "a blast at 6 m left it standing");
+    }
 }
