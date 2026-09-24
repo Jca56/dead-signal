@@ -25,6 +25,7 @@ mod profile;
 mod render;
 mod run;
 mod settings;
+mod slots_ui;
 mod sound;
 mod stats;
 mod style;

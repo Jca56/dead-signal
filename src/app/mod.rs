@@ -20,12 +20,13 @@ mod gpu;
 mod level;
 mod load;
 mod options;
+mod playing;
+mod slots;
 
 use crate::assets::Prop;
 use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::combat::Combat;
-use crate::ending::After;
 use crate::hideout::{Hideout, Leave};
 use crate::loot::tables::Source;
 use crate::map::Map;
@@ -33,10 +34,11 @@ use crate::map::build::{Building, Built, Kit};
 use crate::map::scatter::Scenery;
 use crate::menu::SideMenu;
 use crate::perf::{Perf, Phase};
-use crate::player::Controls;
-use crate::profile::{Profile, save};
+use crate::profile::Profile;
+use crate::profile::save::Saves;
 use crate::render::{Mark, MeshId, Renderer};
 use crate::run::Run;
+use crate::slots_ui::SlotsScreen;
 use crate::settings::screen::SettingsScreen;
 use crate::settings::{self, Settings};
 use crate::viewmodel::Viewmodel;
@@ -69,6 +71,7 @@ enum Screen {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TitleItem {
     Hideout,
+    Slots,
     Settings,
     Quit,
 }
@@ -106,6 +109,8 @@ pub struct DeadSignal {
     /// The player between runs (and whether a run has their loadout now,
     /// to be settled when it ends).
     profile: Profile,
+    /// The save slots, and which is being played.
+    saves: Saves,
     in_run: bool,
     hideout: Hideout,
     perf: Perf,
@@ -153,6 +158,8 @@ pub struct DeadSignal {
     /// The settings screen, while it's up (over the title, or a paused
     /// run); the UI scale as last let go of (not while its slider's held).
     settings: Option<SettingsScreen>,
+    /// The save slots screen, while it's up (over the title).
+    slots: Option<SlotsScreen>,
     ui_scale: f64,
     /// Whether what the window can't be told till it's open (vsync) has
     /// been told.
@@ -165,6 +172,7 @@ impl DeadSignal {
         let combat = Combat::new();
         combat.set_mix(settings.levels());
         let ui_scale = settings.ui_scale;
+        let saves = Saves::open();
         game.world.insert_resource(settings);
         Self {
             game,
@@ -173,7 +181,8 @@ impl DeadSignal {
             combat,
             run: Run::default(),
             icons: Icons::default(),
-            profile: save::load(),
+            profile: saves.profile(),
+            saves,
             in_run: false,
             hideout: Hideout::default(),
             perf: Perf::default(),
@@ -191,7 +200,7 @@ impl DeadSignal {
             picture: None,
             map_open: false,
             screen: Screen::Title,
-            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("SETTINGS", TitleItem::Settings), ("QUIT", TitleItem::Quit)]),
+            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("SAVE SLOTS", TitleItem::Slots), ("SETTINGS", TitleItem::Settings), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("SETTINGS", PauseItem::Settings), ("QUIT TO TITLE", PauseItem::ToTitle)]),
             leave_menu: SideMenu::new("LEAVE THE RUN?", &[("STAY", LeaveItem::Stay), ("LEAVE", LeaveItem::Leave)])
                 .warning(&["Leaving now counts as dying.", "Everything but your pockets is lost."]),
@@ -204,6 +213,7 @@ impl DeadSignal {
             fade_seconds: FIRST_FADE,
             fullscreen,
             settings: None,
+            slots: None,
             ui_scale,
             told_window: false,
         }
@@ -257,7 +267,7 @@ impl DeadSignal {
                 let loadout = self.profile.take_loadout();
                 let mut committed = self.profile.clone();
                 committed.loadout.pockets = loadout.pockets.clone();
-                save::store(&committed);
+                self.saves.store(&committed);
                 if let Some(map) = &self.map {
                     self.run.start(&mut self.game, &mut self.combat, loadout, self.profile.xp, self.profile.perks, map);
                 }
@@ -275,115 +285,6 @@ impl DeadSignal {
                 self.leave_run();
                 self.title_menu.reset();
             }
-        }
-    }
-
-    /// Out of a run (if in one) and back to the title's scene: the run
-    /// settled, the player gone.
-    fn leave_run(&mut self) {
-        self.settle_run();
-        self.game.despawn_player();
-        self.run.ending = None;
-        self.show_title_scene();
-    }
-
-    /// A run that's over (or walked out on) settles into the profile, and
-    /// the profile is saved. Walked out on counts as dead.
-    fn settle_run(&mut self) {
-        if let Some((got_out, bag, xp)) = self.run.take_result() {
-            self.profile.settle(got_out, bag, xp);
-            self.in_run = false;
-            save::store(&self.profile);
-        } else if self.in_run {
-            let bag = self.run.abandon();
-            self.profile.settle(false, bag, 0);
-            self.in_run = false;
-            save::store(&self.profile);
-        }
-    }
-
-    fn pause(&mut self, cx: &mut AreaCx<()>) {
-        self.paused = true;
-        self.leaving = false;
-        self.pause_menu.reset();
-        *self.game.controls_mut() = Controls::default();
-        cx.request(ShellRequest::LockPointer(false));
-    }
-
-    fn resume(&mut self, cx: &mut AreaCx<()>) {
-        self.paused = false;
-        if self.run.wants_lock() {
-            cx.request(ShellRequest::LockPointer(true));
-        }
-    }
-
-    /// A run's frame: look, move, pause; or, dead, the way out.
-    fn run_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, active: bool) {
-        if self.run.ending.is_some() {
-            match self.run.ending(ui, cx, &mut self.game, &mut self.combat, active, &self.icons) {
-                Some(After::Hideout) => self.fade_to(Then::Show(Screen::Hideout)),
-                Some(After::Title) => self.fade_to(Then::Show(Screen::Title)),
-                None => {}
-            }
-            return;
-        }
-        let locked = ui.state.pointer_locked;
-        // Losing the lock unasked (the window lost focus) pauses; the
-        // inventory letting it go doesn't.
-        if self.was_locked && !locked && !self.paused && active && self.run.wants_lock() {
-            self.pause(cx);
-        }
-        self.was_locked = locked;
-        if self.paused && self.settings.is_some() {
-            ui.draw.rect(ui.clip(), Color::rgba(0.0, 0.0, 0.0, PAUSE_DIM));
-            if self.settings_frame(ui, cx, active) {
-                self.pause_menu.reset();
-            }
-            return;
-        }
-        if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() && !self.run.shut_bag(&mut self.game, cx) {
-            // Asked about leaving, Esc is staying.
-            if self.leaving {
-                self.leaving = false;
-            } else if self.paused {
-                self.resume(cx)
-            } else {
-                self.pause(cx)
-            }
-        }
-        if self.paused {
-            let screen = ui.clip();
-            ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, PAUSE_DIM));
-            if self.leaving {
-                match self.leave_menu.draw(ui, active) {
-                    Some(LeaveItem::Stay) => self.leaving = false,
-                    Some(LeaveItem::Leave) => {
-                        cx.request(ShellRequest::LockPointer(false));
-                        self.fade_to(Then::Show(Screen::Title));
-                    }
-                    None => {}
-                }
-            } else {
-                match self.pause_menu.draw(ui, active) {
-                    Some(PauseItem::Resume) => self.resume(cx),
-                    Some(PauseItem::Settings) => self.settings = Some(SettingsScreen::default()),
-                    Some(PauseItem::ToTitle) => {
-                        self.leaving = true;
-                        self.leave_menu.reset();
-                    }
-                    None => {}
-                }
-            }
-            return;
-        }
-        if !active {
-            return;
-        }
-        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons);
-        self.map_screen(ui, active);
-        // The run just ended: it's settled (and saved) at once.
-        if self.run.ending.is_some() {
-            self.settle_run();
         }
     }
 }
@@ -444,6 +345,9 @@ impl Host for DeadSignal {
         // The music, in the menus (and in a run, if the player wants it).
         let in_run = self.screen == Screen::Run;
         self.combat.set_music(!in_run || self.game.world.resource::<Settings>().music_in_runs);
+        if self.screen == Screen::Title {
+            self.title_menu.subtitle = Some(self.playing());
+        }
         if self.screen == Screen::Hideout {
             self.hideout.set_slot_keys(self.game.world.resource::<Settings>().keys.slot_names());
         }
@@ -454,19 +358,25 @@ impl Host for DeadSignal {
                     self.title_menu.reset();
                 }
             }
+            Screen::Title if self.slots.is_some() => {
+                if self.slots_frame(ui, active) {
+                    self.title_menu.reset();
+                }
+            }
             Screen::Title => match self.title_menu.draw(ui, active) {
                 Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
+                Some(TitleItem::Slots) => self.slots = Some(SlotsScreen::new(self.slot_cards())),
                 Some(TitleItem::Settings) => self.settings = Some(SettingsScreen::default()),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
                 None => {}
             },
             Screen::Hideout => match self.hideout.frame(ui, &mut self.profile, &self.icons, active) {
                 Some(Leave::Back) => {
-                    save::store(&self.profile);
+                    self.saves.store(&self.profile);
                     self.show(Screen::Title, cx);
                 }
                 Some(Leave::Play) => {
-                    save::store(&self.profile);
+                    self.saves.store(&self.profile);
                     self.fade_to(Then::Show(Screen::Loading));
                 }
                 None => {}

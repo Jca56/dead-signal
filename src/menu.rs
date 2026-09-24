@@ -15,16 +15,18 @@ pub struct SideMenu<T: Copy + 'static> {
     items: &'static [(&'static str, T)],
     /// Lines under the rule, in red.
     warning: &'static [&'static str],
+    /// A line under the rule, in bone (who's playing, say).
+    pub subtitle: Option<String>,
     selected: usize,
 }
 
 impl<T: Copy + 'static> SideMenu<T> {
-    pub const fn new(heading: &'static str, items: &'static [(&'static str, T)]) -> Self {
-        Self { heading, items, warning: &[], selected: 0 }
+    pub fn new(heading: &'static str, items: &'static [(&'static str, T)]) -> Self {
+        Self { heading, items, warning: &[], subtitle: None, selected: 0 }
     }
 
     /// The same, with `lines` of warning over the items.
-    pub const fn warning(self, lines: &'static [&'static str]) -> Self {
+    pub fn warning(self, lines: &'static [&'static str]) -> Self {
         Self { warning: lines, ..self }
     }
 
@@ -49,6 +51,10 @@ impl<T: Copy + 'static> SideMenu<T> {
         ui.draw.rect(Rect::from_min_size(Vec2::new(left + 5.0 * s, y), Vec2::new(200.0 * s, 5.0 * s)), style::SIGNAL);
         y += 60.0 * s;
         let warning = TextStyle::new((36.0 * s) as f32).bold().family(style::FONT);
+        if let Some(line) = &self.subtitle {
+            ui.text_at(line, &warning, Vec2::new(left, y), screen.width(), style::BONE);
+            y += f64::from(warning.line_height()) + 40.0 * s;
+        }
         for line in self.warning {
             ui.text_at(line, &warning, Vec2::new(left, y), screen.width(), style::SIGNAL);
             y += f64::from(warning.line_height()) + 6.0 * s;

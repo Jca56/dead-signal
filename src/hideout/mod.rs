@@ -8,6 +8,7 @@ mod perks;
 mod trader;
 
 pub(crate) use perks::pressed;
+pub(crate) use trader::{GOLD, dollars};
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;

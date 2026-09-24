@@ -1,7 +1,11 @@
-//! The profile on disk: `~/.lantern/data/dead-signal/save.toml`, plain
-//! TOML a person can read. Written whole to a file beside it and then put
-//! in its place, so a crash mid-write never leaves half a save. One that
-//! won't read is set aside (`save.toml.broken`), never written over.
+//! The profiles on disk: three save slots, each its own player
+//! (`~/.lantern/data/dead-signal/slot1.toml` to `slot3.toml`), plain TOML
+//! a person can read, and which was played last (`slots.toml`). Each is
+//! written whole to a file beside it and then put in its place, so a crash
+//! mid-write never leaves half a save. One that won't read is set aside
+//! (`slot1.toml.broken`), never written over; one deleted is kept as
+//! `slot1.toml.deleted` till the next is. The one save from before there
+//! were slots (`save.toml`) becomes slot 1.
 //! Version 2 added the weapons: a gun's rounds, and what's in each slot;
 //! one from before is given the pistol everyone starts with now. Version 3
 //! added trading: money, the stash's size, what's been bought.
@@ -20,11 +24,8 @@ use crate::loot::{Kind, Stack};
 
 /// The save's layout; a newer one won't be read by an older game.
 const VERSION: i64 = 3;
-
-/// Where the save lives.
-pub fn path() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".lantern/data/dead-signal/save.toml"))
-}
+/// How many save slots there are.
+pub const SLOTS: u8 = 3;
 
 /// What a stack is: its kind, how many, and a gun's rounds.
 fn stack_to_doc(stack: Stack) -> Doc {
@@ -80,6 +81,7 @@ fn grid_from_doc(d: Option<&Doc>, (w, h): (u8, u8)) -> Grid {
 pub fn to_text(p: &Profile) -> String {
     let mut d = Doc::Map(Map::new());
     d.set("version", VERSION.into());
+    d.set("name", p.name.as_str().into());
     d.set("xp", i64::from(p.xp).into());
     d.set("runs", i64::from(p.runs).into());
     d.set("extractions", i64::from(p.extractions).into());
@@ -127,6 +129,7 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
         each: each.iter().map(|n| n.as_i64().unwrap_or(0).clamp(0, 1_000) as u32).collect(),
     };
     let mut p = Profile {
+        name: d.get("name").and_then(Doc::as_str).map(clean_name).unwrap_or_default(),
         stash: grid_from_doc(d.get("stash"), STASH_TIERS[usize::from(stash_tier)].0),
         loadout: Bag { pack: grid_from_doc(d.get("pack"), perks.pack()), pockets: grid_from_doc(d.get("pockets"), perks.pockets()), slots: [None; 3] },
         perks,
@@ -154,40 +157,122 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
     Ok(p)
 }
 
-/// The saved profile, or someone new if there's none (or it won't read:
-/// then it's set aside, not lost).
-pub fn load() -> Profile {
-    let Some(path) = path() else { return Profile::new_player() };
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        log_info!("save: none at {}, starting anew", path.display());
-        return Profile::new_player();
-    };
-    match from_text(&text) {
-        Ok(p) => {
-            log_info!("save: loaded {} (level {}, {} runs)", path.display(), super::xp::level(p.xp).0, p.runs);
-            p
+/// A profile's name as it may be: printable, trimmed, not too long.
+pub fn clean_name(name: &str) -> String {
+    name.chars().filter(|c| !c.is_control()).take(NAME_MAX).collect::<String>().trim().to_string()
+}
+
+/// The longest a name may be, in characters.
+pub const NAME_MAX: usize = 18;
+
+/// The save slots on disk, and which is being played.
+pub struct Saves {
+    /// Where they're kept (none: nowhere, nothing's written).
+    dir: Option<PathBuf>,
+    /// The slot being played, 1 to [`SLOTS`].
+    pub slot: u8,
+}
+
+impl Saves {
+    /// The player's saves, in `~/.lantern/data/dead-signal`.
+    pub fn open() -> Self {
+        Self::at(std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".lantern/data/dead-signal")))
+    }
+
+    /// The saves in `dir`: the old single save made slot 1 if there's no
+    /// slot 1 yet, and the slot played last chosen.
+    pub fn at(dir: Option<PathBuf>) -> Self {
+        let mut saves = Self { dir, slot: 1 };
+        if let (Some(old), Some(first)) = (saves.dir.as_ref().map(|d| d.join("save.toml")), saves.path(1))
+            && old.exists()
+            && !first.exists()
+        {
+            match std::fs::rename(&old, &first) {
+                Ok(()) => log_info!("save: {} is slot 1 now", old.display()),
+                Err(e) => log_error!("save: couldn't make {} slot 1: {e}", old.display()),
+            }
         }
-        Err(e) => {
-            let aside = path.with_extension("toml.broken");
-            log_error!("save: {} won't read ({e}); kept as {}, starting anew", path.display(), aside.display());
-            let _ = std::fs::rename(&path, &aside);
-            Profile::new_player()
+        let last = saves.dir.as_ref().and_then(|d| std::fs::read_to_string(d.join("slots.toml")).ok());
+        let last = last.and_then(|t| lntrn_data::toml::parse(&t).ok()).and_then(|d| d.get("current").and_then(Doc::as_i64));
+        saves.slot = last.map_or(1, |n| n.clamp(1, i64::from(SLOTS)) as u8);
+        saves
+    }
+
+    fn path(&self, slot: u8) -> Option<PathBuf> {
+        self.dir.as_ref().map(|d| d.join(format!("slot{slot}.toml")))
+    }
+
+    /// Whether `slot` has a player in it.
+    pub fn used(&self, slot: u8) -> bool {
+        self.path(slot).is_some_and(|p| p.exists())
+    }
+
+    /// The profile in `slot`, if there's one there that reads (one that
+    /// won't is set aside, not lost).
+    pub fn load(&self, slot: u8) -> Option<Profile> {
+        let path = self.path(slot)?;
+        let text = std::fs::read_to_string(&path).ok()?;
+        match from_text(&text) {
+            Ok(p) => {
+                log_info!("save: loaded {} (level {}, {} runs)", path.display(), super::xp::level(p.xp).0, p.runs);
+                Some(p)
+            }
+            Err(e) => {
+                let aside = path.with_extension("toml.broken");
+                log_error!("save: {} won't read ({e}); kept as {}", path.display(), aside.display());
+                let _ = std::fs::rename(&path, &aside);
+                None
+            }
+        }
+    }
+
+    /// The profile in the slot being played, or someone new.
+    pub fn profile(&self) -> Profile {
+        self.load(self.slot).unwrap_or_else(Profile::new_player)
+    }
+
+    /// Write `p` out, to the slot being played.
+    pub fn store(&self, p: &Profile) {
+        self.store_in(self.slot, p);
+    }
+
+    /// Write `p` out to `slot`.
+    pub fn store_in(&self, slot: u8, p: &Profile) {
+        if let Some(path) = self.path(slot) {
+            write(&path, &to_text(p));
+        }
+    }
+
+    /// Play `slot` from now on (and next time the game starts).
+    pub fn choose(&mut self, slot: u8) {
+        self.slot = slot.clamp(1, SLOTS);
+        if let Some(dir) = &self.dir {
+            let mut d = Doc::map();
+            d.set("current", i64::from(self.slot).into());
+            write(&dir.join("slots.toml"), &lntrn_data::toml::write(&d));
+        }
+    }
+
+    /// Empty `slot` (its player kept aside, till the next is deleted).
+    pub fn delete(&self, slot: u8) {
+        let Some(path) = self.path(slot) else { return };
+        if let Err(e) = std::fs::rename(&path, path.with_extension("toml.deleted")) {
+            log_error!("save: couldn't delete {}: {e}", path.display());
         }
     }
 }
 
-/// Write `p` out.
-pub fn store(p: &Profile) {
-    let Some(path) = path() else { return };
-    let write = || -> std::io::Result<()> {
+/// Write `text` to `path` whole: to a file beside it, then into place.
+fn write(path: &std::path::Path, text: &str) {
+    let go = || -> std::io::Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let fresh = path.with_extension("toml.new");
-        std::fs::write(&fresh, to_text(p))?;
-        std::fs::rename(&fresh, &path)
+        std::fs::write(&fresh, text)?;
+        std::fs::rename(&fresh, path)
     };
-    if let Err(e) = write() {
+    if let Err(e) = go() {
         log_error!("save: couldn't write {}: {e}", path.display());
     }
 }
@@ -220,6 +305,55 @@ mod tests {
         // Empty hands come back empty.
         *p.loadout.slot_mut(Slot::Sidearm) = None;
         assert_eq!(from_text(&to_text(&p)).unwrap(), p);
+    }
+
+    /// An empty folder of saves of its own, for a test.
+    fn folder(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("dead-signal-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn slots_keep_their_own_players_and_the_last_played_is_remembered() {
+        let dir = folder("slots");
+        let mut saves = Saves::at(Some(dir.clone()));
+        assert_eq!(saves.slot, 1);
+        assert!(!saves.used(1) && saves.load(1).is_none());
+        let mut p = Profile::new_player();
+        p.name = "Alva".into();
+        p.xp = 500;
+        saves.store(&p);
+        saves.choose(2);
+        let mut q = Profile::new_player();
+        q.money = 99;
+        saves.store(&q);
+        let again = Saves::at(Some(dir.clone()));
+        assert_eq!(again.slot, 2, "the last played");
+        assert_eq!((again.load(1), again.load(2)), (Some(p), Some(q)));
+        again.delete(2);
+        assert!(!again.used(2) && dir.join("slot2.toml.deleted").exists(), "kept aside");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_one_save_from_before_slots_becomes_slot_one() {
+        let dir = folder("old");
+        let mut p = Profile::new_player();
+        p.runs = 12;
+        std::fs::write(dir.join("save.toml"), to_text(&p)).unwrap();
+        let saves = Saves::at(Some(dir.clone()));
+        assert_eq!(saves.profile(), p);
+        assert!(!dir.join("save.toml").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn names_are_kept_tidy() {
+        assert_eq!(clean_name("  Rick\n Grimes  "), "Rick Grimes");
+        assert_eq!(clean_name("a\u{7}b"), "ab");
+        assert_eq!(clean_name(&"x".repeat(40)).len(), NAME_MAX);
     }
 
     #[test]

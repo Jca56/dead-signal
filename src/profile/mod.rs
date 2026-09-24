@@ -19,6 +19,8 @@ pub const STASH: (u8, u8) = (10, 10);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Profile {
+    /// What the player called them (empty: not named).
+    pub name: String,
     pub stash: Grid,
     pub loadout: Bag,
     pub xp: u32,
@@ -42,7 +44,7 @@ impl Profile {
         }
         let mut loadout = Bag::empty();
         loadout.add(starting_pistol());
-        Self { stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default(), money: 0, stash_tier: 0, bought: trade::Bought::default() }
+        Self { name: String::new(), stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default(), money: 0, stash_tier: 0, bought: trade::Bought::default() }
     }
 
     /// Perk points not yet spent.
