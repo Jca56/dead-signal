@@ -13,7 +13,7 @@ use lntrn_ui::{Key, Sense, Ui};
 use super::keys::{Action, Bind, Button};
 use super::{Field, Range, Settings};
 use crate::hideout::pressed;
-use crate::style;
+use crate::{feedback, style};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tab {
@@ -113,7 +113,7 @@ impl SettingsScreen {
                 ui.draw.rect(Rect::from_min_size(Vec2::new(r.min.x, r.max.y - 4.0 * s), Vec2::new(r.width(), 4.0 * s)), style::SIGNAL);
             }
             ui.text_at(label, &tab_style, Vec2::new(r.min.x + 25.0 * s, r.min.y + 9.0 * s), w, if on { style::BONE } else { style::DIM });
-            if active && hit.clicked {
+            if feedback::button(label, active && hit.hovered && !on, active && hit.clicked && !on) {
                 self.tab = tab;
                 self.held = None;
             }
@@ -159,6 +159,12 @@ impl SettingsScreen {
                         settings.set(field, min + t * (max - min));
                     } else if active && hit.hovered && ui.state.wheel.y != 0.0 {
                         settings.set(field, value + step * ui.state.wheel.y.signum());
+                    }
+                    if settings.get(field) != value {
+                        feedback::tick();
+                    }
+                    if active && hit.hovered && self.held.is_none() {
+                        feedback::hover(field.key());
                     }
                     let t = (settings.get(field) - min) / (max - min);
                     let lit = active && (hit.hovered || self.held == Some(field));
@@ -263,6 +269,7 @@ impl SettingsScreen {
         };
         let Some(bind) = got.filter(|b| b.bindable()) else { return };
         self.listening = None;
+        feedback::click();
         if let Some(other) = settings.keys.bind(action, bind) {
             self.note = Some((format!("SWAPPED WITH {}", other.label()), ui.now() + 3.0));
         }
@@ -277,5 +284,5 @@ fn back_button(ui: &mut Ui, r: Rect, item: &TextStyle, active: bool) -> bool {
     ui.draw.rect(r, if lit { Color::rgba(1.0, 1.0, 1.0, 0.18) } else { Color::rgba(1.0, 1.0, 1.0, 0.08) });
     ui.draw.stroke_rect(r, 2.0 * s, 0.0, if lit { style::BONE } else { style::DIM });
     ui.text_at("BACK", item, Vec2::new(r.min.x + 40.0 * s, r.min.y + 12.0 * s), r.width(), style::BONE);
-    active && hit.clicked
+    feedback::button("settings back", lit, active && hit.clicked)
 }

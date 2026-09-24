@@ -393,6 +393,14 @@ impl Host for DeadSignal {
                 self.perf.zombies(zombie::alive(&mut self.game.world));
             }
         }
+        // The menus' ticks and clicks.
+        let (tick, click) = crate::feedback::take(ui);
+        if tick {
+            self.combat.play(crate::sound::Sfx::Tick, 0.5);
+        }
+        if click {
+            self.combat.play(crate::sound::Sfx::Click, 0.7);
+        }
         match self.step_fade(clock.dt) {
             Some(Then::Show(screen)) => self.show(screen, cx),
             Some(Then::Quit) => cx.request(ShellRequest::Quit),

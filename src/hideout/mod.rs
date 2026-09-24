@@ -17,7 +17,7 @@ use lntrn_ui::{Key, Sense, Ui};
 use crate::bag_ui::{BagUi, Icons, Mode, Shelves};
 use crate::loot::grid::Grid;
 use crate::profile::Profile;
-use crate::style;
+use crate::{feedback, style};
 
 /// Where the hideout was left for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,7 +109,7 @@ impl Hideout {
                 ui.draw.rect(Rect::from_min_size(Vec2::new(r.min.x, r.max.y - 4.0 * s), Vec2::new(r.width(), 4.0 * s)), style::SIGNAL);
             }
             ui.text_at(&label, &tab_style, Vec2::new(r.min.x + 25.0 * s, r.min.y + 9.0 * s), w, if on { style::BONE } else { style::DIM });
-            if active && hit.clicked && !on {
+            if feedback::button(id, active && hit.hovered && !on, active && hit.clicked && !on) {
                 self.let_go(profile);
                 self.tab = tab;
             }
@@ -155,7 +155,7 @@ impl Hideout {
             ui.draw.rect(r, fill);
             ui.draw.stroke_rect(r, 2.0 * s, 0.0, if lit { style::BONE } else { style::DIM });
             ui.text_at(label, &item, Vec2::new(r.min.x + 40.0 * s, r.min.y + 12.0 * s), w, style::BONE);
-            if active && hit.clicked {
+            if feedback::button(label, lit, active && hit.clicked) {
                 leave = Some(choice);
             }
             x -= 30.0 * s;

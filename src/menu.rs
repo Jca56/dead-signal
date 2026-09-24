@@ -7,7 +7,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::{Key, Sense, Ui};
 
-use crate::style;
+use crate::{feedback, style};
 
 /// A menu of `T` choices under a heading.
 pub struct SideMenu<T: Copy + 'static> {
@@ -66,6 +66,7 @@ impl<T: Copy + 'static> SideMenu<T> {
         let item = TextStyle::new((50.0 * s) as f32).bold().family(style::FONT);
         let item_h = f64::from(item.line_height());
         let mut chosen = None;
+        let was = self.selected;
         for (i, (label, choice)) in self.items.iter().enumerate() {
             let w = ui.measure(label, &item) + 60.0 * s;
             let rect = Rect::from_min_size(Vec2::new(left - 40.0 * s, y), Vec2::new(w + 40.0 * s, item_h));
@@ -96,6 +97,11 @@ impl<T: Copy + 'static> SideMenu<T> {
             if ui.state.take_key(|k| matches!(k.key, Key::Enter | Key::Char(' '))).is_some() {
                 chosen = Some(self.items[self.selected].1);
             }
+        }
+        if chosen.is_some() {
+            feedback::click();
+        } else if self.selected != was {
+            feedback::tick();
         }
         chosen
     }

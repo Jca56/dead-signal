@@ -8,7 +8,7 @@ use lntrn_ui::{Sense, Ui};
 
 use crate::profile::Profile;
 use crate::profile::perks::{self, ALL, RANKS};
-use crate::style;
+use crate::{feedback, style};
 
 /// The ranks' colour, taken and not.
 const TAKEN: Color = Color::rgb(0.78, 0.66, 0.30);
@@ -99,5 +99,5 @@ pub(crate) fn pressed(ui: &mut Ui, id: &str, r: Rect, label: &str, style_: &Text
     ui.draw.rect(r, fill);
     ui.draw.stroke_rect(r, 2.0 * s, 0.0, if lit { style::BONE } else { style::DIM });
     ui.text_at(label, style_, Vec2::new(r.min.x + 18.0 * s, r.min.y + 10.0 * s), r.width(), if can { style::BONE } else { style::DIM });
-    active && can && hit.clicked
+    feedback::button(id, lit, active && can && hit.clicked)
 }

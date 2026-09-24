@@ -57,6 +57,9 @@ pub enum Sfx {
     Died,
     Pickup,
     Heal,
+    /// The menus: the highlight moving, and something pressed.
+    Tick,
+    Click,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -71,7 +74,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 33] = [
+const ALL: [Sfx; 35] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -97,6 +100,8 @@ const ALL: [Sfx; 33] = [
     Sfx::Died,
     Sfx::Pickup,
     Sfx::Heal,
+    Sfx::Tick,
+    Sfx::Click,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

@@ -6,6 +6,7 @@ mod bag_ui;
 mod camera;
 mod collide;
 mod exits;
+mod feedback;
 mod combat;
 mod containers;
 mod ending;

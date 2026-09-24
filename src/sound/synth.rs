@@ -260,6 +260,16 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 f.run(saw, 260.0 + 140.0 * (t / 4.0), 0.7).0 * swell
             })
         }
+        Sfx::Tick => {
+            // A dry little tap: a high click of noise and a glint of tone.
+            let mut f = Svf::default();
+            render(0.03, 0.22, |t, n| f.run(n.next(), 4200.0, 0.7).1 * env(t, 0.0003, 0.004) + sine(t, 2600.0) * env(t, 0.0005, 0.006) * 0.35)
+        }
+        Sfx::Click => {
+            // A switch thrown: a knock with some body, and its snap.
+            let mut f = Svf::default();
+            render(0.08, 0.4, |t, n| sine(t, 1150.0) * env(t, 0.0008, 0.018) * 0.8 + sine(t, 380.0) * env(t, 0.001, 0.025) * 0.5 + f.run(n.next(), 3200.0, 0.6).1 * env(t, 0.0002, 0.005) * 0.6)
+        }
         Sfx::Pickup => {
             let mut f = Svf::default();
             render(0.18, 0.5, |t, n| f.run(n.next(), 1800.0, 0.9).1 * env(t, 0.004, 0.04) + sine(t, 520.0) * env(t, 0.002, 0.05) * 0.3)

@@ -12,7 +12,7 @@ use lntrn_ui::{Key, Sense, Ui};
 use crate::hideout::{GOLD, dollars, pressed};
 use crate::profile::Profile;
 use crate::profile::save::{NAME_MAX, SLOTS, clean_name};
-use crate::style;
+use crate::{feedback, style};
 
 /// A slot's player, at a glance.
 #[derive(Clone, Debug, PartialEq)]
@@ -106,7 +106,7 @@ impl SlotsScreen {
         ui.draw.rect(back, if lit { Color::rgba(1.0, 1.0, 1.0, 0.18) } else { Color::rgba(1.0, 1.0, 1.0, 0.08) });
         ui.draw.stroke_rect(back, 2.0 * s, 0.0, if lit { style::BONE } else { style::DIM });
         ui.text_at("BACK", &item, Vec2::new(back.min.x + 40.0 * s, back.min.y + 12.0 * s), back_w, style::BONE);
-        if active && hit.clicked {
+        if feedback::button("slots back", lit, active && hit.clicked) {
             event = Some(SlotEvent::Closed);
         }
         if active && self.renaming.is_none() && ui.state.take_key(|k| k.key == Key::Escape).is_some() {
@@ -127,10 +127,17 @@ impl SlotsScreen {
                 Key::Escape => return None,
                 Key::Enter => return Some(SlotEvent::Renamed(slot, clean_name(&name))),
                 Key::Backspace => {
-                    name.pop();
+                    if name.pop().is_some() {
+                        feedback::tick();
+                    }
                 }
-                Key::Space => name.push(' '),
-                Key::Char(c) if !c.is_control() && name.chars().count() < NAME_MAX => name.push(c),
+                Key::Space | Key::Char(_) if name.chars().count() < NAME_MAX => {
+                    let c = if let Key::Char(c) = k.key { c } else { ' ' };
+                    if !c.is_control() {
+                        name.push(c);
+                        feedback::tick();
+                    }
+                }
                 _ => {}
             }
         }
