@@ -154,14 +154,17 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
         bought,
         best_round: num("best_round"),
     };
-    // Each slot holds only what belongs in it; anything else is kept in
-    // the stash.
+    // Each slot holds only what belongs in it; anything else (a weapon
+    // that's since moved slot, say) is put away once the bag's in: into
+    // its own slot if that's free, else the stash, else (the stash full)
+    // the bag.
+    let mut misplaced = Vec::new();
     for slot in Slot::ALL {
         let Some(stack) = d.get("slots").and_then(|m| m.get(slot.save_key())).and_then(stack_from_doc) else { continue };
         if Slot::of(stack.kind) == Some(slot) {
             *p.loadout.slot_mut(slot) = Some(stack.with_count(1));
         } else {
-            p.stash.place(stack);
+            misplaced.push(stack);
         }
     }
     // From before there were weapons: the pistol everyone starts with.
@@ -186,6 +189,19 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
     let bag = &mut p.loadout;
     for (key, grid) in [("pack", &mut bag.pack), ("pockets", &mut bag.pockets), ("rig", &mut bag.rig), ("belt", &mut bag.belt)] {
         *grid = grid_from_doc(d.get(key), (grid.w, grid.h));
+    }
+    for stack in misplaced {
+        let own = Slot::of(stack.kind).filter(|&s| p.loadout.slot(s).is_none());
+        let left = match own {
+            Some(slot) => {
+                *p.loadout.slot_mut(slot) = Some(stack.with_count(1));
+                continue;
+            }
+            None => p.loadout.add(p.stash.place(stack)),
+        };
+        if left.count > 0 {
+            lntrn_core::log_warn!("save: no room anywhere for {:?} out of the wrong slot", left.kind);
+        }
     }
     Ok(p)
 }
@@ -422,6 +438,22 @@ mod tests {
         let p = from_text("version = 2\nslots = { sidearm = { kind = \"pistol\", count = 1, loaded = 99 }, primary = { kind = \"watch\", count = 1 } }").unwrap();
         assert_eq!(p.loadout.slot(Slot::Sidearm), Some(starting_pistol()));
         assert_eq!((p.loadout.slot(Slot::Primary), p.stash.count(Kind::Watch)), (None, 1));
+    }
+
+    #[test]
+    fn a_weapon_in_a_slot_it_no_longer_goes_in_moves_and_is_never_lost() {
+        // An SMG from when it was a long gun: into the sidearm slot, free.
+        let smg = "primary = { kind = \"smg\", count = 1, loaded = 30 }";
+        let p = from_text(&format!("version = 4\nslots = {{ {smg} }}")).unwrap();
+        assert_eq!(p.loadout.slot(Slot::Sidearm).map(|s| (s.kind, s.loaded)), Some((Kind::Smg, 30)));
+        assert_eq!(p.loadout.slot(Slot::Primary), None);
+        // The sidearm slot taken and the stash full: into the pack.
+        let full: Vec<String> = (0..super::STASH_TIERS[0].0.0).flat_map(|x| (0..super::STASH_TIERS[0].0.1).map(move |y| format!("{{ kind = \"watch\", count = 1, x = {x}, y = {y}, turned = false }}"))).collect();
+        let text = format!("version = 4\nstash = [{}]\nworn = {{ back = {{ kind = \"rucksack\", count = 1 }} }}\nslots = {{ {smg}, sidearm = {{ kind = \"pistol\", count = 1 }} }}", full.join(", "));
+        let p = from_text(&text).unwrap();
+        assert_eq!(p.loadout.slot(Slot::Sidearm).map(|s| s.kind), Some(Kind::Pistol));
+        assert_eq!(p.stash.count(Kind::Smg), 0, "the stash was full");
+        assert_eq!(p.loadout.pack.count(Kind::Smg), 1, "lost");
     }
 
     #[test]
