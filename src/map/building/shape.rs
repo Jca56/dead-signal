@@ -82,6 +82,9 @@ const FIRE_BRICK: Rgb = [0.52, 0.24, 0.18];
 const SCHOOL_BRICK: Rgb = [0.60, 0.42, 0.30];
 const SCHOOL_INSIDE: Rgb = [0.78, 0.76, 0.62];
 const BARS: Rgb = [0.30, 0.31, 0.32];
+/// The relay station's painted block, outside and in.
+const RELAY_WALLS: Rgb = [0.50, 0.54, 0.49];
+const RELAY_INSIDE: Rgb = [0.64, 0.69, 0.62];
 /// The bars: each how thick, how far apart.
 const BAR: f64 = 0.05;
 const BAR_GAP: f64 = 0.2;
@@ -106,6 +109,7 @@ fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
         Use::Corridor => [0.62, 0.60, 0.54],
         Use::Nurse => [0.70, 0.72, 0.70],
         Use::Gym => [0.62, 0.46, 0.28],
+        Use::Bunks => [0.44, 0.34, 0.24],
     }
 }
 
@@ -122,6 +126,7 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         Kind::Police => STATION_WALLS,
         Kind::FireStation => FIRE_BRICK,
         Kind::School => SCHOOL_BRICK,
+        Kind::Relay => RELAY_WALLS,
         Kind::Barn => BARN_RED[0],
         Kind::Cabin => LOGS[0],
         _ => pick(dice, SIDINGS),
@@ -142,13 +147,14 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
             (Kind::Garage | Kind::Armory, _) | (Kind::Police, Use::CellBlock | Use::Cell | Use::Armory) | (_, Use::Bay) => CONCRETE,
             (Kind::Police | Kind::FireStation, _) => STATION_INSIDE,
             (Kind::School, _) => SCHOOL_INSIDE,
+            (Kind::Relay, _) => RELAY_INSIDE,
             (Kind::GunStore, _) => GUN_STORE_INSIDE,
             (_, Use::Bath) => [0.70, 0.74, 0.74],
             _ => pick(dice, PAINTS),
         })
         .collect();
     let floors: Vec<Rgb> = plan.rooms.iter().map(|r| floor_of(r.use_, dice)).collect();
-    let wall_stuff = Stuff::Solid(if matches!(plan.kind, Kind::Store | Kind::Garage | Kind::Armory | Kind::GunStore | Kind::Police | Kind::FireStation | Kind::School) { Surface::Stone } else { Surface::Wood });
+    let wall_stuff = Stuff::Solid(if matches!(plan.kind, Kind::Store | Kind::Garage | Kind::Armory | Kind::GunStore | Kind::Police | Kind::FireStation | Kind::School | Kind::Relay) { Surface::Stone } else { Surface::Wood });
     let mut blocks = Vec::new();
     let mut add = |lo: Vec3, hi: Vec3, colour: Rgb, stuff: Stuff| blocks.push(Block { lo: lo.min(hi), hi: lo.max(hi), colour, stuff });
     let (w, d) = (f64::from(plan.w), f64::from(plan.d));

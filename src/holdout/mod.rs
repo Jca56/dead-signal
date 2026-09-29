@@ -7,7 +7,11 @@
 
 pub mod arena;
 pub mod hud;
+mod land;
+mod layout;
 pub mod props;
+mod raise;
+mod relay;
 pub mod rounds;
 
 use bevy_ecs::prelude::*;
@@ -24,8 +28,9 @@ use rounds::Rounds;
 
 /// Points to start with.
 const START_POINTS: u32 = 500;
-/// Points for a hit; for a kill (over the hit's), to the head, with a
-/// blade or fist; for a board nailed back (only so many a round pay).
+/// Points for a hit (a shot or a blow); for a kill (over the hit's), to
+/// the head, with a blade or fist; for a board nailed back (only so many a
+/// round pay).
 const PER_HIT: u32 = 10;
 const PER_KILL: u32 = 50;
 const PER_HEADSHOT_KILL: u32 = 90;
@@ -37,11 +42,12 @@ pub const BOARDS: u8 = 6;
 const NAIL_EVERY: f64 = 0.5;
 /// How near a wall buy or a door is to be used (from the eye), and how
 /// straight at it the player must look (the cosine of the angle off it);
-/// how near a window's inside to nail its boards.
+/// how near a window's inside to nail its boards (flat, and up or down).
 const BUY_REACH: f64 = 1.9;
 const DOOR_REACH: f64 = 2.4;
 const LOOKING: f64 = 0.8;
 const NAIL_REACH: f64 = 1.6;
+const NAIL_LEVEL: f64 = 1.0;
 /// How high the eye is over the feet.
 const EYE: f64 = 1.6;
 /// A holdout's pack and pockets: room for all the rounds bought.
@@ -69,13 +75,14 @@ pub fn price(kind: Kind) -> u32 {
 fn spare(kind: Kind) -> Option<(Kind, u32)> {
     let spec = kind.weapon()?.spec();
     let ammo = spec.ammo?;
-    Some((ammo, spec.mag * if kind == Kind::Pistol { 5 } else { 6 }))
+    Some((ammo, spec.mag * if kind == Kind::Pistol { 10 } else { 12 }))
 }
 
 /// The count of what earns points, as it stood.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Tally {
     hits: u32,
+    blows: u32,
     kills: u32,
     headshot_kills: u32,
     melee_kills: u32,
@@ -84,7 +91,7 @@ struct Tally {
 
 impl Tally {
     fn of(s: &Stats) -> Self {
-        Self { hits: s.hits, kills: s.gun_kills, headshot_kills: s.headshot_kills, melee_kills: s.melee_kills, blasts: s.blast_kills + s.burst_kills }
+        Self { hits: s.hits, blows: s.blows_landed, kills: s.gun_kills, headshot_kills: s.headshot_kills, melee_kills: s.melee_kills, blasts: s.blast_kills + s.burst_kills }
     }
 }
 
@@ -151,7 +158,7 @@ impl Holdout {
         let was = std::mem::replace(&mut self.seen, now);
         let heads = now.headshot_kills - was.headshot_kills;
         let bodies = (now.kills - was.kills).saturating_sub(heads);
-        let earned = PER_HIT * (now.hits - was.hits) + PER_KILL * (bodies + now.blasts - was.blasts) + PER_HEADSHOT_KILL * heads + PER_MELEE_KILL * (now.melee_kills - was.melee_kills);
+        let earned = PER_HIT * (now.hits - was.hits + now.blows - was.blows) + PER_KILL * (bodies + now.blasts - was.blasts) + PER_HEADSHOT_KILL * heads + PER_MELEE_KILL * (now.melee_kills - was.melee_kills);
         self.earn(earned);
     }
 
@@ -192,7 +199,13 @@ impl Holdout {
         }
         let boards = world.get_resource::<Barriers>()?;
         let feet = eye - Vec3::new(0.0, EYE, 0.0);
-        (0..self.arena.windows.len()).find(|&i| boards.0.get(i).is_some_and(|b| b.boards < BOARDS) && flat_dist(self.arena.windows[i].inside, feet) < NAIL_REACH).map(Aimed::Window)
+        // (On its floor: not the one below, from upstairs.)
+        (0..self.arena.windows.len())
+            .find(|&i| {
+                let inside = self.arena.windows[i].inside;
+                boards.0.get(i).is_some_and(|b| b.boards < BOARDS) && flat_dist(inside, feet) < NAIL_REACH && (inside.y - feet.y).abs() < NAIL_LEVEL
+            })
+            .map(Aimed::Window)
     }
 
     /// What using `aimed` would do, in words.
@@ -211,7 +224,10 @@ impl Holdout {
                 }
                 Wares::Kit(kind) => format!("BUY {} [{}]", kind.def().name, price(kind)),
             },
-            Aimed::Door(i) => format!("OPEN DOOR [{}]", self.arena.doors[i].cost),
+            Aimed::Door(i) => {
+                let door = &self.arena.doors[i];
+                format!("{} [{}]", if door.heap { "CLEAR DEBRIS" } else { "OPEN DOOR" }, door.cost)
+            }
             Aimed::Window(_) => "HOLD TO REBUILD BARRIER".to_string(),
         }
     }
@@ -229,7 +245,7 @@ impl Holdout {
                 }
                 self.points -= cost;
                 self.open_door(world, i);
-                (Some(Sfx::Unlock), None, None)
+                (Some(if self.arena.doors[i].heap { Sfx::Rummage } else { Sfx::Unlock }), None, None)
             }
             Aimed::Window(_) => (None, None, None),
         }

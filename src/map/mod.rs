@@ -59,6 +59,9 @@ pub struct Map {
     pub forest: scatter::Forest,
     /// Where the town's landmarks stand (the middle of each, flat).
     pub landmarks: Vec<(building::landmark::Landmark, Vec2)>,
+    /// Blocks laid straight on the map, square to it (a holdout's walls,
+    /// its gate, what's built in its yards).
+    pub blocks: Vec<building::shape::Block>,
 }
 
 impl Map {
@@ -248,7 +251,7 @@ pub fn generate(seed: u32) -> Map {
     keep_out.extend(things.containers.iter().map(|(_, (x, z, _, _))| (Vec2::new(*x, *z), 4.0)));
     scenery.extend(scatter::forest(seed, &forest, &field, &network, &plots, &plan.fields, &keep_out));
     scenery.extend(scatter::poles(&field, &network, &plots));
-    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings, targets: fitted.targets, forest, landmarks: town.landmarks }
+    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings, targets: fitted.targets, forest, landmarks: town.landmarks, blocks: Vec::new() }
 }
 
 /// Where a road to `p` best leaves `roads` from (flat; only where `may`

@@ -27,6 +27,9 @@ use crate::zombie::nav::NavGrid;
 
 /// Chunks of ground, metres a side.
 const CHUNK: f64 = 60.0;
+/// The luck the faces of the blocks laid on the map are shaded by (a
+/// building's is its place in the list).
+const LOOSE: u32 = 0xB10C;
 /// Solid out to this far past the edge (nobody gets further).
 const SOLID_REACH: f64 = HALF + 24.0;
 
@@ -198,30 +201,36 @@ fn make(map: Map, mut arena: Option<crate::holdout::arena::Arena>, kit: &Kit, st
             bucket(tri, colour);
         }
     }
-    // The buildings, block by block.
-    let mut by_surface: HashMap<Surface, Vec<[Vec3; 3]>> = HashMap::new();
-    let mut barriers = Vec::new();
+    // The buildings, block by block, and the blocks laid on the map (each
+    // with the luck its faces are shaded by); the roofs.
+    let mut blocks: Vec<(u32, usize, shape::Block)> = map.blocks.iter().enumerate().map(|(i, b)| (LOOSE, i, *b)).collect();
+    let mut roofs = Vec::new();
     for (k, b) in map.buildings.iter().enumerate() {
         let shape = shape::shape(&b.plan, &mut Dice(b.seed | 1));
         for (i, block) in shape.blocks.iter().enumerate() {
             let (p, q) = (b.world(block.lo), b.world(block.hi));
-            let tris = box_tris(p.min(q), p.max(q));
-            match block.stuff {
-                Stuff::Ghost => barriers.extend(tris),
-                Stuff::Solid(surface) => {
-                    for (f, t) in tris.iter().enumerate() {
-                        // Each face (two triangles) a shade of its own.
-                        bucket(*t, shade(block.colour, 0.93 + 0.14 * hash(seed ^ k as u32, i, f / 2, 21)));
-                    }
-                    by_surface.entry(surface).or_default().extend(tris);
+            blocks.push((k as u32, i, shape::Block { lo: p.min(q), hi: p.max(q), ..*block }));
+        }
+        roofs.extend(shape.roof.iter().enumerate().map(|(i, (t, colour))| (k as u32, i, t.map(|p| b.world(p)), *colour)));
+    }
+    let mut by_surface: HashMap<Surface, Vec<[Vec3; 3]>> = HashMap::new();
+    let mut barriers = Vec::new();
+    for (salt, i, block) in blocks {
+        let tris = box_tris(block.lo, block.hi);
+        match block.stuff {
+            Stuff::Ghost => barriers.extend(tris),
+            Stuff::Solid(surface) => {
+                for (f, t) in tris.iter().enumerate() {
+                    // Each face (two triangles) a shade of its own.
+                    bucket(*t, shade(block.colour, 0.93 + 0.14 * hash(seed ^ salt, i, f / 2, 21)));
                 }
+                by_surface.entry(surface).or_default().extend(tris);
             }
         }
-        for (i, (t, colour)) in shape.roof.iter().enumerate() {
-            let t = t.map(|p| b.world(p));
-            bucket(t, shade(*colour, 0.93 + 0.14 * hash(seed ^ k as u32, i, 0, 22)));
-            by_surface.entry(Surface::Wood).or_default().push(t);
-        }
+    }
+    for (k, i, t, colour) in roofs {
+        bucket(t, shade(colour, 0.93 + 0.14 * hash(seed ^ k, i, 0, 22)));
+        by_surface.entry(Surface::Wood).or_default().push(t);
     }
     solids.add_barrier(&barriers);
 

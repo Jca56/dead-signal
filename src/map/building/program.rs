@@ -125,6 +125,8 @@ pub(super) fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
         // The bullpen: desks.
         Use::Office if kind == Kind::School => vec![b(Source::Desk, 1.0), b(Source::Desk, 0.7), b(Source::Cabinet, 0.7), f(Bookcase, 0.6)],
         Use::Office if kind == Kind::Police => vec![b(Source::Desk, 1.0), b(Source::Desk, 1.0), b(Source::Desk, 0.8), b(Source::Cabinet, 0.6), b(Source::Desk, 0.6), f(Bookcase, 0.5)],
+        // The relay's control room: its consoles.
+        Use::Office if kind == Kind::Relay => vec![b(Source::Desk, 1.0), b(Source::Desk, 1.0), b(Source::Desk, 0.8), b(Source::Cabinet, 0.7), f(Bookcase, 0.6), b(Source::Locker, 0.5)],
         Use::Office => vec![b(Source::Desk, 1.0), b(Source::Locker, 0.9), b(Source::Cabinet, 0.5), f(Bookcase, 0.4)],
         // The cage first: it has the pick of the walls.
         Use::Armory if kind == Kind::Police => vec![b(Source::PoliceArmory, 1.0), b(Source::PoliceLocker, 0.8), b(Source::Crate, 0.5)],
@@ -144,6 +146,7 @@ pub(super) fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
         Use::Corridor => vec![b(Source::SchoolLocker, 0.9), b(Source::SchoolLocker, 0.9), b(Source::SchoolLocker, 0.8), b(Source::SchoolLocker, 0.7)],
         Use::Nurse => vec![b(Source::MedCabinet, 1.0), f(Bed, 1.0), b(Source::Desk, 0.7), b(Source::Cabinet, 0.5)],
         Use::Gym => vec![b(Source::SchoolLocker, 1.0), b(Source::SchoolLocker, 1.0), b(Source::SchoolLocker, 0.8), b(Source::Crate, 0.8), b(Source::Crate, 0.5)],
+        Use::Bunks => vec![f(Bed, 1.0), f(Bed, 1.0), f(Bed, 1.0), f(Bed, 0.9), b(Source::Locker, 1.0), b(Source::Locker, 0.9), b(Source::Locker, 0.6), f(Table, 0.5)],
         Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::ToolLocker, 1.0), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
     }
 }

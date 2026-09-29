@@ -56,6 +56,9 @@ pub enum Kind {
     Police,
     FireStation,
     School,
+    /// The holdout's relay station (`holdout/relay.rs`): painted cinder
+    /// block, government green-grey.
+    Relay,
 }
 
 /// What a room is for.
@@ -93,6 +96,8 @@ pub enum Use {
     Corridor,
     Nurse,
     Gym,
+    /// A bunkhouse's dormitory: beds in a row, lockers.
+    Bunks,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

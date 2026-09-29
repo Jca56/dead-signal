@@ -50,6 +50,7 @@ impl Run {
     pub(super) fn holdout_step(&mut self, game: &mut Game, combat: &mut Combat, eye: Vec3, dt: f64) {
         let Some(h) = &mut self.holdout else { return };
         h.score(&self.stats);
+        self.stats.biggest_horde = self.stats.biggest_horde.max(crate::zombie::alive(&mut game.world) as u32);
         if h.update(&mut game.world, eye - Vec3::new(0.0, 1.6, 0.0), dt) {
             // A new round: the radio crackles.
             combat.play(Sfx::Static, 0.9);

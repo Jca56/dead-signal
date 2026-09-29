@@ -15,6 +15,8 @@ pub struct Stats {
     /// Kills by a shot to the head.
     pub headshot_kills: u32,
     pub melee_kills: u32,
+    /// Blows that landed on the dead (each one a swing struck).
+    pub blows_landed: u32,
     /// The dead killed by a Spitter's burst (one the player killed).
     pub burst_kills: u32,
     /// The dead killed by the player's fire or blasts.

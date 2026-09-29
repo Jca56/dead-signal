@@ -50,12 +50,88 @@ fn the_dead_get_to_every_window_and_in_only_by_the_windows() {
     assert!(nav.height_at(start).is_some_and(|y| (y - start.y).abs() < 0.3), "the start's floor: {start:?}");
 }
 
+/// Every door bought open.
+fn open_everything(world: &mut World, h: &mut Holdout) {
+    let mut bag = Holdout::loadout();
+    for i in 0..h.arena.doors.len() {
+        h.points = 1_000_000;
+        h.press(world, Aimed::Door(i), &mut bag);
+    }
+}
+
+/// Where a wall buy is stood at to use it (on its floor).
+fn stand_at(b: &arena::Buy) -> Vec3 {
+    b.at + b.facing * 0.6 - Vec3::new(0.0, 1.45, 0.0)
+}
+
+#[test]
+fn with_every_door_open_all_of_it_is_reached_and_the_dead_still_only_come_in_by_the_windows() {
+    let (mut world, mut h) = world_of(built());
+    let start = feet(&mut world);
+    open_everything(&mut world, &mut h);
+    assert!(h.open.iter().all(|&o| o), "a zone never opened");
+    let nav = world.resource::<Nav>().0.as_ref().unwrap();
+    for (i, w) in h.arena.windows.iter().enumerate() {
+        assert!(nav.connects(start, w.inside), "window {i} (zone {}): its inside never reached", h.arena.zones[w.zone]);
+        assert!(!nav.connects(w.outside, start) && !nav.connects(w.from, start), "window {i}: a way in from outside but by it");
+    }
+    for (i, b) in h.arena.buys.iter().enumerate() {
+        assert!(nav.connects(start, stand_at(b)), "wall buy {i} ({:?}) can't be got to", b.wares);
+    }
+}
+
+#[test]
+fn every_zone_opens_from_the_start_a_door_at_a_time_and_the_dead_have_a_way_into_each() {
+    let (_, arena) = arena::generate();
+    let mut open = vec![false; arena.zones.len()];
+    open[arena.start] = true;
+    loop {
+        let mut grew = false;
+        for d in &arena.doors {
+            let (a, b) = d.zones;
+            assert_ne!(a, b, "a door within a zone");
+            if open[a] != open[b] {
+                open[a] = true;
+                open[b] = true;
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    for (z, name) in arena.zones.iter().enumerate() {
+        assert!(open[z], "{name} can't be opened from the start");
+        assert!(arena.windows.iter().any(|w| w.zone == z), "no way in for the dead to {name}");
+    }
+    assert!(arena.buys.iter().all(|b| b.zone < arena.zones.len()));
+}
+
+#[test]
+fn nothing_stands_where_the_dead_come_or_climb_in_or_where_a_wall_buy_is_used() {
+    let built = built();
+    let arena = built.arena.as_ref().unwrap();
+    let body = crate::player::capsule(false);
+    let fits = |at: Vec3| built.solids.fits(body, at + Vec3::new(0.0, 0.05, 0.0));
+    for (i, w) in arena.windows.iter().enumerate() {
+        for (what, at) in [("comes from", w.from), ("stands outside", w.outside), ("lands inside", w.inside)] {
+            assert!(fits(at), "window {i} (zone {}): something's where the dead {what}, at {at:?}", arena.zones[w.zone]);
+        }
+    }
+    for (i, b) in arena.buys.iter().enumerate() {
+        assert!(fits(stand_at(b)), "wall buy {i} ({:?}): something's where it's used, at {:?}", b.wares, stand_at(b));
+    }
+    assert!(fits(built.map.spawn.0), "something's on the start");
+}
+
 #[test]
 fn a_door_bought_open_lets_the_player_and_the_dead_through() {
     let (mut world, mut h) = world_of(built());
     let start = feet(&mut world);
-    let door = h.arena.doors[0].clone();
-    let beyond = h.arena.windows.iter().find(|w| w.zone != h.arena.start).expect("a window beyond the door").inside;
+    let start_zone = h.arena.start;
+    let (i, door) = h.arena.doors.iter().enumerate().find(|(_, d)| d.zones.0 == start_zone || d.zones.1 == start_zone).map(|(i, d)| (i, d.clone())).expect("a door out of the start");
+    let other = if door.zones.0 == start_zone { door.zones.1 } else { door.zones.0 };
+    let beyond = h.arena.windows.iter().find(|w| w.zone == other).expect("a window beyond the door").inside;
     let mid = (door.lo + door.hi) * 0.5;
     // Straight across it (through its doorway).
     let across = if door.hi.x - door.lo.x < door.hi.z - door.lo.z { Vec3::new(1.0, 0.0, 0.0) } else { Vec3::new(0.0, 0.0, 1.0) };
@@ -65,15 +141,15 @@ fn a_door_bought_open_lets_the_player_and_the_dead_through() {
     // Short of points: nothing.
     h.points = door.cost - 1;
     let mut bag = Holdout::loadout();
-    let (_, note, _) = h.press(&mut world, Aimed::Door(0), &mut bag);
+    let (_, note, _) = h.press(&mut world, Aimed::Door(i), &mut bag);
     assert_eq!(note, Some("NOT ENOUGH POINTS"));
-    assert!(!h.door_open(0));
+    assert!(!h.door_open(i));
     h.points = door.cost + 5;
-    h.press(&mut world, Aimed::Door(0), &mut bag);
-    assert!(h.door_open(0) && h.points == 5);
+    h.press(&mut world, Aimed::Door(i), &mut bag);
+    assert!(h.door_open(i) && h.points == 5);
     assert!(!solid_at_door(&world), "the door's still solid");
     assert!(world.resource::<Nav>().0.as_ref().unwrap().connects(start, beyond), "no way through the open door");
-    assert!(h.open.iter().all(|&o| o), "both rooms open");
+    assert!(h.open[start_zone] && h.open[other], "the zones either side open");
 }
 
 #[test]
@@ -82,16 +158,18 @@ fn hits_and_kills_earn_points_the_head_and_the_blade_more() {
     let mut stats = Stats::default();
     h.score(&stats);
     assert_eq!(h.points, START_POINTS);
-    // Four hits, a body kill, a headshot kill, a knife kill.
+    // Four hits, a body kill, a headshot kill; two blows, the second a
+    // kill.
     stats.hits = 4;
     stats.gun_kills = 2;
     stats.headshot_kills = 1;
+    stats.blows_landed = 2;
     stats.melee_kills = 1;
     h.score(&stats);
-    assert_eq!(h.points, START_POINTS + 40 + 50 + 90 + 120);
+    assert_eq!(h.points, START_POINTS + 40 + 50 + 90 + 20 + 120);
     // Counted once.
     h.score(&stats);
-    assert_eq!(h.points, START_POINTS + 300);
+    assert_eq!(h.points, START_POINTS + 320);
 }
 
 #[test]
@@ -120,6 +198,21 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
     let medkit = h.arena.buys.iter().position(|b| b.wares == Wares::Kit(Kind::Medkit)).expect("a medkit on a wall");
     h.press(&mut world, Aimed::Buy(medkit), &mut bag);
     assert_eq!(bag.count(Kind::Medkit), 1);
+}
+
+#[test]
+fn a_window_is_nailed_up_from_its_own_floor_not_the_one_over_it() {
+    let (mut world, h) = world_of(built());
+    let up = Vec3::new(0.0, 1.0, 0.0);
+    for i in 0..h.arena.windows.len() {
+        world.resource_mut::<Barriers>().0[i].boards = 0;
+        let inside = h.arena.windows[i].inside;
+        let eye = |feet: Vec3| feet + Vec3::new(0.0, EYE, 0.0);
+        assert_eq!(h.aimed(&world, eye(inside), up), Some(Aimed::Window(i)), "window {i} from its own floor");
+        let above = inside + Vec3::new(0.0, crate::map::building::plan::STOREY, 0.0);
+        assert_ne!(h.aimed(&world, eye(above), up), Some(Aimed::Window(i)), "window {i} from the floor over it");
+        world.resource_mut::<Barriers>().0[i].boards = BOARDS;
+    }
 }
 
 #[test]
@@ -166,6 +259,37 @@ fn the_first_round_comes_in_by_the_windows_and_comes_for_the_player() {
     assert!(world.resource::<Barriers>().0.iter().enumerate().all(|(i, b)| h.arena.windows[i].zone == h.arena.start || b.boards == BOARDS), "boards torn off in a room that's shut");
 }
 
+/// A round played with the whole arena open and the player standing at
+/// `at`: how many of the dead got to them (at most, at once) in `seconds`.
+fn reach_the_player_at(at: Vec3, seconds: f64) -> usize {
+    let (mut world, mut h) = world_of(built());
+    open_everything(&mut world, &mut h);
+    for mut b in world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut world) {
+        *b = Body::at(at);
+    }
+    let mut think = zombie::stepper();
+    let mut most = 0;
+    for _ in 0..(seconds / STEP) as usize {
+        h.update(&mut world, at, STEP);
+        think.run(&mut world);
+        let close = world.query::<(&zombie::brain::Zombie, &Body)>().iter(&world).filter(|(z, b)| !z.dead() && (b.pos - at).length() < 3.0).count();
+        most = most.max(close);
+    }
+    most
+}
+
+#[test]
+fn out_in_the_yard_by_the_mast_they_come_for_the_player_round_everything_in_it() {
+    let got = reach_the_player_at(Vec3::new(0.5, 0.0, 12.5), 60.0);
+    assert!(got >= 2, "only {got} got to the player in the yard");
+}
+
+#[test]
+fn up_in_the_bunkhouse_dorm_they_come_for_the_player_up_the_stairs() {
+    let got = reach_the_player_at(Vec3::new(20.5, 0.25 + crate::map::building::plan::STOREY, -12.5), 60.0);
+    assert!(got >= 2, "only {got} got up to the dorm");
+}
+
 #[test]
 fn every_round_ends_once_its_dead_are_dead() {
     let (mut world, mut h) = world_of(built());
@@ -191,4 +315,27 @@ fn every_round_ends_once_its_dead_are_dead() {
     }
     let hp = world.query::<&zombie::brain::Zombie>().iter(&world).filter(|z| !z.dead()).map(|z| z.hp).next();
     assert_eq!(hp, Some(rounds::toughness(2)));
+}
+
+/// The arena in numbers: run by hand (`cargo test --release
+/// arena_in_numbers -- --ignored --nocapture`).
+#[test]
+#[ignore]
+fn arena_in_numbers() {
+    let t = std::time::Instant::now();
+    let built = built();
+    eprintln!("built in {:.0} ms", t.elapsed().as_secs_f64() * 1000.0);
+    let a = built.arena.as_ref().unwrap();
+    for (z, name) in a.zones.iter().enumerate() {
+        eprintln!("{name}: {} ways in, {} buys, doors {:?}", a.windows.iter().filter(|w| w.zone == z).count(), a.buys.iter().filter(|b| b.zone == z).count(), a.doors.iter().filter(|d| d.zones.0 == z || d.zones.1 == z).map(|d| (d.cost, d.heap, d.gate.is_empty())).collect::<Vec<_>>());
+    }
+    let m = &built.map;
+    let near = |p: Vec3, r: f64| p.x.abs() < r && p.z.abs() < r;
+    let trees = m.scenery.iter().filter(|p| matches!(p.what, crate::map::scatter::Scenery::Pine(_) | crate::map::scatter::Scenery::Dead(_))).collect::<Vec<_>>();
+    eprintln!("scenery {}, trees {} ({} within 80 m, {} within 45 m), blocks {}, buildings {}, containers {}", m.scenery.len(), trees.len(), trees.iter().filter(|p| near(p.at, 80.0)).count(), trees.iter().filter(|p| near(p.at, 45.0)).count(), m.blocks.len(), m.buildings.len(), built.containers.len());
+    eprintln!("road: {} points, from {:?} to {:?}", m.roads[0].points.len(), m.roads[0].points.first(), m.roads[0].points.last());
+    eprintln!("spawn {:?}; nav cells {}", m.spawn, built.nav.open_cells());
+    for (x, z) in [(0.5, 0.5), (0.5, 30.0), (0.5, 60.0), (40.0, 0.0), (0.0, -60.0), (100.0, 100.0), (250.0, 0.0)] {
+        eprintln!("ground at ({x}, {z}): {:?}", m.field.height_at(x, z));
+    }
 }

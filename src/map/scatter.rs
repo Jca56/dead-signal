@@ -96,23 +96,37 @@ impl Piece {
     }
 }
 
-/// How thick the forest grows where: stands and meadows.
+/// How thick the forest grows where: stands and meadows (and, round a
+/// holdout's hilltop, thick all round it).
 #[derive(Clone)]
-pub struct Forest(Noise);
+pub struct Forest {
+    noise: Noise,
+    round: Option<(Vec2, f64)>,
+}
 
 impl Forest {
     pub fn new(seed: u32) -> Self {
-        Self(Noise::new(seed ^ 0x5EED_F0E5))
+        Self { noise: Noise::new(seed ^ 0x5EED_F0E5), round: None }
+    }
+
+    /// Thick all round `centre` out to `reach`, thinning past it into
+    /// stands and meadows.
+    pub fn round(seed: u32, centre: Vec2, reach: f64) -> Self {
+        Self { round: Some((centre, reach)), ..Self::new(seed) }
     }
 
     /// 0 (open meadow) to 1 (a thick stand); a wall of trees at the edge.
     pub fn density(&self, x: f64, z: f64) -> f64 {
-        let n = self.0.layered(x / 150.0, z / 150.0, 3);
+        let n = self.noise.layered(x / 150.0, z / 150.0, 3);
         let stands = smooth((n + 0.12) / 0.4);
         let edge = smooth((x.abs().max(z.abs()) - (EDGE - 30.0)) / 30.0);
-        stands.max(edge)
+        let round = self.round.map_or(0.0, |(c, r)| ROUND * (1.0 - smooth(((Vec2::new(x, z) - c).length() - r) / 60.0)));
+        stands.max(edge).max(round)
     }
 }
+
+/// How thick the woods round a hilltop are.
+const ROUND: f64 = 0.85;
 
 /// How far a point is from every plot's edge (0 in one).
 fn from_plots(plots: &[Plot], p: Vec2) -> f64 {

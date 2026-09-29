@@ -254,6 +254,7 @@ impl Combat {
                             break;
                         }
                     }
+                    stats.blows_landed += heard.struck.len() as u32;
                     // A heavy blade biting is heard a little way off.
                     if b.heard > 0.0 && !heard.struck.is_empty() {
                         zombie::noise(&mut game.world, aim.eye, b.heard);
