@@ -90,6 +90,7 @@ pub fn to_text(p: &Profile) -> String {
     d.set("extractions", i64::from(p.extractions).into());
     d.set("money", i64::from(p.money).into());
     d.set("stash_tier", i64::from(p.stash_tier).into());
+    d.set("best_round", i64::from(p.best_round).into());
     let mut bought = Doc::map();
     bought.set("runs", i64::from(p.bought.runs).into());
     bought.set("each", Doc::List(p.bought.each.iter().map(|&n| i64::from(n).into()).collect()));
@@ -151,6 +152,7 @@ pub fn from_text(text: &str) -> Result<Profile, String> {
         money: num("money"),
         stash_tier,
         bought,
+        best_round: num("best_round"),
     };
     // Each slot holds only what belongs in it; anything else is kept in
     // the stash.

@@ -26,7 +26,7 @@ const RUMMAGE_EVERY: f64 = 0.45;
 /// itself.
 const WANDER_OFF: f64 = 4.5;
 /// How long a flashed word stays.
-const NOTE_FOR: f64 = 1.4;
+pub(super) const NOTE_FOR: f64 = 1.4;
 /// Things thrown down land this near the feet, and no nearer.
 const DROP_FAR: f64 = 1.1;
 const DROP_NEAR: f64 = 0.5;
@@ -58,7 +58,7 @@ impl Search {
 }
 
 /// Where the player's eye is and which way it looks.
-fn eye(game: &mut Game) -> Option<(Vec3, Vec3)> {
+pub(super) fn eye(game: &mut Game) -> Option<(Vec3, Vec3)> {
     let (body, view) = game.player()?;
     let eye = crate::head::eye_position(&view, &body, game.alpha());
     let (yaw, pitch) = view.aim();

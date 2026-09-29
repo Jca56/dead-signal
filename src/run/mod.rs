@@ -4,6 +4,7 @@
 //! when it comes to that.
 
 mod hands;
+mod holdout;
 mod loot;
 mod out;
 mod throwing;
@@ -79,6 +80,12 @@ pub struct Run {
     /// The throwable picked, and a throw being aimed.
     throwable: Option<crate::throw::Throwable>,
     aiming: Option<throwing::Aiming>,
+    /// A holdout's, when this run is one (no loot, no way out); the best
+    /// round before it, and the round it ended on (for the profile to
+    /// keep, once).
+    pub holdout: Option<crate::holdout::Holdout>,
+    best_round: u32,
+    holdout_over: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -307,8 +314,13 @@ impl Run {
             }
         }
 
-        // More of the dead, as the kills mount (and all of them, surging).
-        if let Some((eye, forward)) = Self::watching(game) {
+        // More of the dead, as the kills mount (and all of them, surging);
+        // in a holdout, round after round of them.
+        if self.holdout.is_some() {
+            if let Some((eye, _)) = Self::watching(game) {
+                self.holdout_step(game, combat, eye, dt);
+            }
+        } else if let Some((eye, forward)) = Self::watching(game) {
             self.director.surge = self.out.surging;
             self.director.update(&mut game.world, eye, forward, dt);
             self.stats.biggest_horde = self.director.peak as u32;
@@ -368,6 +380,10 @@ impl Run {
                 self.note = None;
             }
         }
+        if self.holdout.is_some() {
+            self.holdout_frame(ui, cx, game, combat, icons, dt);
+            return;
+        }
         // Looking about for things, searching, the bag; the ways out.
         let aimed = self.aim(game);
         let at_exit = if let loot::Aimed::Exit(i) = aimed { Some(i) } else { None };
@@ -384,6 +400,13 @@ impl Run {
     fn end(&mut self, game: &mut Game, outcome: Outcome, combat: &mut Combat) {
         if let Some(open) = self.open.take() {
             self.close_bag(game, open);
+        }
+        if let Some(h) = &self.holdout {
+            let round = h.rounds.round;
+            self.holdout_over = Some(round);
+            self.ending = Some(Ending::holdout(self.stats.clone(), round, self.best_round));
+            *game.controls_mut() = Default::default();
+            return;
         }
         self.stats.loot_value = self.bag.value();
         match outcome {
@@ -430,7 +453,7 @@ impl Run {
                 max_stamina: v.max_stamina,
                 winded: v.winded,
                 kits: &kits,
-                heal: v.heal_progress().or(self.search.as_ref().map(loot::Search::progress)).or(self.out_progress()),
+                heal: v.heal_progress().or(self.search.as_ref().map(loot::Search::progress)).or(self.out_progress()).or(self.holdout.as_ref().and_then(|h| h.nail_progress())),
                 prompt: prompt.as_ref().map(|(key, text)| (if key.is_empty() { "" } else { interact.as_str() }, text.as_str())),
                 note: self.note.map(|(n, _)| n),
                 time,
@@ -440,6 +463,10 @@ impl Run {
                 armor: self.bag.armor(),
             },
         );
+        if let Some(h) = &self.holdout {
+            crate::holdout::hud::draw(ui, h);
+            return;
+        }
         let o = self.out_hud(game);
         exits::hud::draw(
             ui,

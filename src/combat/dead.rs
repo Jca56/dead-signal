@@ -100,6 +100,10 @@ impl Combat {
     }
 
     pub(super) fn drop_something(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
+        // A holdout's dead carry nothing.
+        if game.world.get::<zombie::brain::Zombie>(e).is_some_and(|z| z.relentless) {
+            return;
+        }
         // A Juggernaut always had something, and plenty of it.
         if game.world.get::<zombie::brain::Zombie>(e).is_some_and(|z| z.kind == zombie::kind::Kind::Juggernaut) {
             let Some(at) = game.world.get::<Body>(e).map(|b| b.pos) else { return };

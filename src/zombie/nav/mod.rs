@@ -16,7 +16,10 @@ use std::collections::BinaryHeap;
 use lntrn_math::Vec3;
 
 mod build;
+mod gates;
 mod regions;
+
+pub use gates::Gate;
 
 use crate::collide::{Solids, WALKABLE};
 use regions::Regions;

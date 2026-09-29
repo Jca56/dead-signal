@@ -72,6 +72,7 @@ enum Screen {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TitleItem {
     Hideout,
+    Holdout,
     Slots,
     Settings,
     Quit,
@@ -135,6 +136,10 @@ pub struct DeadSignal {
     ready: Option<Built>,
     installed: bool,
     map: Option<Map>,
+    /// Whether the next run (or this one) is a holdout, and its arena
+    /// once built, till the run begins.
+    holdout: bool,
+    arena: Option<crate::holdout::arena::Arena>,
     /// The map screen's picture of it, and whether it's up.
     picture: Option<ImageHandle>,
     map_open: bool,
@@ -142,6 +147,7 @@ pub struct DeadSignal {
     title_menu: SideMenu<TitleItem>,
     pause_menu: SideMenu<PauseItem>,
     leave_menu: SideMenu<LeaveItem>,
+    leave_holdout_menu: SideMenu<LeaveItem>,
     paused: bool,
     /// Paused and asked whether to walk out of the run.
     leaving: bool,
@@ -203,13 +209,16 @@ impl DeadSignal {
             ready: None,
             installed: false,
             map: None,
+            holdout: false,
+            arena: None,
             picture: None,
             map_open: false,
             screen: Screen::Title,
-            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("SAVE SLOTS", TitleItem::Slots), ("SETTINGS", TitleItem::Settings), ("QUIT", TitleItem::Quit)]),
+            title_menu: SideMenu::new("DEAD SIGNAL", &[("HIDEOUT", TitleItem::Hideout), ("HOLDOUT", TitleItem::Holdout), ("SAVE SLOTS", TitleItem::Slots), ("SETTINGS", TitleItem::Settings), ("QUIT", TitleItem::Quit)]),
             pause_menu: SideMenu::new("PAUSED", &[("RESUME", PauseItem::Resume), ("SETTINGS", PauseItem::Settings), ("QUIT TO TITLE", PauseItem::ToTitle)]),
             leave_menu: SideMenu::new("LEAVE THE RUN?", &[("STAY", LeaveItem::Stay), ("LEAVE", LeaveItem::Leave)])
                 .warning(&["Leaving now counts as dying.", "Everything but your pockets is lost."]),
+            leave_holdout_menu: SideMenu::new("END THE HOLDOUT?", &[("STAY", LeaveItem::Stay), ("LEAVE", LeaveItem::Leave)]).warning(&["The holdout ends here."]),
             paused: false,
             leaving: false,
             was_locked: false,
@@ -271,6 +280,14 @@ impl DeadSignal {
                 zombie::clear(&mut self.game.world);
                 zombie::spit::clear(&mut self.game.world);
                 crate::throw::clear(&mut self.game.world);
+                if let Some(arena) = self.arena.take() {
+                    // A holdout: nothing of the profile's goes in.
+                    self.settle_run();
+                    self.run.start_holdout(&mut self.game, &mut self.combat, arena, self.profile.best_round);
+                    self.black = 1.0;
+                    cx.request(ShellRequest::LockPointer(true));
+                    return;
+                }
                 // The loadout goes in with the player. On disk it's already
                 // as good as lost (all but the pockets) till they're out:
                 // quitting mid-run is no way round dying.
@@ -385,6 +402,10 @@ impl Host for DeadSignal {
             }
             Screen::Title => match self.title_menu.draw(ui, active) {
                 Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
+                Some(TitleItem::Holdout) => {
+                    self.holdout = true;
+                    self.fade_to(Then::Show(Screen::Loading));
+                }
                 Some(TitleItem::Slots) => self.slots = Some(SlotsScreen::new(self.slot_cards())),
                 Some(TitleItem::Settings) => self.settings = Some(SettingsScreen::default()),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
@@ -396,6 +417,7 @@ impl Host for DeadSignal {
                     self.show(Screen::Title, cx);
                 }
                 Some(Leave::Play) => {
+                    self.holdout = false;
                     self.saves.store(&self.profile);
                     self.fade_to(Then::Show(Screen::Loading));
                 }

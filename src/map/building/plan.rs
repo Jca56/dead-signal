@@ -234,7 +234,7 @@ fn cut_up(dice: &mut Dice, r: (i32, i32, i32, i32), most: i32, doors: &[(bool, i
 
 /// Every wall on a storey: wherever a room's edge is, split where what's
 /// on the other side changes.
-pub(super) fn walls_of(rooms: &[Room], storey: u8) -> Vec<Wall> {
+pub(crate) fn walls_of(rooms: &[Room], storey: u8) -> Vec<Wall> {
     let on: Vec<(usize, &Room)> = rooms.iter().enumerate().filter(|(_, r)| r.storey == storey).collect();
     let mut lines: Vec<(bool, i32)> = Vec::new();
     for (_, r) in &on {
@@ -287,7 +287,7 @@ pub(super) fn walls_of(rooms: &[Room], storey: u8) -> Vec<Wall> {
 
 /// The wall on `storey` along the line `(along_x, at)` holding `centre`,
 /// with a room each side (for a doorway between them).
-pub(super) fn wall_at(walls: &[Wall], storey: u8, along_x: bool, at: i32, centre: f64) -> Option<usize> {
+pub(crate) fn wall_at(walls: &[Wall], storey: u8, along_x: bool, at: i32, centre: f64) -> Option<usize> {
     walls.iter().position(|w| w.storey == storey && w.along_x == along_x && w.at == at && f64::from(w.from) < centre && f64::from(w.to) > centre)
 }
 

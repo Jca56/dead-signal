@@ -20,6 +20,7 @@ pub(super) fn think(
     cheats: Option<Res<crate::dev::Cheats>>,
     mut noises: ResMut<Noises>,
     mut horde: ResMut<Horde>,
+    mut barriers: Option<ResMut<breach::Barriers>>,
 ) {
     let player = players.iter().next().map(|b| b.pos);
     horde.tick = horde.tick.wrapping_add(1);
@@ -38,7 +39,8 @@ pub(super) fn think(
     let snarls: Vec<(Vec3, Vec3)> = horde.snarls.iter().map(|(_, n)| *n).collect();
     let searches = std::cell::Cell::new(SEARCHES);
     let lures = horde.lures.clone();
-    let senses = Senses { lures: &lures, solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: if cheats.is_some_and(|c| c.ignored) { 0.0 } else { stealth.map_or(1.0, |s| s.0) } };
+    let ways_in = barriers.as_ref().map(|b| b.0.clone()).unwrap_or_default();
+    let senses = Senses { barriers: &ways_in, lures: &lures, solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: if cheats.is_some_and(|c| c.ignored) { 0.0 } else { stealth.map_or(1.0, |s| s.0) } };
     for (mut z, mut body, mut beat) in &mut dead {
         // Far off, it steps less often, and further each time. (What's
         // heard is kept as long as the farthest go between steps.)
@@ -66,8 +68,22 @@ pub(super) fn think(
             horde.bursting.push(body.pos);
             horde.sounds.push((Sfx::Burst, body.pos + Vec3::new(0.0, 0.6, 0.0), 1.0));
         }
+        if let Some(at) = intent.tore
+            && let Some(b) = barriers.as_mut().and_then(|b| b.0.get_mut(at as usize))
+        {
+            b.boards = b.boards.saturating_sub(1);
+        }
         if z.dead() {
             body.prev = body.pos;
+            continue;
+        }
+        // Climbing through a window: carried over the sill, through the
+        // frame nothing else gets through.
+        if let Some(at) = z.climbing() {
+            body.prev = body.pos;
+            body.pos = at;
+            body.vel = Vec3::ZERO;
+            body.push = Vec3::ZERO;
             continue;
         }
         let before = body.pos;

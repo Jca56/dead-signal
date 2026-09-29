@@ -102,7 +102,7 @@ fn a_beeping_pipe_bomb_draws_off_one_hunting_the_player() {
     let player = Some(Vec3::new(0.0, 0.0, -10.0));
     let lure = [Vec3::new(15.0, 0.0, 0.0)];
     let searches = std::cell::Cell::new(u32::MAX);
-    let senses = |lures| Senses { lures, solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &searches, sight: 1.0 };
+    let senses = |lures| Senses { barriers: &[], lures, solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &searches, sight: 1.0 };
     for _ in 0..10 {
         z.think(&body, &senses(&[]), STEP);
     }
@@ -124,7 +124,7 @@ fn drawn_to_a_pipe_bomb_the_dead_go_quietly() {
         let mut z = Zombie::new(0.0, seed * 7919);
         let body = Body::at(Vec3::new(f64::from(seed) * 0.5 - 5.0, 0.0, 0.0));
         for _ in 0..(2.0 / STEP) as usize {
-            let senses = Senses { lures: &lure, solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &searches, sight: 1.0 };
+            let senses = Senses { barriers: &[], lures: &lure, solids: &s, nav: None, player, noises: &[], alerts: &[], searches: &searches, sight: 1.0 };
             snarls += z.think(&body, &senses, STEP).sounds.iter().filter(|(sfx, _)| *sfx == Sfx::Snarl).count();
         }
     }

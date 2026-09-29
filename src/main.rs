@@ -16,6 +16,7 @@ mod ending;
 mod fx;
 mod head;
 mod hideout;
+mod holdout;
 mod hud;
 mod icons;
 mod items;

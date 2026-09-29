@@ -5,6 +5,7 @@
 //! what they say and whom they hit.
 
 pub mod brain;
+pub mod breach;
 pub mod director;
 pub mod figure;
 pub mod kind;
@@ -149,6 +150,15 @@ pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
     frame.add_systems((step::pose, step::bury));
 }
 
+/// The dead's thinking and moving, a step at a time (for tests of the
+/// world round them).
+#[cfg(test)]
+pub fn stepper() -> Schedule {
+    let mut fixed = Schedule::default();
+    fixed.add_systems(step::think);
+    fixed
+}
+
 /// One of the dead in soldier's fatigues and gear (they carry more, and
 /// better).
 #[derive(Component, Clone, Copy, Debug)]
@@ -164,7 +174,7 @@ pub struct Cop;
 pub struct Firefighter;
 
 /// Put one of `kind` at `at`, facing `yaw` (a Shambler, one of `theme`'s).
-pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Theme) {
+pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Theme) -> Entity {
     let seed = {
         let mut h = world.resource_mut::<Horde>();
         h.seed = h.seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -194,6 +204,7 @@ pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Them
         }
         _ => {}
     }
+    e.id()
 }
 
 /// Put a Shambler somewhere the player at `eye`, looking along `forward`,
@@ -246,6 +257,7 @@ pub fn clear(world: &mut World) {
     for e in all {
         world.despawn(e);
     }
+    world.remove_resource::<breach::Barriers>();
 }
 
 /// How many are up and about (not lying dead).

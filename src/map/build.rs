@@ -55,6 +55,16 @@ pub struct Built {
     pub exits: Exits,
     /// The map as the map screen shows it.
     pub picture: Image,
+    /// A holdout's arena (its doors made solid, and shut to the dead).
+    pub arena: Option<crate::holdout::arena::Arena>,
+}
+
+/// What's to be built: the wilds for an extraction run (from a seed), or
+/// the holdout's arena.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Blueprint {
+    Wilds(u32),
+    Holdout,
 }
 
 /// How far along a build is, for the loading screen.
@@ -96,11 +106,20 @@ pub struct Building {
 }
 
 impl Building {
-    /// Start building the map for `seed`.
-    pub fn start(seed: u32, kit: Kit) -> Self {
+    /// Start building what `blueprint` says.
+    pub fn start(blueprint: Blueprint, kit: Kit) -> Self {
         let stage = Arc::new(AtomicU8::new(0));
         let told = stage.clone();
-        let thread = std::thread::Builder::new().name("map".into()).spawn(move || build(seed, &kit, &|s| told.store(s as u8, Ordering::Relaxed))).expect("a thread for the map");
+        let thread = std::thread::Builder::new()
+            .name("map".into())
+            .spawn(move || {
+                let stage = |s| told.store(s as u8, Ordering::Relaxed);
+                match blueprint {
+                    Blueprint::Wilds(seed) => build(seed, &kit, &stage),
+                    Blueprint::Holdout => build_holdout(&kit, &stage),
+                }
+            })
+            .expect("a thread for the map");
         Self { stage, thread: Some(thread) }
     }
 
@@ -121,6 +140,19 @@ impl Building {
 pub fn build(seed: u32, kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
     stage(Stage::Land);
     let map = super::generate(seed);
+    make(map, None, kit, stage)
+}
+
+/// Make the holdout's arena real, saying how far along it is.
+pub fn build_holdout(kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
+    stage(Stage::Land);
+    let (map, arena) = crate::holdout::arena::generate();
+    make(map, Some(arena), kit, stage)
+}
+
+/// Make `map` real (and `arena`'s doors, if it's the holdout's).
+fn make(map: Map, mut arena: Option<crate::holdout::arena::Arena>, kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
+    let seed = map.seed;
     stage(Stage::Ground);
     let network = Network::new(map.roads.clone());
     let mut solids = Solids::default();
@@ -221,11 +253,27 @@ pub fn build(seed: u32, kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
     let containers = crate::containers::set_down(&mut solids, &kit.containers, &map.containers);
     let exits = exits::set_down(&mut solids, &kit.exits, &map.exits);
 
+    // The arena's doors: solid, but open while the dead's ways are found
+    // (so there are ways through them to shut).
+    if let Some(arena) = &mut arena {
+        for door in &mut arena.doors {
+            door.solid = solids.add_as(&box_tris(door.lo, door.hi), Surface::Wood);
+            solids.switch(door.solid.clone(), false);
+        }
+    }
+
     stage(Stage::Walkways);
-    let nav = NavGrid::build(&solids, crate::player::capsule(false), HALF);
+    let mut nav = NavGrid::build(&solids, crate::player::capsule(false), arena.as_ref().map_or(HALF, |a| a.reach));
+    if let Some(arena) = &mut arena {
+        for door in &mut arena.doors {
+            door.gate = nav.gate(door.lo, door.hi);
+            nav.shut(&door.gate, true);
+            solids.switch(door.solid.clone(), true);
+        }
+    }
     let picture = super::screen::picture(&map, &network);
     stage(Stage::Done);
-    Built { map, solids, nav, chunks, containers, exits, picture }
+    Built { map, solids, nav, chunks, containers, exits, picture, arena }
 }
 
 // ---- colour -------------------------------------------------------------------

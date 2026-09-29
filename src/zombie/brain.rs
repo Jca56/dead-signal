@@ -90,6 +90,10 @@ pub enum State {
     Roar { t: f64 },
     Charge { t: f64, dir: Vec3, last: Vec3 },
     Dazed { t: f64 },
+    /// Getting in by barrier `at` (`breach.rs`): heading there, then
+    /// tearing at its boards, `t` towards the next; climbing through.
+    Breach { at: u8, t: f64 },
+    Vault { t: f64, from: Vec3, to: Vec3 },
     /// Knocked off its stride for `until` seconds.
     Stagger { t: f64, until: f64 },
     Dead { t: f64 },
@@ -116,6 +120,8 @@ pub struct Senses<'a> {
     pub sight: f64,
     /// Pipe bombs beeping.
     pub lures: &'a [Vec3],
+    /// A holdout's ways in.
+    pub barriers: &'a [super::breach::Barrier],
 }
 
 /// A blow that landed on the player: the way it pushes, how much it takes
@@ -140,6 +146,8 @@ pub struct Intent {
     pub spit: Option<(Vec3, Vec3)>,
     /// A dead Spitter burst, just now.
     pub burst: bool,
+    /// A board torn off this barrier.
+    pub tore: Option<u8>,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -162,7 +170,11 @@ pub struct Zombie {
     pub(super) repath: f64,
     last_seen: Option<Vec3>,
     unseen: f64,
-    cooldown: f64,
+    pub(super) cooldown: f64,
+    /// Always knows where the player is (a holdout's), and the barrier it
+    /// has yet to get in by.
+    pub relentless: bool,
+    pub barrier: Option<u8>,
     /// The last noise it's listened to (each is heeded or not, once).
     pub(super) heard: u32,
     /// Till a Spitter may spit again, and a Juggernaut charge again.
@@ -189,7 +201,7 @@ impl Zombie {
     /// One of `kind` facing `yaw`, its own ways from `seed`.
     pub fn of(kind: Kind, yaw: f64, seed: u32) -> Self {
         let t = kind.traits();
-        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, heard: 0, spit_in: 0.0, charge_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, relentless: false, barrier: None, heard: 0, spit_in: 0.0, charge_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
         let (lo, hi, lunge) = if z.rand() < t.fast_share { t.fast } else { t.pace };
         let walk = lo + (hi - lo) * z.rand();
@@ -226,6 +238,8 @@ impl Zombie {
             State::Roar { t } => (Clip::Roar, t),
             State::Charge { t, .. } => (Clip::Charge, t),
             State::Dazed { t } => (Clip::Dazed, t),
+            State::Breach { t, .. } if t > 0.0 => (Clip::Attack, t),
+            State::Vault { t, .. } => (Clip::Stumble, t),
             State::Attack { t, .. } if self.kind == Kind::Juggernaut => (Clip::Smash, t),
             State::Attack { t, .. } => (Clip::Attack, t),
             State::Stagger { t, until } if until > FLINCH_TIME => (Clip::Stumble, t),
@@ -252,7 +266,9 @@ impl Zombie {
         }
         self.last_seen = Some(from);
         self.unseen = 0.0;
-        if self.kind == Kind::Juggernaut {
+        if matches!(self.state, State::Vault { .. }) {
+            // Halfway through a window: nothing knocks it back out.
+        } else if self.kind == Kind::Juggernaut {
             // Nothing staggers it; hurt, it only comes on.
             if matches!(self.state, State::Wander { .. } | State::Search(_) | State::Investigate { .. }) {
                 self.state = State::Hunt;
@@ -273,7 +289,7 @@ impl Zombie {
 
     /// Sent stumbling back (a blast at close range), if it's alive.
     pub fn stumble(&mut self) {
-        if !self.dead() && self.kind != Kind::Juggernaut {
+        if !self.dead() && self.kind != Kind::Juggernaut && !matches!(self.state, State::Vault { .. }) {
             self.set(State::Stagger { t: 0.0, until: STUMBLE_TIME });
         }
     }
@@ -303,7 +319,7 @@ impl Zombie {
         self.look_in -= dt;
         if self.look_in <= 0.0 {
             self.look_in += LOOK_EVERY;
-            self.in_sight = s.player.is_some_and(|p| self.sees(body, p, s.solids, s.sight));
+            self.in_sight = s.player.is_some_and(|p| self.relentless || self.sees(body, p, s.solids, s.sight));
         }
         let seen = s.player.filter(|_| self.in_sight);
         // A pipe bomb beeping near draws it, whatever it was about (but a
@@ -374,6 +390,9 @@ impl Zombie {
             State::Dazed { t } => {
                 self.state = if t + dt >= special::DAZED_FOR { State::Hunt } else { State::Dazed { t: t + dt } };
             }
+            State::Breach { at, t } => goal = self.breaching(at, t, body, s, &mut out, dt),
+            State::Vault { t, from, to } => self.vaulting(t, from, to, dt),
+            State::Hunt if let Some(at) = self.barrier => self.state = State::Breach { at, t: 0.0 },
             State::Hunt => {
                 if seen.is_none() {
                     self.unseen += dt;

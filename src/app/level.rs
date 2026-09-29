@@ -12,7 +12,7 @@ use lntrn_ui::Ui;
 
 use super::DeadSignal;
 use crate::exits::{self, Exits};
-use crate::map::build::{Building, Built};
+use crate::map::build::{Blueprint, Building, Built};
 use crate::map::scatter::Scenery;
 use crate::world::{Blink, Bounds, Ground, Look, Model, OnMap, Placed, Solid};
 use crate::{containers, style, zombie};
@@ -23,7 +23,8 @@ impl DeadSignal {
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos() ^ d.as_secs() as u32);
         log_info!("map: building seed {seed}");
         self.loading_since = std::time::Instant::now();
-        self.building = Some(Building::start(seed, self.kit.clone()));
+        let blueprint = if self.holdout { Blueprint::Holdout } else { Blueprint::Wilds(seed) };
+        self.building = Some(Building::start(blueprint, self.kit.clone()));
     }
 
     /// The loading screen: black, a word of what's being done. Whether the
@@ -63,7 +64,7 @@ impl DeadSignal {
     pub(super) fn install(&mut self, gpu: &Gpu, images: &mut Images) {
         let Some(built) = self.ready.take() else { return };
         let Some(renderer) = self.renderer.as_mut() else { return };
-        let Built { map, solids, nav, chunks, containers, mut exits, picture } = built;
+        let Built { map, solids, nav, chunks, containers, mut exits, picture, arena } = built;
         let game = &mut self.game;
         game.clear_map();
         game.hide_title();
@@ -99,6 +100,12 @@ impl DeadSignal {
         let ground = game.ground().clone();
         exits.ring_zones(|centre, radius| renderer.add_mesh(&exits::ring(&ground, centre, radius)));
         game.world.insert_resource(exits);
+        // A holdout's boards, doors and wall buys.
+        if let Some(arena) = &arena {
+            let items = game.world.get_resource::<crate::items::Meshes>().cloned().unwrap_or_default();
+            crate::holdout::props::spawn(&mut game.world, arena, &items, |v| renderer.add_mesh(v));
+        }
+        self.arena = arena;
         renderer.upload(gpu);
         self.picture = Some(match self.picture {
             Some(old) => images.replace(gpu, old, &picture),
@@ -111,8 +118,8 @@ impl DeadSignal {
 
     /// M opens and shuts the map, over the run (not with the bag up).
     pub(super) fn map_screen(&mut self, ui: &mut Ui, active: bool) {
-        // The bag up puts the map away.
-        if !self.run.wants_lock() {
+        // The bag up puts the map away; a holdout has none.
+        if !self.run.wants_lock() || self.run.holdout.is_some() {
             self.map_open = false;
             return;
         }

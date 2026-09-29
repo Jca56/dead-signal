@@ -32,6 +32,8 @@ pub struct Profile {
     pub money: u32,
     pub stash_tier: u8,
     pub bought: trade::Bought,
+    /// The furthest round a holdout's got to.
+    pub best_round: u32,
 }
 
 impl Profile {
@@ -46,7 +48,7 @@ impl Profile {
         *loadout.worn_mut(crate::loot::gear::Wear::Back) = Some(Stack::one(Kind::Daypack));
         loadout.refit(Perks::default().fit());
         loadout.add(starting_pistol());
-        Self { name: String::new(), stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default(), money: 0, stash_tier: 0, bought: trade::Bought::default() }
+        Self { name: String::new(), stash, loadout, xp: 0, runs: 0, extractions: 0, perks: Perks::default(), money: 0, stash_tier: 0, bought: trade::Bought::default(), best_round: 0 }
     }
 
     /// Perk points not yet spent.

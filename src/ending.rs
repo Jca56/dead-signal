@@ -40,6 +40,8 @@ pub enum After {
     /// To the hideout, to see what's left and pack for the next run.
     Hideout,
     Title,
+    /// Another holdout.
+    Again,
 }
 
 /// How it ended.
@@ -64,6 +66,8 @@ pub struct Ending {
     earned: Earned,
     xp_before: u32,
     menu: SideMenu<After>,
+    /// A holdout's: the round it ended on, and the best there's been.
+    holdout: Option<(u32, u32)>,
 }
 
 fn ease(t: f64) -> f64 {
@@ -93,7 +97,14 @@ impl Ending {
             }
         };
         let value = loot.iter().map(|s| s.value()).sum();
-        Self { t: 0.0, outcome, stats, loot, value, kept, earned, xp_before, menu }
+        Self { t: 0.0, outcome, stats, loot, value, kept, earned, xp_before, menu, holdout: None }
+    }
+
+    /// A holdout's end, on `round`: nothing carried, nothing earned but
+    /// how far it got (and the best before it, `best`).
+    pub fn holdout(stats: Stats, round: u32, best: u32) -> Self {
+        let menu = SideMenu::new("YOU DIED", &[("PLAY AGAIN", After::Again), ("TITLE", After::Title)]);
+        Self { t: 0.0, outcome: Outcome::Died(1.0), stats, loot: Vec::new(), value: 0, kept: Vec::new(), earned: Earned::default(), xp_before: 0, menu, holdout: Some((round, best)) }
     }
 
     pub fn update(&mut self, dt: f64) {
@@ -154,6 +165,12 @@ impl Ending {
                 let h = f64::from(words.line_height());
                 let at = Vec2::new(screen.center().x - w * 0.5, screen.center().y - h * 0.5);
                 ui.text_at(text, &words, at, screen.width(), Color::rgba(colour.r, colour.g, colour.b, shown));
+                if let Some((round, _)) = self.holdout {
+                    let small = TextStyle::new((34.0 * s) as f32).bold().family(style::FONT);
+                    let how = format!("SURVIVED {round} ROUND{}", if round == 1 { "" } else { "S" });
+                    let hw = ui.measure(&how, &small);
+                    ui.text_at(&how, &small, Vec2::new(screen.center().x - hw * 0.5, at.y + h + 4.0 * s), hw + 4.0, Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, shown));
+                }
                 if let Outcome::Extracted(way) = self.outcome {
                     let how = match way {
                         Way::Radio => "BY RADIO",
@@ -170,6 +187,10 @@ impl Ending {
         let shown = ease((self.t - STATS_AT) / 0.5);
         let chosen = self.menu.draw(ui, active && shown >= 1.0);
         self.numbers(ui, screen, shown);
+        if let Some((round, best)) = self.holdout {
+            holdout_summary(ui, screen, round, best, shown);
+            return chosen;
+        }
         self.carried(ui, screen, shown, icons);
         // The level, filling with what was earned (if it was kept).
         let filled = ease((self.t - STATS_AT - 0.6) / 1.8);
@@ -191,10 +212,16 @@ impl Ending {
         let left = screen.max.x - 2.0 * col_w - gap - 90.0 * s;
         let top = screen.min.y + screen.height() * 0.16;
         let mut groups = self.stats.groups();
-        // What it earned, last; struck off if it was lost.
+        // What it earned, last; struck off if it was lost. (A holdout earns
+        // none.)
+        if self.holdout.is_some() {
+            groups.retain(|g| !matches!(g.title, "LOOT" | "PRACTICE"));
+        }
         let mut lines: Vec<(&'static str, String)> = self.earned.lines.iter().map(|(l, n)| (*l, format!("+{n}"))).collect();
         lines.push(("Total", if self.earned.kept { format!("+{}", self.earned.total()) } else { "LOST".into() }));
-        groups.push(Group { title: if self.earned.kept { "XP" } else { "XP · LOST" }, lines });
+        if self.holdout.is_none() {
+            groups.push(Group { title: if self.earned.kept { "XP" } else { "XP · LOST" }, lines });
+        }
         // SURVIVAL, SHOOTING and LOOT on the left; the rest on the right.
         for (column, range) in [(0usize, 0..3usize), (1, 3..groups.len())] {
             let x = left + column as f64 * (col_w + gap);
@@ -226,6 +253,20 @@ impl Ending {
             row(ui, &format!("KEPT · POCKETS  ${worth}"), SIGNAL_GREEN, &self.kept, Vec2::new(at.x, y + 24.0 * s), shown, icons);
         }
     }
+}
+
+/// How far a holdout got, under the way on: the round, and the best.
+fn holdout_summary(ui: &mut Ui, screen: Rect, round: u32, best: u32, shown: f64) {
+    let s = ui.m.scale;
+    let label = TextStyle::new((35.0 * s) as f32).bold().family(style::FONT);
+    let big = TextStyle::new((110.0 * s) as f32).bold().family(style::SERIF);
+    let at = Vec2::new(screen.min.x + 120.0 * s, screen.min.y + screen.height() * 0.56);
+    let fade = |c: Color| Color::rgba(c.r, c.g, c.b, shown);
+    ui.text_at("ROUNDS", &label, at, 600.0 * s, fade(style::SIGNAL));
+    let n = round.to_string();
+    ui.text_at(&n, &big, at + Vec2::new(0.0, f64::from(label.line_height())), 600.0 * s, fade(style::BONE));
+    let record = if round > best { "A NEW BEST".to_string() } else { format!("BEST  {best}") };
+    ui.text_at(&record, &label, at + Vec2::new(0.0, f64::from(label.line_height() + big.line_height()) + 8.0 * s), 600.0 * s, fade(style::DIM));
 }
 
 /// A heading and under it each of `stacks`' picture and how many, from

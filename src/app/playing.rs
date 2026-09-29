@@ -23,6 +23,12 @@ impl DeadSignal {
     /// A run that's over (or walked out on) settles into the profile, and
     /// the profile is saved. Walked out on counts as dead.
     pub(super) fn settle_run(&mut self) {
+        if let Some(round) = self.run.take_holdout_round()
+            && round > self.profile.best_round
+        {
+            self.profile.best_round = round;
+            self.saves.store(&self.profile);
+        }
         if let Some((got_out, bag, xp)) = self.run.take_result() {
             self.profile.settle(got_out, bag, xp);
             self.in_run = false;
@@ -56,6 +62,10 @@ impl DeadSignal {
             match self.run.ending(ui, cx, &mut self.game, &mut self.combat, active, &self.icons) {
                 Some(After::Hideout) => self.fade_to(Then::Show(Screen::Hideout)),
                 Some(After::Title) => self.fade_to(Then::Show(Screen::Title)),
+                Some(After::Again) => {
+                    self.holdout = true;
+                    self.fade_to(Then::Show(Screen::Loading));
+                }
                 None => {}
             }
             return;
@@ -88,7 +98,8 @@ impl DeadSignal {
             let screen = ui.clip();
             ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, PAUSE_DIM));
             if self.leaving {
-                match self.leave_menu.draw(ui, active) {
+                let menu = if self.run.holdout.is_some() { &mut self.leave_holdout_menu } else { &mut self.leave_menu };
+                match menu.draw(ui, active) {
                     Some(LeaveItem::Stay) => self.leaving = false,
                     Some(LeaveItem::Leave) => {
                         cx.request(ShellRequest::LockPointer(false));
@@ -103,6 +114,7 @@ impl DeadSignal {
                     Some(PauseItem::ToTitle) => {
                         self.leaving = true;
                         self.leave_menu.reset();
+                        self.leave_holdout_menu.reset();
                     }
                     None => {}
                 }
