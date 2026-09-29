@@ -101,9 +101,9 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
     let mut bag = Holdout::loadout();
     h.points = price(Kind::Smg);
     let (_, _, took) = h.press(&mut world, Aimed::Buy(smg), &mut bag);
-    assert_eq!(took, Some(Slot::Primary));
+    assert_eq!(took, Some(Slot::Sidearm));
     assert_eq!(h.points, 0);
-    let held = bag.slot(Slot::Primary).expect("the SMG in hand");
+    let held = bag.slot(Slot::Sidearm).expect("the SMG in hand");
     assert_eq!((held.kind, held.loaded), (Kind::Smg, 30));
     let (ammo, most) = spare(Kind::Smg).unwrap();
     assert_eq!(bag.count(ammo), most, "a full carry of its rounds");

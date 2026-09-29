@@ -55,6 +55,8 @@ const WINDED: Color = Color::rgb(0.52, 0.32, 0.13);
 const TROUGH: Color = Color::rgba(0.0, 0.0, 0.0, 0.55);
 const POISON: Color = Color::rgb(0.45, 0.72, 0.22);
 const ARMOR: Color = Color::rgb(0.26, 0.52, 0.86);
+/// The hitmarker's gold, for a shot to the head.
+const HEADSHOT: Color = Color::rgb(0.98, 0.76, 0.16);
 
 pub fn draw(ui: &mut Ui, h: &Hud) {
     let s = ui.m.scale;
@@ -79,7 +81,10 @@ pub fn draw(ui: &mut Ui, h: &Hud) {
         ui.draw.rect(Rect::from_min_size(mid - Vec2::new(dot, dot) * 0.5, Vec2::new(dot, dot)), Color::rgba(style::BONE.r, style::BONE.g, style::BONE.b, shown));
     }
     if let Some(m) = h.marker {
-        let (inner, outer, width, colour) = if m.beaten { (10.0 * s, 25.0 * s, 5.0 * s, style::SIGNAL) } else { (10.0 * s, 20.0 * s, 4.0 * s, style::BONE) };
+        let (inner, outer, width, colour) = match (m.beaten, m.head) {
+            (true, head) => (10.0 * s, 25.0 * s, 5.0 * s, if head { HEADSHOT } else { style::SIGNAL }),
+            (false, head) => (10.0 * s, 20.0 * s, 4.0 * s, if head { HEADSHOT } else { style::BONE }),
+        };
         for (dx, dy) in [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
             let d = Vec2::new(dx, dy) * std::f64::consts::FRAC_1_SQRT_2;
             ui.draw.line(mid + d * inner, mid + d * outer, width, colour);

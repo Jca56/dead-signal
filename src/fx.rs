@@ -21,12 +21,14 @@ struct Chip {
     tint: [f32; 3],
 }
 
-/// A hitmarker at the crosshair: how long it has left, and whether the hit
-/// beat what it struck (drawn bigger, and red).
+/// A hitmarker at the crosshair: how long it has left, whether the hit
+/// beat what it struck (drawn bigger, and red), and whether it was a shot
+/// to the head (gold).
 #[derive(Clone, Copy, Debug)]
 pub struct Marker {
     pub left: f64,
     pub beaten: bool,
+    pub head: bool,
 }
 
 #[derive(Default)]
@@ -101,8 +103,8 @@ impl Fx {
     }
 
     /// Flash the hitmarker.
-    pub fn mark(&mut self, beaten: bool) {
-        self.marker = Some(Marker { left: if beaten { 0.35 } else { 0.15 }, beaten });
+    pub fn mark(&mut self, beaten: bool, head: bool) {
+        self.marker = Some(Marker { left: if beaten { 0.35 } else { 0.15 }, beaten, head });
     }
 
     pub fn update(&mut self, dt: f64) {
@@ -148,7 +150,7 @@ mod tests {
             fx.update(1.0 / 60.0);
         }
         assert_eq!(fx.chips.len(), 0, "gone within a second");
-        fx.mark(true);
+        fx.mark(true, false);
         fx.update(0.2);
         assert!(fx.marker.is_some_and(|m| m.beaten));
         fx.update(0.2);

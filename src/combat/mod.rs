@@ -311,7 +311,7 @@ impl Combat {
                     self.drop_something(game, e);
                 }
                 self.fx.burst(point, -dir, if plated { Surface::Metal } else { Surface::Flesh }, if hit.blow { 12 } else { 9 });
-                self.fx.mark(killed);
+                self.fx.mark(killed, head && !hit.blow);
                 heard.confirm(&self.sound, killed);
                 if plated {
                     self.sound.play_at(Sfx::Clank, 0.9, point, aim.eye, aim.right, false);
@@ -343,7 +343,7 @@ impl Combat {
                 Kind::Plate => (Surface::Metal, Sfx::Ding, 1.0),
             };
             self.fx.burst(point, -dir, surface, if hit.blow { 10 } else { 7 });
-            self.fx.mark(beaten);
+            self.fx.mark(beaten, head && !hit.blow);
             heard.confirm(&self.sound, beaten);
             if heard.thud() {
                 self.sound.play_at(sfx, gain, point, aim.eye, aim.right, false);

@@ -297,7 +297,7 @@ const RIFLE: Spec = Spec {
 // A spray of 9mm: soft rounds, a lot of them, quickly.
 const SMG: Spec = Spec {
     name: "SMG",
-    slot: Some(Slot::Primary),
+    slot: Some(Slot::Sidearm),
     model: "smg",
     mag: 30,
     ammo: Some(Kind::Rounds),

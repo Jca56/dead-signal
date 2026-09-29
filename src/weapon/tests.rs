@@ -389,7 +389,7 @@ fn winded_the_swing_is_slower() {
 #[test]
 fn a_full_auto_gun_fires_on_while_the_trigger_is_held_and_one_switches() {
     let mut h = Hands::default();
-    h.take_up(Some(Slot::Primary), Weapon::Smg, 30);
+    h.take_up(Some(Slot::Sidearm), Weapon::Smg, 30);
     idle(&mut h);
     let held = Trigger { fire: false, hold: true, reload: false, melee: false, aim: false };
     // A second of it held: about as many rounds as its rate.
