@@ -90,9 +90,10 @@ pub enum Kind {
     CargoPants,
     Bandolier,
     ArmorPlate,
+    PrecinctKey,
 }
 
-pub const ALL: [Kind; 42] = [
+pub const ALL: [Kind; 43] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -135,6 +136,7 @@ pub const ALL: [Kind; 42] = [
     Kind::CargoPants,
     Kind::Bandolier,
     Kind::ArmorPlate,
+    Kind::PrecinctKey,
 ];
 
 impl Kind {
@@ -184,6 +186,7 @@ impl Kind {
             Kind::CargoPants => "cargo_pants",
             Kind::Bandolier => "bandolier",
             Kind::ArmorPlate => "armor_plate",
+            Kind::PrecinctKey => "precinct_key",
         }
     }
 
@@ -268,6 +271,7 @@ impl Kind {
             Kind::CargoPants => d("CARGO PANTS", (2, 2), 1, Uncommon, 90, "ITEM_CargoPants"),
             Kind::Bandolier => d("BANDOLIER", (2, 1), 1, Uncommon, 70, "ITEM_Bandolier"),
             Kind::ArmorPlate => d("ARMOR PLATE", (2, 2), 1, Uncommon, 70, "ITEM_ArmorPlate"),
+            Kind::PrecinctKey => d("PRECINCT KEY", (1, 1), 1, Rare, 40, "ITEM_PrecinctKey"),
         }
     }
 }
@@ -406,7 +410,7 @@ mod tests {
             assert_eq!(row[4], format!("${}", d.value), "{} value", d.name);
             assert!(!row[6].is_empty(), "{} has no flavor", d.name);
             // (The keys are put somewhere once a run, not rolled for.)
-            if matches!(kind, Kind::Key | Kind::ArmoryKey) {
+            if matches!(kind, Kind::Key | Kind::ArmoryKey | Kind::PrecinctKey) {
                 continue;
             }
             let mut found: Vec<&str> = [
@@ -428,6 +432,19 @@ mod tests {
                 (Source::Corpse, "zombies"),
                 (Source::Soldier, "soldiers"),
                 (Source::Juggernaut, "juggernaut"),
+                (Source::GunRack, "gun rack"),
+                (Source::DisplayCase, "display case"),
+                (Source::GunCage, "gun cage"),
+                (Source::PoliceLocker, "police locker"),
+                (Source::FrontDesk, "front desk"),
+                (Source::PoliceArmory, "police armory"),
+                (Source::CopCar, "patrol car"),
+                (Source::Cop, "cops"),
+                (Source::FireEngine, "fire engine"),
+                (Source::FireLocker, "turnout locker"),
+                (Source::MedCabinet, "first aid cabinet"),
+                (Source::SchoolLocker, "student locker"),
+                (Source::Firefighter, "firefighters"),
             ]
                 .iter()
                 .filter(|(s, _)| s.holds(kind))

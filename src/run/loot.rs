@@ -158,7 +158,14 @@ impl Run {
             self.search = None;
             if self.keys.pressed(ui, Action::Interact) {
                 combat.play(Sfx::Rattle, 0.8);
-                self.note = Some((if key == Some(Kind::ArmoryKey) { "NEEDS ARMORY KEY" } else { "NEEDS CAGE KEY" }, NOTE_FOR));
+                self.note = Some((
+                    match key {
+                        Some(Kind::ArmoryKey) => "NEEDS ARMORY KEY",
+                        Some(Kind::PrecinctKey) => "NEEDS PRECINCT KEY",
+                        _ => "NEEDS CAGE KEY",
+                    },
+                    NOTE_FOR,
+                ));
             }
             return;
         }

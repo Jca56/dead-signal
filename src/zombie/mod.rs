@@ -154,6 +154,15 @@ pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Soldier;
 
+/// One of the dead in a police uniform (they carry police things, and
+/// now and then the precinct key).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Cop;
+
+/// One of the dead in a firefighter's turnout gear.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Firefighter;
+
 /// Put one of `kind` at `at`, facing `yaw` (a Shambler, one of `theme`'s).
 pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Theme) {
     let seed = {
@@ -173,8 +182,17 @@ pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Them
         zombie.hp *= looks::HEADLESS_TOUGHNESS;
     }
     let mut e = world.spawn((zombie, Body::at(at), Figure::of(&looks), looks, Beat::new(seed % 64)));
-    if theme == Theme::Soldier {
-        e.insert(Soldier);
+    match theme {
+        Theme::Soldier => {
+            e.insert(Soldier);
+        }
+        Theme::Cop => {
+            e.insert(Cop);
+        }
+        Theme::Firefighter => {
+            e.insert(Firefighter);
+        }
+        _ => {}
     }
 }
 

@@ -120,6 +120,10 @@ pub enum Theme {
     Staff,
     Pilot,
     Soldier,
+    /// In uniform, at the police station; in turnout gear, at the fire
+    /// station.
+    Cop,
+    Firefighter,
     /// Anyone at all: the woods', and those who come in as the run goes on.
     Drifter,
 }

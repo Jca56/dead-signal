@@ -9,7 +9,7 @@
 
 use lntrn_math::Vec3;
 
-use super::plan::{CEILING, Kind, Plan, STEPS, STOREY, TREAD, Use};
+use super::plan::{self, CEILING, Kind, Plan, STEPS, STOREY, TREAD, Use};
 use crate::collide::Surface;
 use crate::loot::Dice;
 
@@ -72,6 +72,19 @@ const CEILING_WHITE: Rgb = [0.78, 0.77, 0.73];
 const BARN_RED: [Rgb; 2] = [[0.50, 0.18, 0.14], [0.42, 0.15, 0.12]];
 const LOGS: [Rgb; 2] = [[0.42, 0.29, 0.18], [0.33, 0.22, 0.13]];
 const LOG_INSIDE: Rgb = [0.55, 0.41, 0.27];
+/// The landmarks': the gun store's dark front, the station's pale stone
+/// and its painted block inside; the cells' bars.
+const GUN_STORE_WALLS: Rgb = [0.26, 0.25, 0.24];
+const GUN_STORE_INSIDE: Rgb = [0.50, 0.44, 0.36];
+const STATION_WALLS: Rgb = [0.70, 0.68, 0.62];
+const STATION_INSIDE: Rgb = [0.70, 0.72, 0.70];
+const FIRE_BRICK: Rgb = [0.52, 0.24, 0.18];
+const SCHOOL_BRICK: Rgb = [0.60, 0.42, 0.30];
+const SCHOOL_INSIDE: Rgb = [0.78, 0.76, 0.62];
+const BARS: Rgb = [0.30, 0.31, 0.32];
+/// The bars: each how thick, how far apart.
+const BAR: f64 = 0.05;
+const BAR_GAP: f64 = 0.2;
 
 /// What a room's floor is.
 fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
@@ -84,6 +97,15 @@ fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
         Use::Barn => [0.46, 0.40, 0.26],
         Use::Garage | Use::Armory => [0.44, 0.43, 0.40],
         Use::Office => [0.40, 0.36, 0.30],
+        Use::GunShop => [0.36, 0.34, 0.31],
+        Use::Lobby => [0.60, 0.58, 0.54],
+        Use::CellBlock | Use::Cell => [0.46, 0.45, 0.42],
+        Use::LockerRoom => [0.52, 0.54, 0.52],
+        Use::Bay => [0.44, 0.43, 0.40],
+        Use::Classroom => [0.56, 0.52, 0.44],
+        Use::Corridor => [0.62, 0.60, 0.54],
+        Use::Nurse => [0.70, 0.72, 0.70],
+        Use::Gym => [0.62, 0.46, 0.28],
     }
 }
 
@@ -96,6 +118,10 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
     let siding = match plan.kind {
         Kind::Store | Kind::Garage => pick(dice, STORE_WALLS),
         Kind::Armory => CONCRETE,
+        Kind::GunStore => GUN_STORE_WALLS,
+        Kind::Police => STATION_WALLS,
+        Kind::FireStation => FIRE_BRICK,
+        Kind::School => SCHOOL_BRICK,
         Kind::Barn => BARN_RED[0],
         Kind::Cabin => LOGS[0],
         _ => pick(dice, SIDINGS),
@@ -113,13 +139,16 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         .iter()
         .map(|r| match (plan.kind, r.use_) {
             (Kind::Cabin | Kind::Barn, _) => LOG_INSIDE,
-            (Kind::Garage | Kind::Armory, _) => CONCRETE,
+            (Kind::Garage | Kind::Armory, _) | (Kind::Police, Use::CellBlock | Use::Cell | Use::Armory) | (_, Use::Bay) => CONCRETE,
+            (Kind::Police | Kind::FireStation, _) => STATION_INSIDE,
+            (Kind::School, _) => SCHOOL_INSIDE,
+            (Kind::GunStore, _) => GUN_STORE_INSIDE,
             (_, Use::Bath) => [0.70, 0.74, 0.74],
             _ => pick(dice, PAINTS),
         })
         .collect();
     let floors: Vec<Rgb> = plan.rooms.iter().map(|r| floor_of(r.use_, dice)).collect();
-    let wall_stuff = Stuff::Solid(if matches!(plan.kind, Kind::Store | Kind::Garage | Kind::Armory) { Surface::Stone } else { Surface::Wood });
+    let wall_stuff = Stuff::Solid(if matches!(plan.kind, Kind::Store | Kind::Garage | Kind::Armory | Kind::GunStore | Kind::Police | Kind::FireStation | Kind::School) { Surface::Stone } else { Surface::Wood });
     let mut blocks = Vec::new();
     let mut add = |lo: Vec3, hi: Vec3, colour: Rgb, stuff: Stuff| blocks.push(Block { lo: lo.min(hi), hi: lo.max(hi), colour, stuff });
     let (w, d) = (f64::from(plan.w), f64::from(plan.d));
@@ -156,6 +185,23 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         let (from, to) = (f64::from(wall.from) - reach, f64::from(wall.to) + reach);
         let mut gaps: Vec<_> = plan.openings.iter().filter(|o| o.wall == wi).collect();
         gaps.sort_by(|a, b| a.centre.total_cmp(&b.centre));
+        if plan.bars.contains(&wi) {
+            // Bars from floor to ceiling, a rail along the top; none in its
+            // doorways but the rail over them.
+            let in_gap = |u: f64| gaps.iter().any(|g| (u - g.centre).abs() < g.width * 0.5 + BAR);
+            let mut u = from + BAR_GAP * 0.5;
+            while u < to {
+                if !in_gap(u) {
+                    let (lo, hi) = if wall.along_x { (Vec3::new(u - BAR * 0.5, base - TUCK, at - BAR * 0.5), Vec3::new(u + BAR * 0.5, base + CEILING + TUCK, at + BAR * 0.5)) } else { (Vec3::new(at - BAR * 0.5, base - TUCK, u - BAR * 0.5), Vec3::new(at + BAR * 0.5, base + CEILING + TUCK, u + BAR * 0.5)) };
+                    add(lo, hi, BARS, Stuff::Solid(Surface::Metal));
+                }
+                u += BAR_GAP;
+            }
+            let (y0, y1) = (base + plan::DOOR_HEAD, base + plan::DOOR_HEAD + 0.08);
+            let (lo, hi) = if wall.along_x { (Vec3::new(from, y0, at - BAR), Vec3::new(to, y1, at + BAR)) } else { (Vec3::new(at - BAR, y0, from), Vec3::new(at + BAR, y1, to)) };
+            add(lo, hi, BARS, Stuff::Solid(Surface::Metal));
+            continue;
+        }
         for (side, room) in wall.sides.iter().enumerate() {
             let colour = room.map_or(siding, |r| paints[r]);
             let (t0, t1) = if side == 0 { (at - SKIN, at) } else { (at, at + SKIN) };

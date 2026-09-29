@@ -7,101 +7,14 @@
 use lntrn_math::{Vec2, Vec3};
 
 use super::Building;
-use super::plan::{Kind, Room, STOREY, Use};
+use super::plan::{Kind, STOREY, Use};
+use super::program::{Thing, needed, program};
+pub use super::program::Furn;
 use crate::loot::tables::Source;
 use crate::loot::{Dice, Kind as ItemKind};
 use crate::map::Spot;
+use crate::map::outposts::Fixture;
 use crate::map::scatter::{Piece, Scenery};
-
-/// A piece of furniture: its object in `furniture.glb`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Furn {
-    Bed,
-    Sofa,
-    Armchair,
-    Table,
-    Counter,
-    Stove,
-    Bathtub,
-    Toilet,
-    Basin,
-    Bookcase,
-    Tv,
-    HayBale,
-    HayStack,
-    WoodStove,
-    Workbench,
-}
-
-impl Furn {
-    pub const ALL: [Furn; 15] = [Furn::Bed, Furn::Sofa, Furn::Armchair, Furn::Table, Furn::Counter, Furn::Stove, Furn::Bathtub, Furn::Toilet, Furn::Basin, Furn::Bookcase, Furn::Tv, Furn::HayBale, Furn::HayStack, Furn::WoodStove, Furn::Workbench];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Furn::Bed => "FURN_Bed",
-            Furn::Sofa => "FURN_Sofa",
-            Furn::Armchair => "FURN_Armchair",
-            Furn::Table => "FURN_Table",
-            Furn::Counter => "FURN_Counter",
-            Furn::Stove => "FURN_Stove",
-            Furn::Bathtub => "FURN_Bathtub",
-            Furn::Toilet => "FURN_Toilet",
-            Furn::Basin => "FURN_Basin",
-            Furn::Bookcase => "FURN_Bookcase",
-            Furn::Tv => "FURN_Tv",
-            Furn::HayBale => "FURN_HayBale",
-            Furn::HayStack => "FURN_HayStack",
-            Furn::WoodStove => "FURN_WoodStove",
-            Furn::Workbench => "FURN_Workbench",
-        }
-    }
-}
-
-/// Something put in a room: furniture, or a thing to search.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Thing {
-    Furn(Furn),
-    Box(Source),
-}
-
-impl Thing {
-    /// Its footprint (along the wall it backs onto, out from it), and
-    /// whether it stands tall enough to cover a window.
-    fn size(self) -> (f64, f64, bool) {
-        match self {
-            Thing::Furn(f) => match f {
-                Furn::Bed => (1.6, 2.1, false),
-                Furn::Sofa => (2.0, 0.9, false),
-                Furn::Armchair => (0.9, 0.9, false),
-                Furn::Table => (2.1, 0.8, false),
-                Furn::Counter => (1.8, 0.65, false),
-                Furn::Stove => (0.7, 0.65, false),
-                Furn::Bathtub => (1.7, 0.75, false),
-                Furn::Toilet => (0.45, 0.7, false),
-                Furn::Basin => (0.6, 0.5, false),
-                Furn::Bookcase => (1.0, 0.35, true),
-                Furn::Tv => (1.2, 0.45, false),
-                Furn::HayBale => (1.1, 0.5, false),
-                Furn::HayStack => (1.1, 1.0, true),
-                Furn::WoodStove => (0.6, 0.55, true),
-                Furn::Workbench => (1.8, 0.7, false),
-            },
-            Thing::Box(s) => match s {
-                Source::Fridge => (0.75, 0.7, true),
-                Source::Cabinet => (1.04, 0.52, false),
-                Source::Desk => (1.3, 0.65, false),
-                Source::Wardrobe => (1.24, 0.6, true),
-                Source::Shelf => (1.8, 0.6, true),
-                Source::Register => (2.06, 0.86, false),
-                Source::Locker | Source::ToolLocker => (0.6, 0.55, true),
-                Source::GunCabinet | Source::HunterCabinet => (0.84, 0.5, true),
-                Source::AmmoCage => (1.62, 1.04, true),
-                Source::SupplyCase => (1.0, 0.6, false),
-                _ => (1.0, 0.7, false),
-            },
-        }
-    }
-}
 
 /// What a building holds: its furniture, its containers, and what's left
 /// lying about in it.
@@ -122,31 +35,6 @@ struct Rect {
 impl Rect {
     fn overlaps(&self, o: &Rect, gap: f64) -> bool {
         self.lo.x < o.hi.x + gap && o.lo.x < self.hi.x + gap && self.lo.y < o.hi.y + gap && o.lo.y < self.hi.y + gap
-    }
-}
-
-/// What goes in a room of each use: what must, then what might (and how
-/// likely).
-fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
-    use Furn::*;
-    let f = |x: Furn, p: f64| (Thing::Furn(x), p);
-    let b = |s: Source, p: f64| (Thing::Box(s), p);
-    let big = (room.x1 - room.x0).min(room.z1 - room.z0) >= 4;
-    match use_ {
-        Use::Living => vec![f(Sofa, 1.0), f(Tv, 0.9), f(Armchair, 0.6), b(Source::Desk, 0.45), b(Source::Cabinet, 0.4), f(Bookcase, 0.5)],
-        Use::Kitchen => vec![f(Counter, 1.0), b(Source::Fridge, 1.0), f(Stove, 1.0), b(Source::Cabinet, 0.7), f(Table, if big { 0.9 } else { 0.4 })],
-        Use::Bed => vec![f(Bed, 1.0), b(Source::Wardrobe, 0.9), b(Source::Cabinet, 0.6), b(Source::Desk, 0.3)],
-        Use::Bath => vec![f(Bathtub, 0.9), f(Toilet, 1.0), f(Basin, 1.0), b(Source::Cabinet, 0.25)],
-        Use::Back => vec![b(Source::Crate, 1.0), b(Source::Crate, 0.6), b(Source::Locker, 0.35), b(Source::Shelf, 0.5)],
-        Use::Shop => vec![b(Source::Register, 1.0)],
-        Use::Hall => Vec::new(),
-        // The gun cabinet first: it has the pick of the walls.
-        Use::Den => vec![b(if kind == Kind::Cabin { Source::HunterCabinet } else { Source::GunCabinet }, 1.0), f(WoodStove, 0.9), f(Armchair, 0.8), f(Table, 0.6), f(Bookcase, 0.5), b(Source::Cabinet, 0.5), f(Sofa, 0.35)],
-        Use::Garage => vec![f(Workbench, 1.0), b(Source::ToolLocker, 1.0), b(Source::Crate, 0.7), b(Source::Crate, 0.4)],
-        Use::Office => vec![b(Source::Desk, 1.0), b(Source::Locker, 0.9), b(Source::Cabinet, 0.5), f(Bookcase, 0.4)],
-        // The cage first: it has the pick of the walls.
-        Use::Armory => vec![b(Source::AmmoCage, 1.0), b(Source::Locker, 0.8), b(Source::Crate, 0.7), b(Source::Crate, 0.4)],
-        Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::ToolLocker, 1.0), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
     }
 }
 
@@ -197,14 +85,23 @@ impl Space {
     }
 }
 
+/// How high a landmark's sign's foot stands on its front, and how far out
+/// from the wall.
+const SIGN_HIGH: f64 = 2.35;
+const SIGN_OUT: f64 = 0.19;
+
+/// The fire engine, across and long; how far in from its bay's doors it's
+/// parked.
+pub(super) const ENGINE: (f64, f64) = (2.5, 8.2);
+const ENGINE_IN: f64 = 2.6;
+
+/// A glass display case, across and deep; and how far in from the gun
+/// store's front the row of them stands.
+pub(super) const DISPLAY: (f64, f64) = (1.3, 0.65);
+const COUNTER_IN: f64 = 4.5;
+
 /// How deep the floor kept free in front of something to search.
 const ACCESS: f64 = 1.2;
-
-/// Whether a thing is what its room is looked in for: it's never left
-/// out, going in another room if its own has no wall for it.
-fn needed(thing: Thing) -> bool {
-    matches!(thing, Thing::Box(Source::GunCabinet | Source::HunterCabinet | Source::AmmoCage))
-}
 
 /// `thing` set down in `b` at `centre` (in its frame, on `floor`), facing
 /// `facing`.
@@ -269,6 +166,20 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
         return out;
     }
     let plan = &b.plan;
+    // A landmark's sign on its front, over its door.
+    // (The fire station's over its bay doors, between them.)
+    let sign = match plan.kind {
+        Kind::GunStore => Some((Fixture::SignGuns, f64::from(plan.w) * 0.5, SIGN_HIGH)),
+        Kind::Police => Some((Fixture::SignPolice, f64::from(plan.w) * 0.5, SIGN_HIGH)),
+        Kind::FireStation => Some((Fixture::SignFire, 5.0, super::landmark::BAY_DOOR.1 + 0.15)),
+        Kind::School => Some((Fixture::SignSchool, f64::from(plan.w) * 0.5, SIGN_HIGH)),
+        _ => None,
+    };
+    if let Some((sign, x, y)) = sign {
+        let at = b.world(Vec3::new(x, y, -SIGN_OUT));
+        let facing = b.turn(Vec3::new(0.0, 0.0, -1.0));
+        out.pieces.push(Piece::new(Scenery::Fixture(sign), at, (-facing.x).atan2(-facing.z), 1.0));
+    }
     let mut spaces: Vec<Space> = (0..plan.rooms.len()).map(|ri| Space::of(plan, ri)).collect();
     let mut homeless: Vec<Thing> = Vec::new();
     for space in &mut spaces {
@@ -289,6 +200,35 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
                 }
                 x += 3;
             }
+        }
+        if room.use_ == Use::Bay {
+            // The engine, parked facing out of one of the bay's doors.
+            let doors: Vec<f64> = plan.openings.iter().filter(|o| o.door && o.width >= super::landmark::BAY_DOOR.0 && plan.walls[o.wall].sides.contains(&Some(space.room))).map(|o| o.centre).collect();
+            if let Some(&x) = doors.get(dice.next() as usize % doors.len().max(1)) {
+                let z = f64::from(room.z0) + ENGINE_IN + ENGINE.1 * 0.5;
+                let r = Rect { lo: Vec2::new(x - ENGINE.0 * 0.5, z - ENGINE.1 * 0.5), hi: Vec2::new(x + ENGINE.0 * 0.5, z + ENGINE.1 * 0.5) };
+                space.placed.push(r);
+                put(b, Thing::Box(Source::FireEngine), space.floor, Vec2::new(x, z), Vec2::new(0.0, -1.0), &mut out);
+            }
+        }
+        if room.use_ == Use::GunShop {
+            // A row of glass cases across the floor, facing the way in, a
+            // gap at one end to get behind them.
+            let z = f64::from(room.z0) + COUNTER_IN;
+            let gap_left = dice.unit() < 0.5;
+            let (x0, x1) = if gap_left { (f64::from(room.x0) + 2.0, f64::from(room.x1) - 0.6) } else { (f64::from(room.x0) + 0.6, f64::from(room.x1) - 2.0) };
+            let n = ((x1 - x0) / DISPLAY.0).floor() as i32;
+            let start = if gap_left { x1 - f64::from(n) * DISPLAY.0 } else { x0 };
+            for k in 0..n {
+                let x = start + (f64::from(k) + 0.5) * DISPLAY.0;
+                let r = Rect { lo: Vec2::new(x - DISPLAY.0 * 0.5, z - DISPLAY.1 * 0.5), hi: Vec2::new(x + DISPLAY.0 * 0.5, z + DISPLAY.1 * 0.5) };
+                if !space.clear.iter().any(|c| c.overlaps(&r, 0.0)) {
+                    space.placed.push(r);
+                    put(b, Thing::Box(Source::DisplayCase), space.floor, Vec2::new(x, z), Vec2::new(0.0, -1.0), &mut out);
+                }
+            }
+            // Behind them kept free to stand at the racks on the far wall.
+            space.placed.push(Rect { lo: Vec2::new(inner.lo.x, z + DISPLAY.1 * 0.5), hi: Vec2::new(inner.hi.x, z + DISPLAY.1 * 0.5 + 1.2) });
         }
         for (thing, chance) in program(room.use_, &room, b.plan.kind) {
             if dice.unit() > chance {

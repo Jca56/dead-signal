@@ -213,7 +213,7 @@ const GROUPS: [(&str, &[Kind]); 11] = [
     ("HEALTH", &[Kind::Bandage, Kind::Medkit, Kind::Pills]),
     ("VALUABLES", &[Kind::Cash, Kind::Watch, Kind::Ring, Kind::Chain, Kind::GoldBar]),
     ("SUPPLIES", &[Kind::Beans, Kind::Water, Kind::Radio, Kind::Battery, Kind::Fuel]),
-    ("KEYS", &[Kind::Key, Kind::ArmoryKey]),
+    ("KEYS", &[Kind::Key, Kind::ArmoryKey, Kind::PrecinctKey]),
     ("ARMOR", &[Kind::BikeHelmet, Kind::MilitaryHelmet, Kind::LightVest, Kind::PlateCarrier, Kind::ArmorPlate]),
     ("RIGS, BELTS, PANTS", &[Kind::ChestRig, Kind::ArmoredRig, Kind::Bandolier, Kind::CargoPants]),
     ("BACKPACKS", &[Kind::Daypack, Kind::Rucksack, Kind::HikingPack, Kind::MilitaryRuck]),

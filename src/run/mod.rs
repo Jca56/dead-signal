@@ -106,7 +106,7 @@ impl Run {
         self.dice = Dice(seed.rotate_left(7) | 1);
         self.begin_out(game, seed.rotate_left(21), map);
         if let Some((eye, _)) = Self::watching(game) {
-            self.director.begin(&mut game.world, &map.sites, &|x, z| map.field.height_at(x, z), eye, seed.rotate_left(3));
+            self.director.begin(&mut game.world, &map.sites, &map.landmarks, &|x, z| map.field.height_at(x, z), eye, seed.rotate_left(3));
         }
     }
 

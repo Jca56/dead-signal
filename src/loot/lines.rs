@@ -282,3 +282,163 @@ pub(super) const JUGGERNAUT: &[Line] = &[
     (Kind::PlateCarrier, 5, (1, 1)),
     (Kind::ArmorPlate, 8, (1, 2)),
 ];
+
+// The gun store's: long guns on the wall, a gun more often than not
+// between the racks, and the rounds for them.
+pub(super) const GUN_RACK: &[Line] = &[
+    (Kind::Shotgun, 14, (1, 1)),
+    (Kind::Rifle, 8, (1, 1)),
+    (Kind::Pistol, 8, (1, 1)),
+    (Kind::Shells, 30, (6, 14)),
+    (Kind::RifleRounds, 20, (6, 12)),
+    (Kind::Rounds, 15, (12, 24)),
+    (Kind::Bandolier, 5, (1, 1)),
+];
+
+// Under the glass: handguns, blades, boxes of rounds.
+pub(super) const DISPLAY_CASE: &[Line] = &[
+    (Kind::Pistol, 15, (1, 1)),
+    (Kind::Knife, 12, (1, 1)),
+    (Kind::Machete, 5, (1, 1)),
+    (Kind::Rounds, 30, (12, 24)),
+    (Kind::Shells, 15, (6, 12)),
+    (Kind::RifleRounds, 10, (6, 12)),
+    (Kind::Rounds556, 8, (10, 20)),
+    (Kind::Bandolier, 5, (1, 1)),
+];
+
+// Locked in the back (the cage key opens it): what the store didn't put
+// out.
+pub(super) const GUN_CAGE: &[Line] = &[
+    (Kind::Smg, 12, (1, 1)),
+    (Kind::AssaultRifle, 10, (1, 1)),
+    (Kind::Rifle, 8, (1, 1)),
+    (Kind::Shotgun, 6, (1, 1)),
+    (Kind::Rounds556, 25, (20, 30)),
+    (Kind::Rounds, 10, (20, 30)),
+    (Kind::PlateCarrier, 5, (1, 1)),
+    (Kind::MilitaryHelmet, 5, (1, 1)),
+    (Kind::PipeBomb, 8, (1, 2)),
+    (Kind::ArmorPlate, 8, (1, 2)),
+];
+
+pub(super) const POLICE_LOCKER: &[Line] = &[
+    (Kind::Rounds, 30, (10, 20)),
+    (Kind::Pistol, 8, (1, 1)),
+    (Kind::Shells, 12, (4, 10)),
+    (Kind::Bandage, 15, (1, 2)),
+    (Kind::Medkit, 5, (1, 1)),
+    (Kind::Cash, 8, (1, 2)),
+    (Kind::Knife, 5, (1, 1)),
+    (Kind::LightVest, 6, (1, 1)),
+    (Kind::MilitaryHelmet, 2, (1, 1)),
+    (Kind::ArmorPlate, 4, (1, 1)),
+];
+
+// The station's front desk (the precinct key is kept in one).
+pub(super) const FRONT_DESK: &[Line] = &[
+    (Kind::Rounds, 25, (6, 12)),
+    (Kind::Cash, 20, (1, 3)),
+    (Kind::Bandage, 15, (1, 2)),
+    (Kind::Pills, 10, (1, 1)),
+    (Kind::Radio, 12, (1, 1)),
+    (Kind::Watch, 6, (1, 1)),
+    (Kind::Battery, 4, (1, 1)),
+];
+
+// Locked (the precinct key opens it): the station's long guns and armor.
+pub(super) const POLICE_ARMORY: &[Line] = &[
+    (Kind::Shotgun, 12, (1, 1)),
+    (Kind::Smg, 10, (1, 1)),
+    (Kind::AssaultRifle, 6, (1, 1)),
+    (Kind::Pistol, 8, (1, 1)),
+    (Kind::Shells, 20, (10, 20)),
+    (Kind::Rounds, 20, (20, 30)),
+    (Kind::Rounds556, 15, (20, 30)),
+    (Kind::LightVest, 8, (1, 1)),
+    (Kind::PlateCarrier, 5, (1, 1)),
+    (Kind::MilitaryHelmet, 6, (1, 1)),
+    (Kind::ArmorPlate, 10, (1, 2)),
+    (Kind::PipeBomb, 4, (1, 1)),
+];
+
+// A patrol car's trunk.
+pub(super) const COP_CAR: &[Line] = &[
+    (Kind::Shotgun, 8, (1, 1)),
+    (Kind::Shells, 25, (6, 12)),
+    (Kind::Rounds, 25, (8, 16)),
+    (Kind::Bandage, 15, (1, 2)),
+    (Kind::Medkit, 8, (1, 1)),
+    (Kind::Radio, 8, (1, 1)),
+    (Kind::Cash, 5, (1, 2)),
+    (Kind::LightVest, 5, (1, 1)),
+];
+
+// On one of the dead in uniform.
+pub(super) const COP: &[Line] = &[
+    (Kind::Rounds, 40, (6, 12)),
+    (Kind::Bandage, 15, (1, 1)),
+    (Kind::Cash, 10, (1, 2)),
+    (Kind::Shells, 10, (3, 6)),
+    (Kind::Radio, 5, (1, 1)),
+    (Kind::Pistol, 4, (1, 1)),
+    (Kind::LightVest, 2, (1, 1)),
+    (Kind::PrecinctKey, 4, (1, 1)),
+];
+
+// The fire engine's lockers: what cuts, what heals, what runs it.
+pub(super) const FIRE_ENGINE: &[Line] = &[
+    (Kind::FireAxe, 18, (1, 1)),
+    (Kind::Medkit, 18, (1, 1)),
+    (Kind::Bandage, 20, (1, 3)),
+    (Kind::Pills, 8, (1, 1)),
+    (Kind::Fuel, 10, (1, 1)),
+    (Kind::Battery, 6, (1, 1)),
+    (Kind::Radio, 6, (1, 1)),
+    (Kind::Water, 8, (1, 2)),
+];
+
+pub(super) const FIRE_LOCKER: &[Line] = &[
+    (Kind::Bandage, 20, (1, 2)),
+    (Kind::Medkit, 8, (1, 1)),
+    (Kind::FireAxe, 8, (1, 1)),
+    (Kind::Pills, 10, (1, 1)),
+    (Kind::Cash, 10, (1, 2)),
+    (Kind::Watch, 5, (1, 1)),
+    (Kind::Water, 8, (1, 1)),
+    (Kind::Beans, 6, (1, 1)),
+    (Kind::CargoPants, 4, (1, 1)),
+];
+
+// A first-aid cabinet on the wall (the fire station's, the school
+// nurse's).
+pub(super) const MED_CABINET: &[Line] = &[
+    (Kind::Bandage, 40, (1, 3)),
+    (Kind::Medkit, 25, (1, 1)),
+    (Kind::Pills, 30, (1, 1)),
+];
+
+// A student's: lunch, a little money, whatever they were into.
+pub(super) const SCHOOL_LOCKER: &[Line] = &[
+    (Kind::Beans, 12, (1, 1)),
+    (Kind::Water, 12, (1, 1)),
+    (Kind::Cash, 12, (1, 2)),
+    (Kind::Pills, 8, (1, 1)),
+    (Kind::Bandage, 10, (1, 1)),
+    (Kind::Watch, 4, (1, 1)),
+    (Kind::Radio, 4, (1, 1)),
+    (Kind::Daypack, 6, (1, 1)),
+    (Kind::BikeHelmet, 5, (1, 1)),
+    (Kind::Knife, 2, (1, 1)),
+    (Kind::Rounds, 5, (4, 10)),
+];
+
+// On one of the dead in turnout gear.
+pub(super) const FIREFIGHTER: &[Line] = &[
+    (Kind::Bandage, 30, (1, 2)),
+    (Kind::Pills, 15, (1, 1)),
+    (Kind::Medkit, 10, (1, 1)),
+    (Kind::Cash, 15, (1, 2)),
+    (Kind::Water, 10, (1, 1)),
+    (Kind::FireAxe, 3, (1, 1)),
+];

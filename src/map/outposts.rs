@@ -45,10 +45,15 @@ pub enum Fixture {
     Berm,
     Bench,
     PlateFrame,
+    /// The town's landmarks' signs, over their doors.
+    SignGuns,
+    SignPolice,
+    SignFire,
+    SignSchool,
 }
 
 impl Fixture {
-    pub const ALL: [Fixture; 17] = [
+    pub const ALL: [Fixture; 21] = [
         Fixture::Canopy,
         Fixture::Pumps,
         Fixture::GasSign,
@@ -66,6 +71,10 @@ impl Fixture {
         Fixture::Berm,
         Fixture::Bench,
         Fixture::PlateFrame,
+        Fixture::SignGuns,
+        Fixture::SignPolice,
+        Fixture::SignFire,
+        Fixture::SignSchool,
     ];
 
     pub fn name(self) -> &'static str {
@@ -87,6 +96,10 @@ impl Fixture {
             Fixture::Berm => "SITE_Berm",
             Fixture::Bench => "SITE_Bench",
             Fixture::PlateFrame => "SITE_PlateFrame",
+            Fixture::SignGuns => "SITE_SignGuns",
+            Fixture::SignPolice => "SITE_SignPolice",
+            Fixture::SignFire => "SITE_SignFire",
+            Fixture::SignSchool => "SITE_SignSchool",
         }
     }
 
@@ -94,7 +107,7 @@ impl Fixture {
     pub fn surface(self) -> Surface {
         match self {
             Fixture::Sandbags | Fixture::Berm => Surface::Dirt,
-            Fixture::Tent | Fixture::CommandTent | Fixture::Bench => Surface::Wood,
+            Fixture::Tent | Fixture::CommandTent | Fixture::Bench | Fixture::SignGuns | Fixture::SignPolice | Fixture::SignFire | Fixture::SignSchool => Surface::Wood,
             _ => Surface::Metal,
         }
     }

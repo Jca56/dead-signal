@@ -1,7 +1,8 @@
 //! How many of the dead are about, and where. A run starts with the whole
 //! map peopled: a crowd in the town (some of them upstairs), a group at
 //! every place, and wanderers in the woods between; never close to where
-//! the player starts; the dead at the crash and the camp soldiers, mostly.
+//! the player starts; the dead at the crash and the camp soldiers, mostly;
+//! officers at the police station, firefighters at the fire station.
 //! Then, as the run goes on, a trickle keeps some of
 //! them near the player: whenever fewer are close than the noise they've
 //! made lately calls for (its heat: loud, and more come; quiet a while,
@@ -20,6 +21,7 @@ use super::Nav;
 use super::kind::Kind as Dead;
 use super::looks::Theme;
 use crate::loot::Dice;
+use crate::map::building::landmark::Landmark;
 use crate::map::sites::{Kind, Site};
 
 /// How many of the dead the whole map starts with, and the most there may
@@ -64,6 +66,16 @@ const JUGGERNAUT_CHANCE: f64 = 0.5;
 fn outpost(kind: Kind) -> bool {
     matches!(kind, Kind::Gas | Kind::Pad | Kind::Crash | Kind::Military | Kind::Radio)
 }
+/// Who's at a landmark in town, in what, and how many; how far round its
+/// middle they stand, metres.
+fn crew(landmark: Landmark) -> Option<(Theme, usize)> {
+    match landmark {
+        Landmark::Police => Some((Theme::Cop, 7)),
+        Landmark::FireStation => Some((Theme::Firefighter, 5)),
+        _ => None,
+    }
+}
+const CREW_ROUND: f64 = 12.0;
 /// Nothing starts nearer the player than this, metres.
 const CLEAR_OF_START: f64 = 45.0;
 /// What counts as near the player, how many should be near when all's
@@ -109,7 +121,7 @@ impl Director {
     /// A run begins: the map peopled, clear of the player at `eye`. The
     /// ground's height is `ground`'s (none off the land); `seed` picks
     /// where they stand.
-    pub fn begin(&mut self, world: &mut World, sites: &[Site], ground: &dyn Fn(f64, f64) -> Option<f64>, eye: Vec3, seed: u32) {
+    pub fn begin(&mut self, world: &mut World, sites: &[Site], landmarks: &[(Landmark, Vec2)], ground: &dyn Fn(f64, f64) -> Option<f64>, eye: Vec3, seed: u32) {
         *self = Self::default();
         let feet = eye - Vec3::new(0.0, 1.6, 0.0);
         let mut dice = Dice(seed | 1);
@@ -158,6 +170,23 @@ impl Director {
                             Dead::Shambler
                         };
                         spots.push((at, kind, Theme::of(site.kind, dice.unit() < soldiers(site.kind))));
+                        placed += 1;
+                    }
+                }
+            }
+            // Officers at the police station, firefighters at the fire
+            // station: in it and round it.
+            let town_floor = sites.iter().find(|s| s.kind == Kind::Town).map_or(0.0, |s| s.plot.height);
+            for &(landmark, at) in landmarks {
+                let Some((theme, want)) = crew(landmark) else { continue };
+                let mut placed = 0;
+                for _ in 0..want * 20 {
+                    if placed == want {
+                        break;
+                    }
+                    let (dx, dz) = ((dice.unit() * 2.0 - 1.0) * CREW_ROUND, (dice.unit() * 2.0 - 1.0) * CREW_ROUND);
+                    if let Some(p) = stand(&mut dice, at.x + dx, at.y + dz, town_floor) {
+                        spots.push((p, Dead::Shambler, theme));
                         placed += 1;
                     }
                 }

@@ -4,7 +4,12 @@ object (CONTAINER_Crate, CONTAINER_Locker, CONTAINER_Car, CONTAINER_Cage,
 CONTAINER_GunCabinet, CONTAINER_SupplyCase);
 and in houses and stores (`indoor_containers.py`) a fridge, a chest
 of drawers (CONTAINER_Cabinet), a desk, a wardrobe, a store's shelving
-and its till counter (CONTAINER_Register): each standing on its origin with its front (the
+and its till counter (CONTAINER_Register); in the town's landmarks
+(`town_containers.py`) the gun store's glass display case and its wall
+rack of long guns (CONTAINER_DisplayCase, CONTAINER_GunRack), the fire
+station's engine and a first-aid cabinet (CONTAINER_FireEngine,
+CONTAINER_MedCabinet); a patrol car (CONTAINER_CopCar) and a student's
+locker (CONTAINER_SchoolLocker): each standing on its origin with its front (the
 side it's searched from) facing +Y, for the game to set down where it likes;
 and each again as it's left once searched (CONTAINER_*_Open): the crate's
 lid off and leant against it, the locker's door and the cage's swung wide,
@@ -31,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from container_kit import BRASS, CHROME, GLASS, HOLLOW, HUB, KIT_RED, LAMP, LOCKER, LOCKER_DARK, PAINT, PLANK, PLANK_DARK, ROPE, RUST, SLOT, STEEL, STEEL_DARK, STRAW, TAIL, TYRE, hull, named, swing  # noqa: E402
 from indoor_containers import cabinet, desk, fridge, register, shelf, wardrobe  # noqa: E402
+from town_containers import display_case, fire_engine, gun_rack, med_cabinet  # noqa: E402
 
 OUT = os.path.join(HERE, "..", "models", "containers.glb")
 
@@ -70,11 +76,15 @@ def crate(opened):
     p.finish()
 
 
-def locker(opened):
+SCHOOL_BLUE = (0.20, 0.34, 0.56)
+SCHOOL_BLUE_DARK = (0.12, 0.20, 0.34)
+
+
+def locker(opened, name="CONTAINER_Locker", LOCKER=LOCKER, LOCKER_DARK=LOCKER_DARK):
     """A tall steel locker, 0.6 × 0.5 × 1.9, vents at the top and bottom of
     its door, a dent low on one side; opened, its door swung wide on a bare
-    shelf."""
-    p = named("CONTAINER_Locker", opened)
+    shelf. (A student's is the same, in the school's blue.)"""
+    p = named(name, opened)
     w, d, h = 0.6, 0.5, 1.9
     p.box((-w / 2, -d / 2, 0.08), (w / 2, d / 2, h), LOCKER)
     for x in (-w / 2, w / 2 - 0.05):
@@ -96,26 +106,35 @@ def locker(opened):
     p.finish()
 
 
-def car(opened):
+COP_WHITE = (0.80, 0.80, 0.78)
+COP_BLACK = (0.08, 0.08, 0.09)
+LIGHT_RED = (0.85, 0.08, 0.06)
+LIGHT_BLUE = (0.10, 0.25, 0.85)
+
+
+def car(opened, cop=False):
     """A wrecked sedan along X (its boot at -X), 4.3 × 1.75, on four
     wheels, one of them flat, so it lists; paint gone to rust in patches;
-    opened, its boot lid up on a dark hollow."""
-    p = named("CONTAINER_Car", opened)
+    opened, its boot lid up on a dark hollow. A patrol car (`cop`) is
+    white, its bonnet and boot black, a light bar on its roof and a push
+    bar at its nose."""
+    p = named("CONTAINER_CopCar" if cop else "CONTAINER_Car", opened)
+    PAINT_ = COP_WHITE if cop else PAINT
     L, W = 4.3, 1.75
     lift = 0.30
     # Body: the lower hull, then the cabin narrowing to its roof.
-    p.box((-L / 2, -W / 2, lift), (L / 2, W / 2, lift + 0.52), PAINT)
+    p.box((-L / 2, -W / 2, lift), (L / 2, W / 2, lift + 0.52), PAINT_)
     made = p.box((-1.15, -W / 2 + 0.06, lift + 0.52), (1.0, W / 2 - 0.06, lift + 1.02), GLASS)
     for v in made:
         if v.co.z > lift + 0.8:
             v.co.x = -0.85 if v.co.x < 0 else 0.55
             v.co.y *= 0.88
     top = max((f for f in p.faces_of(made)), key=lambda f: f.calc_center_median().z)
-    p.paint([top], PAINT)
+    p.paint([top], PAINT_)
     # Pillars at the cabin's corners, over the glass.
     for x0 in (-1.16, 0.95):
         for y in (-W / 2 + 0.05, W / 2 - 0.09):
-            post = p.box((x0, y, lift + 0.52), (x0 + 0.06, y + 0.04, lift + 1.02), PAINT)
+            post = p.box((x0, y, lift + 0.52), (x0 + 0.06, y + 0.04, lift + 1.02), PAINT_)
             for v in post:
                 if v.co.z > lift + 0.8:
                     v.co.x += (0.3 if x0 < 0 else -0.46) * 1.0
@@ -129,12 +148,26 @@ def car(opened):
     p.box((-1.5, -W / 2 + 0.05, lift + 0.52), (-1.48, W / 2 - 0.05, lift + 0.525), STEEL_DARK)
     if opened:
         p.box((-L / 2 + 0.06, -W / 2 + 0.1, lift + 0.52), (-1.52, W / 2 - 0.1, lift + 0.524), HOLLOW)
-        boot = p.box((-L / 2, -W / 2 + 0.05, lift + 0.525), (-1.5, W / 2 - 0.05, lift + 0.555), PAINT)
+        boot = p.box((-L / 2, -W / 2 + 0.05, lift + 0.525), (-1.5, W / 2 - 0.05, lift + 0.555), COP_BLACK if cop else PAINT_)
         swing(boot, (-1.5, 0.0, lift + 0.555), "Y", 72.0)
-    for x, y, z, sx, sz in ((1.2, W / 2, 0.45, 0.5, 0.2), (-0.4, W / 2, 0.35, 0.35, 0.25), (-1.7, -W / 2, 0.5, 0.45, 0.22), (0.6, -W / 2, 0.4, 0.3, 0.3)):
-        side = 0.005 if y > 0 else -0.005
-        p.box((x - sx / 2, y, lift + z - sz / 2), (x + sx / 2, y + side, lift + z + sz / 2), RUST)
-    p.box((1.2, -0.5, lift + 0.52), (2.0, 0.3, lift + 0.525), RUST)
+    if cop:
+        # Black bonnet and boot (and their wings), the light bar, the push
+        # bar.
+        p.box((1.0, -W / 2 - 0.004, lift), (L / 2 + 0.004, W / 2 + 0.004, lift + 0.524), COP_BLACK)
+        if not opened:
+            p.box((-L / 2 - 0.004, -W / 2 - 0.004, lift), (-1.5, W / 2 + 0.004, lift + 0.524), COP_BLACK)
+        else:
+            for y in (-W / 2 - 0.004, W / 2 - 0.004):
+                p.box((-L / 2, y, lift), (-1.5, y + 0.008, lift + 0.52), COP_BLACK)
+            p.box((-L / 2 - 0.004, -W / 2, lift), (-L / 2 + 0.002, W / 2, lift + 0.52), COP_BLACK)
+        p.box((-0.55, -0.62, lift + 1.02), (-0.15, 0.0, lift + 1.13), LIGHT_RED)
+        p.box((-0.55, 0.0, lift + 1.02), (-0.15, 0.62, lift + 1.13), LIGHT_BLUE)
+        p.box((L / 2 + 0.06, -0.55, lift + 0.08), (L / 2 + 0.14, 0.55, lift + 0.5), COP_BLACK)
+    else:
+        for x, y, z, sx, sz in ((1.2, W / 2, 0.45, 0.5, 0.2), (-0.4, W / 2, 0.35, 0.35, 0.25), (-1.7, -W / 2, 0.5, 0.45, 0.22), (0.6, -W / 2, 0.4, 0.3, 0.3)):
+            side = 0.005 if y > 0 else -0.005
+            p.box((x - sx / 2, y, lift + z - sz / 2), (x + sx / 2, y + side, lift + z + sz / 2), RUST)
+        p.box((1.2, -0.5, lift + 0.52), (2.0, 0.3, lift + 0.525), RUST)
     # Wheels; the front left flat.
     for x in (-1.35, 1.35):
         for y in (-W / 2 + 0.05, W / 2 - 0.05):
@@ -279,6 +312,12 @@ def hulls():
     hull("CONTAINER_SupplyCase", [((-0.5, -0.28, 0.0), (0.5, 0.3, 0.5))])
     lean = Matrix.Rotation(math.radians(-2.5), 4, "X") @ Matrix.Rotation(math.radians(-1.5), 4, "Y")
     hull("CONTAINER_Car", [((-2.2, -0.875, 0.05), (2.2, 0.875, 0.82)), ((-1.0, -0.78, 0.82), (0.75, 0.78, 1.32))], lean)
+    hull("CONTAINER_CopCar", [((-2.2, -0.875, 0.05), (2.2, 0.875, 0.82)), ((-1.0, -0.78, 0.82), (0.75, 0.78, 1.32))], lean)
+    hull("CONTAINER_DisplayCase", [((-0.65, -0.325, 0.0), (0.65, 0.325, 1.0))])
+    hull("CONTAINER_GunRack", [((-0.95, -0.175, 0.0), (0.95, 0.175, 2.0))])
+    hull("CONTAINER_SchoolLocker", [((-0.3, -0.25, 0.0), (0.3, 0.27, 1.92))])
+    hull("CONTAINER_MedCabinet", [((-0.4, -0.2, 0.0), (0.4, 0.2, 1.8))])
+    hull("CONTAINER_FireEngine", [((-1.25, -4.1, 0.1), (1.25, 4.3, 2.3)), ((-1.25, 1.7, 2.3), (1.25, 4.1, 2.66)), ((-0.6, -4.3, 2.3), (0.6, 2.3, 2.45))])
     w, d, h, t = 1.6, 1.0, 2.0, 0.05
     hull("CONTAINER_Cage", [
         ((-w / 2, -d / 2, 0.0), (w / 2, d / 2, t)),
@@ -294,7 +333,13 @@ def main():
     for opened in (False, True):
         crate(opened)
         locker(opened)
+        locker(opened, "CONTAINER_SchoolLocker", SCHOOL_BLUE, SCHOOL_BLUE_DARK)
+        fire_engine(opened)
+        med_cabinet(opened)
         car(opened)
+        car(opened, cop=True)
+        display_case(opened)
+        gun_rack(opened)
         cage(opened)
         fridge(opened)
         cabinet(opened)

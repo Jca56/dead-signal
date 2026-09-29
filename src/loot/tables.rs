@@ -38,10 +38,60 @@ pub enum Source {
     Soldier,
     /// What a Juggernaut had on it: always something, and good.
     Juggernaut,
+    /// The gun store's: racks of long guns on its walls, glass cases of
+    /// handguns and rounds, and a cage in the back (the cage key opens it).
+    GunRack,
+    DisplayCase,
+    GunCage,
+    /// The police station's: its officers' lockers, its front desk (where
+    /// the precinct key is kept), its armory (the precinct key opens it),
+    /// and the patrol cars out front.
+    PoliceLocker,
+    FrontDesk,
+    PoliceArmory,
+    CopCar,
+    /// On one of the dead in uniform.
+    Cop,
+    /// The fire station's: the engine's lockers, its crew's lockers; a
+    /// first-aid cabinet on the wall (there, and at the school nurse's).
+    FireEngine,
+    FireLocker,
+    MedCabinet,
+    /// A student's locker, down the school's corridors and in its gym.
+    SchoolLocker,
+    /// On one of the dead in turnout gear.
+    Firefighter,
 }
 
 /// Every container there is (not the dead).
-pub const CONTAINERS: [Source; 15] = [Source::Crate, Source::Locker, Source::Car, Source::Cage, Source::Fridge, Source::Cabinet, Source::Desk, Source::Wardrobe, Source::Shelf, Source::Register, Source::GunCabinet, Source::HunterCabinet, Source::ToolLocker, Source::SupplyCase, Source::AmmoCage];
+pub const CONTAINERS: [Source; 26] = [
+    Source::Crate,
+    Source::Locker,
+    Source::Car,
+    Source::Cage,
+    Source::Fridge,
+    Source::Cabinet,
+    Source::Desk,
+    Source::Wardrobe,
+    Source::Shelf,
+    Source::Register,
+    Source::GunCabinet,
+    Source::HunterCabinet,
+    Source::ToolLocker,
+    Source::SupplyCase,
+    Source::AmmoCage,
+    Source::GunRack,
+    Source::DisplayCase,
+    Source::GunCage,
+    Source::PoliceLocker,
+    Source::FrontDesk,
+    Source::PoliceArmory,
+    Source::CopCar,
+    Source::FireEngine,
+    Source::FireLocker,
+    Source::MedCabinet,
+    Source::SchoolLocker,
+];
 
 /// One line of a table: what, how likely against the rest, how many.
 pub(super) type Line = (Kind, u32, (u32, u32));
@@ -52,6 +102,8 @@ pub const JUGGERNAUT_DROPS: (u32, u32) = (2, 3);
 /// How one of the dead carries something at all; one of the soldiers.
 pub const CORPSE_CHANCE: f64 = 0.2;
 pub const SOLDIER_CHANCE: f64 = 0.35;
+pub const COP_CHANCE: f64 = 0.3;
+pub const FIREFIGHTER_CHANCE: f64 = 0.25;
 
 impl Source {
     fn table(self) -> &'static [Line] {
@@ -74,6 +126,19 @@ impl Source {
             Source::Soldier => SOLDIER,
             Source::Juggernaut => JUGGERNAUT,
             Source::Corpse => CORPSE,
+            Source::GunRack => GUN_RACK,
+            Source::DisplayCase => DISPLAY_CASE,
+            Source::GunCage => GUN_CAGE,
+            Source::PoliceLocker => POLICE_LOCKER,
+            Source::FrontDesk => FRONT_DESK,
+            Source::PoliceArmory => POLICE_ARMORY,
+            Source::CopCar => COP_CAR,
+            Source::Cop => COP,
+            Source::FireEngine => FIRE_ENGINE,
+            Source::FireLocker => FIRE_LOCKER,
+            Source::MedCabinet => MED_CABINET,
+            Source::SchoolLocker => SCHOOL_LOCKER,
+            Source::Firefighter => FIREFIGHTER,
         }
     }
 
@@ -101,7 +166,17 @@ impl Source {
             Source::SupplyCase => (2, 3),
             Source::AmmoCage => (3, 5),
             Source::Soldier | Source::Juggernaut => (1, 1),
-            Source::Corpse => (1, 1),
+            Source::Corpse | Source::Cop | Source::Firefighter => (1, 1),
+            Source::GunRack => (1, 1),
+            Source::FireEngine => (2, 4),
+            Source::FireLocker => (2, 3),
+            Source::MedCabinet => (1, 3),
+            Source::SchoolLocker => (1, 2),
+            Source::DisplayCase => (1, 2),
+            Source::GunCage | Source::PoliceArmory => (3, 5),
+            Source::PoliceLocker => (2, 3),
+            Source::FrontDesk => (1, 2),
+            Source::CopCar => (2, 3),
         }
     }
 
@@ -124,7 +199,16 @@ impl Source {
             Source::AmmoCage => (5, 4),
             Source::Soldier => (2, 2),
             Source::Juggernaut => (5, 3),
-            Source::Corpse => (2, 2),
+            Source::Corpse | Source::Cop | Source::Firefighter => (2, 2),
+            Source::FireEngine => (6, 4),
+            Source::FireLocker | Source::SchoolLocker => (3, 4),
+            Source::MedCabinet => (3, 3),
+            Source::GunRack => (5, 2),
+            Source::DisplayCase => (5, 2),
+            Source::GunCage | Source::PoliceArmory => (5, 4),
+            Source::PoliceLocker => (3, 4),
+            Source::FrontDesk => (4, 2),
+            Source::CopCar => (6, 3),
         }
     }
 
@@ -146,7 +230,18 @@ impl Source {
             Source::SupplyCase => "SUPPLY CASE",
             Source::AmmoCage => "AMMO CAGE",
             Source::Soldier | Source::Juggernaut => "REMAINS",
-            Source::Corpse => "REMAINS",
+            Source::Corpse | Source::Cop | Source::Firefighter => "REMAINS",
+            Source::FireEngine => "FIRE ENGINE",
+            Source::FireLocker => "TURNOUT LOCKER",
+            Source::MedCabinet => "FIRST AID CABINET",
+            Source::SchoolLocker => "STUDENT LOCKER",
+            Source::GunRack => "GUN RACK",
+            Source::DisplayCase => "DISPLAY CASE",
+            Source::GunCage => "GUN CAGE",
+            Source::PoliceLocker => "POLICE LOCKER",
+            Source::FrontDesk => "FRONT DESK",
+            Source::PoliceArmory => "POLICE ARMORY",
+            Source::CopCar => "PATROL CAR TRUNK",
         }
     }
 
@@ -167,7 +262,15 @@ impl Source {
             Source::SupplyCase => 1.5,
             Source::AmmoCage => 3.0,
             Source::Soldier | Source::Juggernaut => 0.0,
-            Source::Corpse => 0.0,
+            Source::Corpse | Source::Cop | Source::Firefighter => 0.0,
+            Source::FireEngine => 3.0,
+            Source::FireLocker | Source::SchoolLocker => 1.5,
+            Source::MedCabinet => 1.0,
+            Source::GunRack | Source::DisplayCase => 1.5,
+            Source::GunCage | Source::PoliceArmory => 3.0,
+            Source::PoliceLocker => 2.0,
+            Source::FrontDesk => 1.5,
+            Source::CopCar => 2.5,
         }
     }
 }

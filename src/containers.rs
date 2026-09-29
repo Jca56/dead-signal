@@ -24,24 +24,30 @@ pub const REACH: f64 = 2.4;
 pub fn model_name(source: Source) -> &'static str {
     match source {
         Source::Crate => "CONTAINER_Crate",
-        Source::Locker | Source::ToolLocker => "CONTAINER_Locker",
+        Source::Locker | Source::ToolLocker | Source::PoliceLocker | Source::FireLocker => "CONTAINER_Locker",
+        Source::SchoolLocker => "CONTAINER_SchoolLocker",
+        Source::FireEngine => "CONTAINER_FireEngine",
+        Source::MedCabinet => "CONTAINER_MedCabinet",
         Source::Car => "CONTAINER_Car",
-        Source::Cage | Source::AmmoCage => "CONTAINER_Cage",
+        Source::CopCar => "CONTAINER_CopCar",
+        Source::Cage | Source::AmmoCage | Source::GunCage | Source::PoliceArmory => "CONTAINER_Cage",
         Source::Fridge => "CONTAINER_Fridge",
         Source::Cabinet => "CONTAINER_Cabinet",
-        Source::Desk => "CONTAINER_Desk",
+        Source::Desk | Source::FrontDesk => "CONTAINER_Desk",
         Source::Wardrobe => "CONTAINER_Wardrobe",
         Source::Shelf => "CONTAINER_Shelf",
         Source::Register => "CONTAINER_Register",
         Source::GunCabinet | Source::HunterCabinet => "CONTAINER_GunCabinet",
         Source::SupplyCase => "CONTAINER_SupplyCase",
-        Source::Corpse | Source::Soldier | Source::Juggernaut => "",
+        Source::GunRack => "CONTAINER_GunRack",
+        Source::DisplayCase => "CONTAINER_DisplayCase",
+        Source::Corpse | Source::Soldier | Source::Juggernaut | Source::Cop | Source::Firefighter => "",
     }
 }
 
 fn surface(source: Source) -> Surface {
     match source {
-        Source::Crate | Source::Cabinet | Source::Desk | Source::Wardrobe | Source::Register | Source::GunCabinet | Source::HunterCabinet => Surface::Wood,
+        Source::Crate | Source::Cabinet | Source::Desk | Source::FrontDesk | Source::Wardrobe | Source::Register | Source::GunCabinet | Source::HunterCabinet | Source::GunRack => Surface::Wood,
         _ => Surface::Metal,
     }
 }
@@ -54,8 +60,9 @@ pub fn holds_keys(source: Source) -> bool {
 /// The key that opens it, if it's locked.
 pub fn key_for(source: Source) -> Option<Kind> {
     match source {
-        Source::Cage => Some(Kind::Key),
+        Source::Cage | Source::GunCage => Some(Kind::Key),
         Source::AmmoCage => Some(Kind::ArmoryKey),
+        Source::PoliceArmory => Some(Kind::PrecinctKey),
         _ => None,
     }
 }
@@ -178,7 +185,7 @@ pub fn open_up(world: &mut World, e: Entity) {
 /// the cage locked, its key in one locker, car, desk or wardrobe.
 pub fn fill(world: &mut World, seed: u32) {
     let mut dice = Dice(seed | 1);
-    let (mut holders, mut cases) = (Vec::new(), Vec::new());
+    let (mut holders, mut cases, mut desks) = (Vec::new(), Vec::new(), Vec::new());
     for (e, mut c, model) in world.query::<(Entity, &mut Container, Option<&mut Model>)>().iter_mut(world) {
         c.grid = tables::fill(c.source, &mut dice);
         c.searched = false;
@@ -189,13 +196,17 @@ pub fn fill(world: &mut World, seed: u32) {
         if holds_keys(c.source) {
             holders.push(e);
         }
-        if c.source == Source::SupplyCase {
-            cases.push(e);
+        match c.source {
+            Source::SupplyCase => cases.push(e),
+            Source::FrontDesk => desks.push(e),
+            _ => {}
         }
     }
-    // The cage's key in one of the places it can be, the armory's in one of
-    // the wreck's cases (the dead soldiers carry it too, now and then).
-    for (mut holders, key) in [(holders, Kind::Key), (cases, Kind::ArmoryKey)] {
+    // The cage's key in one of the places it can be (it opens the camp's
+    // cage and the gun store's), the armory's in one of the wreck's cases,
+    // the precinct's in the station's front desk (the dead soldiers and
+    // officers carry theirs too, now and then).
+    for (mut holders, key) in [(holders, Kind::Key), (cases, Kind::ArmoryKey), (desks, Kind::PrecinctKey)] {
         if holders.is_empty() {
             continue;
         }

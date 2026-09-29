@@ -43,6 +43,10 @@ const LAB_COAT: Rgb = [0.84, 0.84, 0.82];
 const FLIGHT: [Rgb; 4] = [[0.40, 0.44, 0.32], [0.30, 0.32, 0.20], [0.56, 0.50, 0.38], [0.18, 0.22, 0.34]];
 const FATIGUES: [Rgb; 4] = [[0.29, 0.31, 0.22], [0.36, 0.34, 0.24], [0.24, 0.28, 0.20], [0.52, 0.46, 0.34]];
 const HELMETS: [Rgb; 3] = [[0.24, 0.26, 0.18], [0.30, 0.30, 0.22], [0.48, 0.42, 0.30]];
+const POLICE: [Rgb; 3] = [[0.13, 0.16, 0.28], [0.10, 0.12, 0.20], [0.16, 0.20, 0.34]];
+const POLICE_SLACKS: [Rgb; 2] = [[0.09, 0.10, 0.14], [0.12, 0.14, 0.22]];
+const TURNOUT: [Rgb; 3] = [[0.58, 0.48, 0.26], [0.50, 0.42, 0.24], [0.14, 0.14, 0.15]];
+const FIRE_HELMETS: [Rgb; 3] = [[0.62, 0.12, 0.08], [0.78, 0.62, 0.12], [0.10, 0.10, 0.11]];
 
 fn pick<T: Copy>(dice: &mut Dice, from: &[T]) -> T {
     from[dice.next() as usize % from.len()]
@@ -246,8 +250,26 @@ impl Looks {
                 self.pack = dice.unit() < 0.45;
                 self.hat(dice, 0.7, &[Crown::Helmet], &HELMETS);
             }
+            Theme::Cop => {
+                self.top = Top::Collar;
+                self.colors[TOP] = pick(dice, &POLICE);
+                self.colors[BOTTOM] = pick(dice, &POLICE_SLACKS);
+                self.legs = Legs::Boots;
+                self.vest = dice.unit() < 0.45;
+                self.hat(dice, 0.5, &[Crown::Cap], &POLICE_SLACKS);
+            }
+            Theme::Firefighter => {
+                // A turnout coat hanging open over a navy shirt, trousers to
+                // match, boots, the helmet (mostly).
+                self.top = Top::Jacket;
+                self.colors[TOP] = pick(dice, &TURNOUT);
+                self.colors[UNDER] = POLICE[0];
+                self.colors[BOTTOM] = self.colors[TOP];
+                self.legs = Legs::Boots;
+                self.hat(dice, 0.7, &[Crown::Helmet], &FIRE_HELMETS);
+            }
         }
-        if self.top == Top::Plain && theme != Theme::Soldier && dice.unit() < 0.15 {
+        if self.top == Top::Plain && !matches!(theme, Theme::Soldier | Theme::Cop | Theme::Firefighter) && dice.unit() < 0.15 {
             // A tee left in the wash too long.
             self.colors[TOP] = [0.66, 0.64, 0.58];
         }

@@ -4,47 +4,48 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 
 | Item | Size | Stack | Rarity | Value | Found in | Flavor |
 |---|---|---|---|---|---|---|
-| 9MM ROUNDS | 1×1 | 30 | Common | $2 | crate, locker, car, cage, drawers, desk, wardrobe, shelf, register, gun cabinet, tool locker, supply case, ammo cage, zombies, soldiers, lying about | Brass, for the only conversation the dead still understand. |
-| BANDAGE | 1×1 | 3 | Common | $15 | crate, locker, drawers, wardrobe, shelf, supply case, zombies, soldiers, lying about | Clean-ish. Wrap it tight and don't look. |
-| MEDKIT | 2×1 | 1 | Uncommon | $60 | locker, cage, wardrobe, supply case, ammo cage, soldiers, juggernaut, lying about | Somebody packed this for a bad day. Today qualifies. |
-| CANNED BEANS | 1×1 | 1 | Common | $10 | crate, car, fridge, drawers, shelf | Best before the end of the world. Still fine. |
-| WATER | 1×2 | 1 | Common | $12 | crate, car, fridge, shelf | Sealed. Worth more than it used to be. |
-| ANTIBIOTICS | 1×1 | 1 | Uncommon | $45 | crate, locker, fridge, drawers, desk, shelf, supply case, zombies | Half a bottle. Someone never finished the course. |
-| CASH | 1×1 | 50 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, hunter's cabinet, supply case, zombies, soldiers, juggernaut | Nobody takes it anymore. Everybody still wants it. |
-| WATCH | 1×1 | 1 | Rare | $120 | locker, car, cage, drawers, desk, wardrobe, register, zombies | Still ticking. Doesn't know what it's counting down to. |
-| RADIO | 1×2 | 1 | Rare | $150 | locker, car, cage, desk, supply case | Static on every channel. Every channel but one. |
-| CAR BATTERY | 2×2 | 1 | Rare | $180 | car, cage, shelf, tool locker, supply case | Heavy, leaking, and the closest thing left to electricity. |
-| FUEL CAN | 2×2 | 1 | Uncommon | $90 | crate, car, shelf, tool locker | Half full. Smells like the old world. |
+| 9MM ROUNDS | 1×1 | 30 | Common | $2 | crate, locker, car, cage, drawers, desk, wardrobe, shelf, register, gun cabinet, tool locker, supply case, ammo cage, zombies, soldiers, gun rack, display case, gun cage, police locker, front desk, police armory, patrol car, cops, student locker, lying about | Brass, for the only conversation the dead still understand. |
+| BANDAGE | 1×1 | 3 | Common | $15 | crate, locker, drawers, wardrobe, shelf, supply case, zombies, soldiers, police locker, front desk, patrol car, cops, fire engine, turnout locker, first aid cabinet, student locker, firefighters, lying about | Clean-ish. Wrap it tight and don't look. |
+| MEDKIT | 2×1 | 1 | Uncommon | $60 | locker, cage, wardrobe, supply case, ammo cage, soldiers, juggernaut, police locker, patrol car, fire engine, turnout locker, first aid cabinet, firefighters, lying about | Somebody packed this for a bad day. Today qualifies. |
+| CANNED BEANS | 1×1 | 1 | Common | $10 | crate, car, fridge, drawers, shelf, turnout locker, student locker | Best before the end of the world. Still fine. |
+| WATER | 1×2 | 1 | Common | $12 | crate, car, fridge, shelf, fire engine, turnout locker, student locker, firefighters | Sealed. Worth more than it used to be. |
+| ANTIBIOTICS | 1×1 | 1 | Uncommon | $45 | crate, locker, fridge, drawers, desk, shelf, supply case, zombies, front desk, fire engine, turnout locker, first aid cabinet, student locker, firefighters | Half a bottle. Someone never finished the course. |
+| CASH | 1×1 | 50 | Uncommon | $50 | crate, locker, car, drawers, desk, wardrobe, register, gun cabinet, hunter's cabinet, supply case, zombies, soldiers, juggernaut, police locker, front desk, patrol car, cops, turnout locker, student locker, firefighters | Nobody takes it anymore. Everybody still wants it. |
+| WATCH | 1×1 | 1 | Rare | $120 | locker, car, cage, drawers, desk, wardrobe, register, zombies, front desk, turnout locker, student locker | Still ticking. Doesn't know what it's counting down to. |
+| RADIO | 1×2 | 1 | Rare | $150 | locker, car, cage, desk, supply case, front desk, patrol car, cops, fire engine, student locker | Static on every channel. Every channel but one. |
+| CAR BATTERY | 2×2 | 1 | Rare | $180 | car, cage, shelf, tool locker, supply case, front desk, fire engine | Heavy, leaking, and the closest thing left to electricity. |
+| FUEL CAN | 2×2 | 1 | Uncommon | $90 | crate, car, shelf, tool locker, fire engine | Half full. Smells like the old world. |
 | GOLD RING | 1×1 | 1 | Epic | $300 | locker, cage, wardrobe, zombies | Engraved inside: "forever." Well. |
 | GOLD CHAIN | 1×1 | 1 | Epic | $350 | car, cage, desk, wardrobe | Off someone who didn't need it anymore. |
-| CAGE KEY | 1×1 | 1 | Rare | $25 | one locker, car, desk or wardrobe each run | Tagged SUPPLY. Someone locked up the good stuff and never came back. |
+| CAGE KEY | 1×1 | 1 | Rare | $25 | one locker, car, desk or wardrobe each run | Tagged SUPPLY. Fits the army camp's cage, and the one in the back of the gun store. Someone locked up the good stuff and never came back. |
 | GOLD BAR | 2×1 | 1 | Legendary | $1000 | cage, juggernaut | Useless, heavy, and absolutely coming home with you. |
-| PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe, gun cabinet, ammo cage | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
-| SHOTGUN | 4×1 | 1 | Rare | $320 | car, cage, wardrobe, gun cabinet, hunter's cabinet, ammo cage, juggernaut | Five shells and a very loud opinion. Rack it and they all come running. |
-| 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, hunter's cabinet, tool locker, ammo cage, zombies, soldiers, juggernaut | Red paper, brass base, a fistful of lead. Loaded one at a time. |
-| HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage, juggernaut | Bolt-action, 4× glass. One round, one less of them, and often the one behind it. |
-| .308 ROUNDS | 1×1 | 20 | Uncommon | $8 | cage, gun cabinet, hunter's cabinet, supply case, ammo cage, soldiers, juggernaut | Heavy brass. Every one of them should count. |
-| SMG | 3×1 | 1 | Rare | $380 | locker, cage, supply case, ammo cage | Thirty rounds of 9mm and an opinion about all of them. Hold the trigger and mean it. |
-| ASSAULT RIFLE | 5×1 | 1 | Epic | $650 | cage, ammo cage, juggernaut | The soldiers didn't need it anymore. B switches between full auto and a round a pull. |
-| 5.56 ROUNDS | 1×1 | 30 | Uncommon | $5 | cage, supply case, ammo cage, soldiers, juggernaut | Military surplus. The surplus part is new. |
+| PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe, gun cabinet, ammo cage, gun rack, display case, police locker, police armory, cops | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
+| SHOTGUN | 4×1 | 1 | Rare | $320 | car, cage, wardrobe, gun cabinet, hunter's cabinet, ammo cage, juggernaut, gun rack, gun cage, police armory, patrol car | Five shells and a very loud opinion. Rack it and they all come running. |
+| 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, hunter's cabinet, tool locker, ammo cage, zombies, soldiers, juggernaut, gun rack, display case, police locker, police armory, patrol car, cops | Red paper, brass base, a fistful of lead. Loaded one at a time. |
+| HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage, juggernaut, gun rack, gun cage | Bolt-action, 4× glass. One round, one less of them, and often the one behind it. |
+| .308 ROUNDS | 1×1 | 20 | Uncommon | $8 | cage, gun cabinet, hunter's cabinet, supply case, ammo cage, soldiers, juggernaut, gun rack, display case | Heavy brass. Every one of them should count. |
+| SMG | 3×1 | 1 | Rare | $380 | locker, cage, supply case, ammo cage, gun cage, police armory | Thirty rounds of 9mm and an opinion about all of them. Hold the trigger and mean it. |
+| ASSAULT RIFLE | 5×1 | 1 | Epic | $650 | cage, ammo cage, juggernaut, gun cage, police armory | The soldiers didn't need it anymore. B switches between full auto and a round a pull. |
+| 5.56 ROUNDS | 1×1 | 30 | Uncommon | $5 | cage, supply case, ammo cage, soldiers, juggernaut, display case, gun cage, police armory | Military surplus. The surplus part is new. |
 | MOLOTOV | 2×1 | 2 | Uncommon | $45 | crate, car, drawers, tool locker, ammo cage | A bottle, a rag, and a bad idea done well. Hold G to aim, let go to throw: a pool of fire that the dead walk into and keep burning after. |
-| PIPE BOMB | 2×1 | 2 | Rare | $90 | cage, tool locker, supply case, ammo cage, soldiers | It beeps, and every one of the dead near enough drops what it's doing to go and listen. Then it stops beeping. |
-| BIKE HELMET | 2×2 | 1 | Common | $40 | crate, locker, car, wardrobe, shelf | Worn on the head: 15 armor. Better than a bare skull; not by a lot. |
-| MILITARY HELMET | 2×2 | 1 | Rare | $180 | cage, supply case, ammo cage, soldiers | Worn on the head: 40 armor. Medium weight. Its last owner didn't need it anymore, and neither did their head. |
-| LIGHT VEST | 3×3 | 1 | Uncommon | $150 | locker, car, cage, wardrobe, supply case | Worn on the chest: 40 armor. Medium weight. Soft, and stops most of a swipe. |
-| PLATE CARRIER | 3×3 | 1 | Epic | $450 | cage, ammo cage, juggernaut | Worn on the chest: 80 armor. Heavy: a slower sprint, a shorter breath, louder feet. Worth it. |
+| PIPE BOMB | 2×1 | 2 | Rare | $90 | cage, tool locker, supply case, ammo cage, soldiers, gun cage, police armory | It beeps, and every one of the dead near enough drops what it's doing to go and listen. Then it stops beeping. |
+| BIKE HELMET | 2×2 | 1 | Common | $40 | crate, locker, car, wardrobe, shelf, student locker | Worn on the head: 15 armor. Better than a bare skull; not by a lot. |
+| MILITARY HELMET | 2×2 | 1 | Rare | $180 | cage, supply case, ammo cage, soldiers, gun cage, police locker, police armory | Worn on the head: 40 armor. Medium weight. Its last owner didn't need it anymore, and neither did their head. |
+| LIGHT VEST | 3×3 | 1 | Uncommon | $150 | locker, car, cage, wardrobe, supply case, police locker, police armory, patrol car, cops | Worn on the chest: 40 armor. Medium weight. Soft, and stops most of a swipe. |
+| PLATE CARRIER | 3×3 | 1 | Epic | $450 | cage, ammo cage, juggernaut, gun cage, police armory | Worn on the chest: 80 armor. Heavy: a slower sprint, a shorter breath, louder feet. Worth it. |
 | CHEST RIG | 3×2 | 1 | Uncommon | $120 | locker, cage, supply case | Worn on the chest: a 4×2 grid of pouches. No armor, all pockets. |
 | ARMORED RIG | 3×3 | 1 | Rare | $320 | cage, supply case, ammo cage | Worn on the chest: 50 armor and a 3×2 grid of pouches. Medium weight. The best of both, most of each. |
-| DAYPACK | 3×3 | 1 | Common | $60 | crate, locker, car, wardrobe, shelf | Worn on the back: a 4×3 backpack. School's out forever. |
+| DAYPACK | 3×3 | 1 | Common | $60 | crate, locker, car, wardrobe, shelf, student locker | Worn on the back: a 4×3 backpack. School's out forever. |
 | RUCKSACK | 3×4 | 1 | Uncommon | $140 | locker, car, cage, wardrobe, supply case | Worn on the back: a 6×4 backpack. |
 | HIKING PACK | 4×4 | 1 | Rare | $260 | cage, wardrobe | Worn on the back: a 7×5 backpack. Medium weight. A sleeping roll on top nobody will sleep on again. |
 | MILITARY RUCK | 4×5 | 1 | Epic | $420 | cage, ammo cage | Worn on the back: an 8×6 backpack. Medium weight. Carries a whole run home. |
-| CARGO PANTS | 2×2 | 1 | Uncommon | $90 | locker, drawers, wardrobe, shelf, soldiers | Worn on the legs: pockets one bigger each way. What's in your pockets is kept even if you die, so these are worth more than they look. |
-| BANDOLIER | 2×1 | 1 | Uncommon | $70 | locker, gun cabinet, hunter's cabinet, ammo cage, soldiers | Worn on the belt: a 4×1 grid that holds rounds only, to hand for reloading. |
-| ARMOR PLATE | 2×2 | 1 | Uncommon | $70 | cage, supply case, ammo cage, soldiers, juggernaut | Hold 6 to slot it in: 40 armor back on what you wear. |
-| TACTICAL KNIFE | 2×1 | 1 | Uncommon | $90 | locker, cage, tool locker, supply case, ammo cage, zombies, soldiers | Quiet work. One that never saw you coming never will. |
-| MACHETE | 3×1 | 1 | Uncommon | $110 | car, tool locker | For brush, once. Swing it again and it comes back the other way. |
-| FIRE AXE | 4×1 | 1 | Rare | $160 | hunter's cabinet, tool locker | Break glass in case of emergency. Everything is the emergency now. |
+| CARGO PANTS | 2×2 | 1 | Uncommon | $90 | locker, drawers, wardrobe, shelf, soldiers, turnout locker | Worn on the legs: pockets one bigger each way. What's in your pockets is kept even if you die, so these are worth more than they look. |
+| BANDOLIER | 2×1 | 1 | Uncommon | $70 | locker, gun cabinet, hunter's cabinet, ammo cage, soldiers, gun rack, display case | Worn on the belt: a 4×1 grid that holds rounds only, to hand for reloading. |
+| ARMOR PLATE | 2×2 | 1 | Uncommon | $70 | cage, supply case, ammo cage, soldiers, juggernaut, gun cage, police locker, police armory | Hold 6 to slot it in: 40 armor back on what you wear. |
+| PRECINCT KEY | 1×1 | 1 | Rare | $40 | one police front desk each run, cops now and then | A brass star on a navy tag. The station kept its long guns behind a door only this opens. |
+| TACTICAL KNIFE | 2×1 | 1 | Uncommon | $90 | locker, cage, tool locker, supply case, ammo cage, zombies, soldiers, display case, police locker, student locker | Quiet work. One that never saw you coming never will. |
+| MACHETE | 3×1 | 1 | Uncommon | $110 | car, tool locker, display case | For brush, once. Swing it again and it comes back the other way. |
+| FIRE AXE | 4×1 | 1 | Rare | $160 | hunter's cabinet, tool locker, fire engine, turnout locker, firefighters | Break glass in case of emergency. Everything is the emergency now. |
 | ARMORY KEY | 1×1 | 1 | Rare | $40 | one supply case each run, soldiers now and then | Stamped PROVING GROUND. Whatever they were testing, they kept the rounds for it locked up. |
 
 ## Rarity

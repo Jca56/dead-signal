@@ -43,6 +43,7 @@ pub fn barn(dice: &mut Dice, w: i32, d: i32) -> Plan {
         flat_roof: false,
         ridge_along_x: false,
         ridge: BARN_RIDGE,
+        bars: Vec::new(),
     };
     plan.walls = plan::walls_of(&plan.rooms, 0);
     let middle = f64::from(w) * 0.5;
@@ -66,7 +67,7 @@ pub fn barn(dice: &mut Dice, w: i32, d: i32) -> Plan {
 /// One room `w` (odd, for a doorway in its middle) by `d`, of `kind` and
 /// for `use_`, a flat roof.
 fn one_room(kind: Kind, use_: Use, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind, w, d, storeys: 1, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_ }], walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true, ridge: plan::RIDGE };
+    let mut plan = Plan { kind, w, d, storeys: 1, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_ }], walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true, ridge: plan::RIDGE, bars: Vec::new() };
     plan.walls = plan::walls_of(&plan.rooms, 0);
     plan
 }
@@ -114,7 +115,7 @@ pub fn armory(dice: &mut Dice, w: i32, d: i32) -> Plan {
 /// bedroom through a doorway at its side.
 pub fn cabin(dice: &mut Dice, w: i32, d: i32) -> Plan {
     let bed = 3;
-    let mut plan = Plan { kind: Kind::Cabin, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: plan::RIDGE };
+    let mut plan = Plan { kind: Kind::Cabin, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: plan::RIDGE, bars: Vec::new() };
     plan.rooms.push(Room { storey: 0, x0: 0, z0: 0, x1: w - bed, z1: d, use_: Use::Den });
     plan.rooms.push(Room { storey: 0, x0: w - bed, z0: 0, x1: w, z1: d, use_: Use::Bed });
     let door = f64::from(plan::between(dice, 1, d - 2)) + 0.5;

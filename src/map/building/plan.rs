@@ -50,6 +50,12 @@ pub enum Kind {
     Garage,
     Office,
     Armory,
+    /// In town (`landmark.rs`): the gun store, the police station, the
+    /// fire station, the school.
+    GunStore,
+    Police,
+    FireStation,
+    School,
 }
 
 /// What a room is for.
@@ -71,6 +77,22 @@ pub enum Use {
     Garage,
     Office,
     Armory,
+    /// The gun store's floor: glass cases across it, racks on its walls.
+    GunShop,
+    /// The police station's: its lobby (the front desk), the corridor
+    /// before its cells, a cell, its locker room.
+    Lobby,
+    CellBlock,
+    Cell,
+    LockerRoom,
+    /// The fire station's engine bay.
+    Bay,
+    /// The school's: a classroom, a corridor lined with lockers, the
+    /// nurse's office, the gym.
+    Classroom,
+    Corridor,
+    Nurse,
+    Gym,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -152,6 +174,9 @@ pub struct Plan {
     pub flat_roof: bool,
     pub ridge_along_x: bool,
     pub ridge: f64,
+    /// Walls of bars (a cell's front), by their place in `walls`: seen
+    /// and shot through, never walked through but at their doorways.
+    pub bars: Vec<usize>,
 }
 
 /// A cut to make across a region: along x (at z) or along z (at x), and
@@ -262,7 +287,7 @@ pub(super) fn walls_of(rooms: &[Room], storey: u8) -> Vec<Wall> {
 
 /// The wall on `storey` along the line `(along_x, at)` holding `centre`,
 /// with a room each side (for a doorway between them).
-fn wall_at(walls: &[Wall], storey: u8, along_x: bool, at: i32, centre: f64) -> Option<usize> {
+pub(super) fn wall_at(walls: &[Wall], storey: u8, along_x: bool, at: i32, centre: f64) -> Option<usize> {
     walls.iter().position(|w| w.storey == storey && w.along_x == along_x && w.at == at && f64::from(w.from) < centre && f64::from(w.to) > centre)
 }
 
@@ -288,7 +313,7 @@ pub(super) fn spots_along(plan: &Plan, w: usize, width: f64, every: f64) -> Vec<
 
 /// A house `w` by `d`, of one storey or two.
 pub fn house(dice: &mut Dice, w: i32, d: i32, two: bool) -> Plan {
-    let mut plan = Plan { kind: Kind::House, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE };
+    let mut plan = Plan { kind: Kind::House, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE, bars: Vec::new() };
     let two = two && d >= 8 && w >= HALL + 2 * MIN_ROOM;
     let mut cuts = Vec::new();
     let mut rects = Vec::new();
@@ -370,7 +395,7 @@ pub fn house(dice: &mut Dice, w: i32, d: i32, two: bool) -> Plan {
 
 /// A store `w` by `d`: the shop floor at the front, a back room.
 pub fn store(dice: &mut Dice, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind: Kind::Store, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true, ridge: RIDGE };
+    let mut plan = Plan { kind: Kind::Store, w, d, storeys: 1, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true, ridge: RIDGE, bars: Vec::new() };
     let back = 4.min(d - MIN_ROOM - 5).max(MIN_ROOM);
     plan.rooms.push(Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d - back, use_: Use::Shop });
     plan.rooms.push(Room { storey: 0, x0: 0, z0: d - back, x1: w, z1: d, use_: Use::Back });
@@ -380,7 +405,7 @@ pub fn store(dice: &mut Dice, w: i32, d: i32) -> Plan {
 
 /// A house boarded up all round, nothing inside worth drawing.
 pub fn shell(dice: &mut Dice, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind: Kind::Shell, w, d, storeys: 1, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_: Use::Hall }], walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE };
+    let mut plan = Plan { kind: Kind::Shell, w, d, storeys: 1, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_: Use::Hall }], walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE, bars: Vec::new() };
     plan.walls = walls_of(&plan.rooms, 0);
     for i in 0..plan.walls.len() {
         let spots = spots_along(&plan, i, 1.2, 3.0);

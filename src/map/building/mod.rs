@@ -1,11 +1,13 @@
 //! Buildings: a floor plan (`plan.rs`, and out in the country
-//! `country.rs`), the blocks it's built of (`shape.rs`), and what's put in
-//! its rooms (`furnish.rs`); each set down on the map square to the
+//! `country.rs`, the town's landmarks `landmark.rs`), the blocks it's
+//! built of (`shape.rs`), and what's put in its rooms (`furnish.rs`); each set down on the map square to the
 //! walking grid, turned a whole quarter.
 
 pub mod country;
 pub mod furnish;
+pub mod landmark;
 pub mod plan;
+mod program;
 pub mod shape;
 
 use lntrn_math::{Vec2, Vec3};

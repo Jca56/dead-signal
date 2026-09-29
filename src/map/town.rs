@@ -3,16 +3,20 @@
 //! cross streets run the plot's width, out into the country. Lots are
 //! packed along every street, each side, wherever one fits clear of the
 //! streets and the lots already laid (the main street's first), each with
-//! a building set back from its street, facing it. Stores stand near the
-//! middle of the main street, houses round them (some of two storeys, some
-//! boarded up), and a few lots lie empty. Cars are left parked along the
-//! kerbs.
+//! a building set back from its street, facing it. The landmarks
+//! (`building/landmark.rs`) have their lots first: the gun store
+//! downtown, the police station on the main street past it (its patrol
+//! cars out front), the fire station and the school off the middle. Then
+//! stores near the middle of the main street, houses round them (some of
+//! two storeys, some boarded up), and a few lots lie empty. Cars are left
+//! parked along the kerbs.
 //!
 //! The streets are plain data ([`Street`]), so a smaller place (a village
 //! of one street and a crossing) can be laid out the same way.
 
 use lntrn_math::Vec2;
 
+use super::building::landmark::Landmark;
 use super::building::{Building, plan};
 use super::roads::Kind as RoadKind;
 use super::sites::Site;
@@ -65,32 +69,37 @@ impl Street {
 }
 
 /// A lot: the middle of its front edge and which way is out to its street
-/// (in the town's frame), how wide along the street, and whether it's on
-/// the main street near the middle.
+/// (in the town's frame), how wide along the street and how deep, whether
+/// it's on the main street (and near the middle), and the landmark it's
+/// for, if it is.
 struct Lot {
     front: Vec2,
     out: Vec2,
     frontage: f64,
+    depth: f64,
     main: bool,
     downtown: bool,
+    landmark: Option<Landmark>,
 }
 
 impl Lot {
     /// The ground it covers, as a box (lo, hi).
     fn bounds(&self) -> (Vec2, Vec2) {
         let along = Vec2::new(self.out.y.abs(), self.out.x.abs()) * (self.frontage * 0.5);
-        let back = self.front - self.out * LOT_DEPTH;
+        let back = self.front - self.out * self.depth;
         let (a, b) = (self.front - along, back + along);
         (a.min(b), a.max(b))
     }
 }
 
 /// The town laid out: its streets but the main one (each a line, flat, on
-/// the map), its buildings, and cars parked (each a spot).
+/// the map), its buildings, cars parked (each a spot), and where each of
+/// its landmarks stands (the middle of its floor, on the map).
 pub struct Town {
     pub streets: Vec<Vec<Vec2>>,
     pub buildings: Vec<Building>,
     pub cars: Vec<(Source, super::Spot)>,
+    pub landmarks: Vec<(Landmark, Vec2)>,
 }
 
 fn between(dice: &mut Dice, lo: f64, hi: f64) -> f64 {
@@ -119,27 +128,66 @@ pub fn grid(half: Vec2) -> Vec<Street> {
     out
 }
 
-/// Lots packed along each of `streets`, each side, in turn: wherever one
-/// fits on the plot (`half`), clear of every street and every lot already
-/// laid.
+/// Where a landmark may stand: on which streets (by their place in the
+/// grid), and how far from the middle of the town along them, least and
+/// most (shares of the plot's half length).
+fn wanted(landmark: Landmark) -> (&'static [usize], (f64, f64)) {
+    match landmark {
+        // Downtown on the main street.
+        Landmark::GunStore => (&[0], (0.0, DOWNTOWN)),
+        // On the main street past downtown, where it's houses.
+        Landmark::Police => (&[0], (DOWNTOWN, 0.95)),
+        // Off the middle: on a back street, or out on a cross street.
+        Landmark::FireStation => (&[1, 2, 3, 6], (0.0, 0.8)),
+        Landmark::School => (&[1, 2], (0.0, 0.6)),
+    }
+}
+
+/// How far a landmark stands back from its street.
+const LANDMARK_SETBACK: f64 = 2.0;
+
+/// Whether `lot` fits on the plot (`half`), clear of every street and of
+/// every lot in `laid`.
+fn fits(lot: &Lot, streets: &[Street], half: Vec2, laid: &[Lot]) -> bool {
+    let (lo, hi) = lot.bounds();
+    let on_plot = lo.x > -half.x + 2.0 && hi.x < half.x - 2.0 && lo.y > -half.y + 2.0 && hi.y < half.y - 2.0;
+    on_plot && streets.iter().all(|t| !overlaps((lo, hi), t.bounds(VERGE - 0.01), 0.0)) && laid.iter().all(|o| !overlaps((lo, hi), o.bounds(), LOT_GAP))
+}
+
+/// Lots: first each landmark's (somewhere it may stand, as it fits), then
+/// packed along each of `streets`, each side, in turn, wherever one fits.
 fn lots(dice: &mut Dice, streets: &[Street], half: Vec2) -> Vec<Lot> {
     let hy = half.y;
     let mut out: Vec<Lot> = Vec::new();
+    let side_of = |s: &Street, side: f64| (if s.along_y { Vec2::new(-side, 0.0) } else { Vec2::new(0.0, -side) }, s.at + side * (s.half + VERGE));
+    for landmark in Landmark::ALL {
+        let (on, (near, far)) = wanted(landmark);
+        let (w, d) = landmark.size();
+        let (frontage, depth) = (f64::from(w) + 2.0, f64::from(d) + LANDMARK_SETBACK + 1.0);
+        for _ in 0..400 {
+            let s = &streets[on[dice.next() as usize % on.len()]];
+            let side = if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+            let (out_dir, edge) = side_of(s, side);
+            let off = between(dice, near * hy, far * hy) * if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+            let mid = off.clamp(s.from, s.to).round();
+            let front = if s.along_y { Vec2::new(edge, mid) } else { Vec2::new(mid, edge) };
+            let lot = Lot { front, out: out_dir, frontage, depth, main: s.main, downtown: false, landmark: Some(landmark) };
+            if fits(&lot, streets, half, &out) {
+                out.push(lot);
+                break;
+            }
+        }
+    }
     for s in streets {
         for side in [-1.0, 1.0] {
-            // Out from the lot to the street.
-            let out_dir = if s.along_y { Vec2::new(-side, 0.0) } else { Vec2::new(0.0, -side) };
-            let edge = s.at + side * (s.half + VERGE);
+            let (out_dir, edge) = side_of(s, side);
             let mut u = s.from;
             while u < s.to {
                 let frontage = between(dice, FRONTAGE.0, FRONTAGE.1).round();
                 let mid = u + frontage * 0.5;
                 let front = if s.along_y { Vec2::new(edge, mid) } else { Vec2::new(mid, edge) };
-                let lot = Lot { front, out: out_dir, frontage, main: s.main, downtown: s.main && mid.abs() < DOWNTOWN * hy };
-                let (lo, hi) = lot.bounds();
-                let on_plot = lo.x > -half.x + 2.0 && hi.x < half.x - 2.0 && lo.y > -half.y + 2.0 && hi.y < half.y - 2.0;
-                let clear = on_plot && streets.iter().all(|t| !overlaps((lo, hi), t.bounds(VERGE - 0.01), 0.0)) && out.iter().all(|o| !overlaps((lo, hi), o.bounds(), LOT_GAP));
-                if clear {
+                let lot = Lot { front, out: out_dir, frontage, depth: LOT_DEPTH, main: s.main, downtown: s.main && mid.abs() < DOWNTOWN * hy, landmark: None };
+                if fits(&lot, streets, half, &out) {
                     out.push(lot);
                     u += frontage;
                 } else {
@@ -167,7 +215,33 @@ pub fn lay_out(dice: &mut Dice, site: &Site) -> Town {
     // A building on most lots: fewer off the main street, and more of
     // those boarded up.
     let mut buildings = Vec::new();
+    let mut cars = Vec::new();
+    let mut landmarks = Vec::new();
     for lot in lots(dice, &grid, plot.half) {
+        if let Some(landmark) = lot.landmark {
+            let seed = dice.next();
+            let plan = landmark.plan(&mut Dice(seed | 1));
+            let (w, d) = (f64::from(plan.w), f64::from(plan.d));
+            let b = Building::facing(plan, plot, lot.front - lot.out * LANDMARK_SETBACK, lot.out, seed);
+            let middle = b.world(lntrn_math::Vec3::new(w * 0.5, 0.0, d * 0.5));
+            landmarks.push((landmark, Vec2::new(middle.x, middle.z)));
+            buildings.push(b);
+            // The patrol cars out front of the station, at the kerb.
+            if landmark == Landmark::Police {
+                let along = Vec2::new(lot.out.y.abs(), lot.out.x.abs());
+                let kerb = lot.front + lot.out * (VERGE + 1.0);
+                for k in [-1.0, 1.0] {
+                    if k > 0.0 && dice.unit() < 0.4 {
+                        continue;
+                    }
+                    let at = plot.world(kerb + along * (k * (3.0 + dice.unit() * 2.0)));
+                    let dir = plot.world(along) - plot.centre;
+                    let yaw = (-dir.y).atan2(dir.x) + (dice.unit() - 0.5) * 0.2;
+                    cars.push((Source::CopCar, (at.x, at.y, yaw, plot.height + 3.0)));
+                }
+            }
+            continue;
+        }
         let (empty, shells) = if lot.main { (0.08, 0.1) } else { (0.15, 0.18) };
         if dice.unit() < empty {
             continue;
@@ -189,7 +263,6 @@ pub fn lay_out(dice: &mut Dice, site: &Site) -> Town {
     }
 
     // Cars left at the kerbs, a couple down each street but the main one.
-    let mut cars = Vec::new();
     for s in grid.iter().filter(|s| !s.main) {
         for _ in 0..2 {
             let u = between(dice, s.from + 8.0, s.to - 8.0);
@@ -205,7 +278,7 @@ pub fn lay_out(dice: &mut Dice, site: &Site) -> Town {
             cars.push((Source::Car, (at.x, at.y, yaw, plot.height + 3.0)));
         }
     }
-    Town { streets, buildings, cars }
+    Town { streets, buildings, cars, landmarks }
 }
 
 #[cfg(test)]
@@ -227,7 +300,11 @@ mod tests {
                 let town = lay_out(&mut dice, &site);
                 let streets = grid(half);
                 assert!(town.buildings.len() >= 45, "seed {seed}: {} buildings", town.buildings.len());
-                assert!(town.buildings.iter().filter(|b| b.plan.kind == plan::Kind::Store).count() >= 4, "seed {seed}: too few stores");
+                assert!(town.buildings.iter().filter(|b| matches!(b.plan.kind, plan::Kind::Store | plan::Kind::GunStore)).count() >= 4, "seed {seed}: too few stores");
+                for landmark in Landmark::ALL {
+                    assert_eq!(town.landmarks.iter().filter(|(l, _)| *l == landmark).count(), 1, "seed {seed}: no {landmark:?}");
+                }
+                assert!(town.cars.iter().any(|(s, _)| *s == Source::CopCar), "seed {seed}: no patrol car");
                 assert_eq!(town.streets.len(), streets.len() - 1, "every street but the main one laid as a road");
                 for (i, a) in town.buildings.iter().enumerate() {
                     // Within the plot, off every street.

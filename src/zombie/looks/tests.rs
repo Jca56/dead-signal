@@ -34,7 +34,7 @@ fn some_are_missing_bits_but_most_are_whole() {
 
 #[test]
 fn what_is_worn_fits_what_it_is_worn_with() {
-    let all: Vec<Looks> = [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Drifter].iter().flat_map(|&t| many(t)).collect();
+    let all: Vec<Looks> = [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Cop, Theme::Firefighter, Theme::Drifter].iter().flat_map(|&t| many(t)).collect();
     for l in &all {
         assert!(!(l.headless() && l.crown.is_some()), "a hat with no head");
         assert!(l.top != Top::Tank || l.sleeve == Sleeve::Bare, "sleeves on a vest top");
@@ -51,7 +51,7 @@ fn every_part_is_in_the_model() {
     let gltf = lntrn_model::Gltf::load(path).expect("shambler.glb");
     let names: std::collections::HashSet<String> = gltf.nodes.iter().filter(|n| n.mesh.is_some()).filter_map(|n| n.name.clone()).collect();
     let mut used = std::collections::HashSet::new();
-    let themes = [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Drifter];
+    let themes = [Theme::Townsfolk, Theme::Farmhand, Theme::Hunter, Theme::Mechanic, Theme::Staff, Theme::Pilot, Theme::Soldier, Theme::Cop, Theme::Firefighter, Theme::Drifter];
     let specials = (0..50u32).flat_map(|i| [Looks::ripper(&mut Dice(i * 7919 + 1)), Looks::spitter(&mut Dice(i * 7919 + 1)), Looks::juggernaut(&mut Dice(i * 7919 + 1))]);
     for l in themes.into_iter().flat_map(many).chain(specials) {
         for part in l.parts() {

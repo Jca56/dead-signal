@@ -112,7 +112,15 @@ impl Combat {
             }
             return;
         }
-        let (source, chance) = if game.world.get::<zombie::Soldier>(e).is_some() { (Source::Soldier, tables::SOLDIER_CHANCE) } else { (Source::Corpse, tables::CORPSE_CHANCE) };
+        let (source, chance) = if game.world.get::<zombie::Soldier>(e).is_some() {
+            (Source::Soldier, tables::SOLDIER_CHANCE)
+        } else if game.world.get::<zombie::Cop>(e).is_some() {
+            (Source::Cop, tables::COP_CHANCE)
+        } else if game.world.get::<zombie::Firefighter>(e).is_some() {
+            (Source::Firefighter, tables::FIREFIGHTER_CHANCE)
+        } else {
+            (Source::Corpse, tables::CORPSE_CHANCE)
+        };
         let chance = chance * game.world.get::<zombie::brain::Zombie>(e).map_or(1.0, |z| z.kind.traits().loot);
         if self.loot.unit() >= chance {
             return;

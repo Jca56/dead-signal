@@ -153,20 +153,28 @@ pub fn place_gas(dice: &mut Dice, plan: &mut Plan, line: &[Vec2]) {
                 (i < nearest) == before && d > 0.5 * HALF && d < 0.77 * HALF && line[i].x.abs().max(line[i].y.abs()) < EDGE - 50.0 && square(i)
             })
             .collect();
-        if spots.is_empty() {
-            continue;
+        // A few tries: the highway must keep off the rest of its plot (a
+        // bend can swing back through it).
+        for _ in 0..12 {
+            if spots.is_empty() {
+                break;
+            }
+            let i = spots[dice.next() as usize % spots.len()];
+            let dir = (line[i + 1] - line[i - 1]) * (1.0 / (line[i + 1] - line[i - 1]).length().max(1e-9));
+            let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
+            // Square to the grid: straight out from the road's nearest axis.
+            let dir = if dir.x.abs() > dir.y.abs() { Vec2::new(dir.x.signum(), 0.0) } else { Vec2::new(0.0, dir.y.signum()) };
+            let out = Vec2::new(-dir.y, dir.x) * side;
+            let (half, _) = Kind::Gas.size();
+            let centre = line[i] + out * (super::roads::Kind::Highway.half_width() + 3.0 + half.y);
+            // Its front (-y in its frame) towards the road.
+            let yaw = out.x.atan2(out.y);
+            let site = Site::new(Kind::Gas, centre, yaw);
+            if line.iter().all(|&p| site.plot.outside(p) > super::roads::Kind::Highway.half_width() + 1.0) {
+                plan.sites.push(site);
+                break;
+            }
         }
-        let i = spots[dice.next() as usize % spots.len()];
-        let dir = (line[i + 1] - line[i - 1]) * (1.0 / (line[i + 1] - line[i - 1]).length().max(1e-9));
-        let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
-        // Square to the grid: straight out from the road's nearest axis.
-        let dir = if dir.x.abs() > dir.y.abs() { Vec2::new(dir.x.signum(), 0.0) } else { Vec2::new(0.0, dir.y.signum()) };
-        let out = Vec2::new(-dir.y, dir.x) * side;
-        let (half, _) = Kind::Gas.size();
-        let centre = line[i] + out * (super::roads::Kind::Highway.half_width() + 3.0 + half.y);
-        // Its front (-y in its frame) towards the road.
-        let yaw = out.x.atan2(out.y);
-        plan.sites.push(Site::new(Kind::Gas, centre, yaw));
     }
 }
 

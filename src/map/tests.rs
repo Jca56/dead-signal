@@ -41,6 +41,10 @@ fn maps_are_laid_out_whole_and_sound() {
             }
             assert!(steepest <= road.kind.steepest() + 0.08, "seed {seed}: a {:?} road climbs {steepest:.2}", road.kind);
         }
+        // The highway runs past each gas station, never through it.
+        for site in map.sites.iter().filter(|s| s.kind == SiteKind::Gas) {
+            assert!(hw.iter().all(|p| site.plot.outside(Vec2::new(p.x, p.z)) > 5.0), "seed {seed}: the highway runs through a gas station");
+        }
         // Every place but the crash and the gas station has a road to its
         // door (the gas station is on the highway).
         for site in map.sites.iter().filter(|s| !matches!(s.kind, SiteKind::Crash | SiteKind::Town | SiteKind::Gas)) {
@@ -190,6 +194,10 @@ fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     eprintln!("{up} dead: {at_places} at the places ({in_town} in town), the closest {closest:.0} m off");
     assert!(at_places > up / 2 && in_town >= 40, "{at_places} at the places, {in_town} in town");
     assert!(closest > 40.0, "one {closest:.0} m from the start");
+    let cops = game.world.query_filtered::<(), With<crate::zombie::Cop>>().iter(&game.world).count();
+    assert!(cops >= 3, "only {cops} officers at the station");
+    let crew = game.world.query_filtered::<(), With<crate::zombie::Firefighter>>().iter(&game.world).count();
+    assert!(crew >= 2, "only {crew} firefighters at the station");
     assert!(game.world.query::<&crate::items::Pickup>().iter(&game.world).count() >= 15, "things lie about");
     // Ten seconds walking in towards the middle of the map, the dead
     // coming after.
@@ -303,3 +311,5 @@ fn what_is_set_under_a_roof_rests_on_the_floor_not_the_roof() {
         assert!(seen >= 4, "seed {seed}: only {seen} cases and cages");
     }
 }
+
+
