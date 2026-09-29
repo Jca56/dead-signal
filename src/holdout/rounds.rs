@@ -11,7 +11,7 @@ use crate::loot::Dice;
 use crate::zombie::{self, brain::{State, Zombie}, kind::Kind, looks::Theme};
 
 /// The most of the dead up at once.
-pub const MOST_UP: usize = 24;
+pub const MOST_UP: usize = 20;
 /// Seconds before the first round, and between rounds.
 const FIRST_WAIT: f64 = 4.0;
 pub const BREATHER: f64 = 10.0;
@@ -27,15 +27,17 @@ const SCATTER: f64 = 2.0;
 pub fn count(round: u32) -> u32 {
     match round {
         0 => 0,
-        1..=5 => [6, 8, 13, 18, 24][round as usize - 1],
-        _ => 24 + 3 * (round - 5),
+        1..=5 => [6, 8, 11, 14, 18][round as usize - 1],
+        _ => 18 + 2 * (round - 5),
     }
 }
 
-/// How much a Shambler of a round takes to kill: a hundred more each round
-/// to the ninth, then a tenth more each.
+/// How much a Shambler of a round takes to kill: fifty more each round to
+/// the tenth, then a twelfth or so more each. (Gentler than it might be:
+/// the guns are the ones made for the wilds, where the dead never
+/// toughen.)
 pub fn toughness(round: u32) -> f64 {
-    if round < 10 { 150.0 + 100.0 * f64::from(round.saturating_sub(1)) } else { 950.0 * 1.1f64.powi(round as i32 - 9) }
+    if round <= 10 { 150.0 + 50.0 * f64::from(round.saturating_sub(1)) } else { 600.0 * 1.08f64.powi(round as i32 - 10) }
 }
 
 /// How fast one of a round walks, m/s, by luck (`roll`, `pick` 0–1): all
@@ -148,11 +150,11 @@ mod tests {
 
     #[test]
     fn rounds_grow_in_number_and_toughness() {
-        assert_eq!((count(1), count(5), count(6)), (6, 24, 27));
+        assert_eq!((count(1), count(5), count(6)), (6, 18, 20));
         assert!((1..40).all(|r| count(r + 1) >= count(r)));
-        assert_eq!(toughness(1), 150.0);
-        assert_eq!(toughness(9), 950.0);
-        assert!((toughness(10) - 1045.0).abs() < 1e-9);
+        assert_eq!((toughness(1), toughness(5), toughness(10)), (150.0, 350.0, 600.0));
+        assert!((toughness(11) - 648.0).abs() < 1e-9);
+        assert!((1..40).all(|r| toughness(r + 1) > toughness(r)));
     }
 
     #[test]
