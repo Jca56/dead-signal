@@ -4,7 +4,8 @@
 //! steering in the air. It slides along walls, walks up steps as tall as
 //! [`STEP_UP`] and down stairs without leaving them, climbs slopes up to
 //! 45° and slides back off steeper ones, and will not stand up where there
-//! is no room. The view that rides on it is in `head.rs`.
+//! is no room. The view that rides on it is in `head.rs`. Pressing into
+//! the dead, it wades: slowed, never stopped.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
@@ -12,6 +13,7 @@ use lntrn_math::{Vec2, Vec3};
 use crate::collide::{Capsule, Contacts, Solids};
 use crate::head::View;
 use crate::world::Solid;
+use crate::zombie::brain::Zombie;
 
 pub const WALK: f64 = 6.0;
 pub const SPRINT: f64 = 9.0;
@@ -214,14 +216,7 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
     body.sprinting = controls.sprint && controls.walk.y > 0.0 && !body.crouched;
     let speed = if body.crouched { gait.crouch } else if body.sprinting { gait.sprint } else { gait.walk };
 
-    // The keys, turned to face where the player looks, on the flat.
-    let (s, c) = yaw.sin_cos();
-    let forward = Vec2::new(-s, -c);
-    let right = Vec2::new(c, -s);
-    let mut wish = right * controls.walk.x + forward * controls.walk.y;
-    if wish.length() > 1.0 {
-        wish = wish.normalize();
-    }
+    let wish = wish(yaw, controls.walk);
     let now = flat(body.vel);
     let moving = wish != Vec2::ZERO;
     let steer = if body.grounded {
@@ -315,6 +310,47 @@ pub fn step_body(body: &mut Body, yaw: f64, controls: &mut Controls, solids: &So
     body.airborne = if grounded { 0.0 } else { body.airborne + dt };
 }
 
+/// The keys (`walk`: x right, y forward), turned to face `yaw`, on the
+/// flat: at most a unit long.
+fn wish(yaw: f64, walk: Vec2) -> Vec2 {
+    let (s, c) = yaw.sin_cos();
+    let forward = Vec2::new(-s, -c);
+    let right = Vec2::new(c, -s);
+    let wish = right * walk.x + forward * walk.y;
+    if wish.length() > 1.0 { wish.normalize() } else { wish }
+}
+
+/// Pressing into the dead: one squarely in the way takes most of a body's
+/// pace, a crowd more, but some is always kept: it wades through, slowly,
+/// and is never walled in. Bodies' middles this near (flat) press on each
+/// other, touching at two radii.
+const WADE: f64 = 2.5;
+const WADE_LEAST: f64 = 0.9;
+const PRESS: f64 = 1.0;
+
+/// How much of its pace a body at `at` keeps heading `wish` (flat, the
+/// keys' way) into bodies at `others`: those ahead of it and touching take
+/// it; those beside it, behind it, or a floor up or down, none.
+pub fn wading(at: Vec3, wish: Vec2, others: impl IntoIterator<Item = Vec3>) -> f64 {
+    let len = wish.length();
+    if len < 1e-9 {
+        return 1.0;
+    }
+    let dir = wish * (1.0 / len);
+    let mut press = 0.0;
+    for o in others {
+        let d = Vec2::new(o.x - at.x, o.z - at.z);
+        let dist = d.length();
+        if dist >= PRESS || (o.y - at.y).abs() > 1.5 {
+            continue;
+        }
+        let ahead = if dist < 1e-6 { 1.0 } else { dir.dot(d * (1.0 / dist)).max(0.0) };
+        let touch = 1.0 - ((dist - 2.0 * RADIUS) / (PRESS - 2.0 * RADIUS)).clamp(0.0, 1.0);
+        press += ahead * touch;
+    }
+    (1.0 / (1.0 + WADE * press)).max(WADE_LEAST / WALK)
+}
+
 /// How much of a sprint the player's gear leaves them, a share (heavy gear
 /// slows it).
 #[derive(Resource, Clone, Copy, Debug)]
@@ -326,9 +362,13 @@ impl Default for Load {
     }
 }
 
-fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, load: Option<Res<Load>>, mut players: Query<(&mut Body, &View), With<Player>>) {
+fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, load: Option<Res<Load>>, mut players: Query<(&mut Body, &View), With<Player>>, dead: Query<(&Zombie, &Body), Without<Player>>) {
     let gait = Gait { sprint: WALK + (SPRINT - WALK) * load.map_or(1.0, |l| l.0), ..PLAYER_GAIT };
     for (mut body, view) in &mut players {
+        // Wading through the dead: slowed pressing into them (the lying
+        // dead are stepped over).
+        let keep = wading(body.pos, wish(view.yaw, controls.walk), dead.iter().filter(|(z, _)| !z.dead()).map(|(_, b)| b.pos));
+        let gait = Gait { walk: gait.walk * keep, sprint: gait.sprint * keep, crouch: gait.crouch * keep };
         step_body(&mut body, view.yaw, &mut controls, &solid.0, &gait, STEP);
     }
 }

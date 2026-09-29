@@ -262,3 +262,57 @@ fn a_shove_moves_you_and_fades() {
     run(&mut body, &mut Controls::default(), &s, 60);
     assert!((body.pos.z - (0.5 - RADIUS)).abs() < 0.02, "against the wall at {}", body.pos.z);
 }
+
+#[test]
+fn pressing_into_the_dead_takes_the_pace_but_never_all_of_it() {
+    let at = Vec3::ZERO;
+    let north = Vec2::new(0.0, -1.0);
+    let touching = |x: f64, z: f64| Vec3::new(x, 0.0, z);
+    assert_eq!(wading(at, north, []), 1.0);
+    assert_eq!(wading(at, Vec2::ZERO, [touching(0.0, -0.7)]), 1.0, "standing still");
+    // One squarely ahead, touching: most of it gone.
+    let one = wading(at, north, [touching(0.0, -0.7)]);
+    assert!(one < 0.35, "{one}");
+    // Beside, behind, out of reach, a floor up: nothing.
+    for (o, what) in [(touching(0.7, 0.0), "beside"), (touching(0.0, 0.7), "behind"), (touching(0.0, -1.2), "out of reach"), (Vec3::new(0.0, 3.0, -0.7), "upstairs")] {
+        assert_eq!(wading(at, north, [o]), 1.0, "{what}");
+    }
+    // A crowd ahead, more; but never nothing.
+    let crowd = wading(at, north, [touching(0.0, -0.7), touching(-0.5, -0.6), touching(0.5, -0.6), touching(0.0, -0.9)]);
+    assert!(crowd < one, "{crowd} vs {one}");
+    assert!(crowd * WALK >= WADE_LEAST - 1e-9, "walled in: {crowd}");
+}
+
+/// The player sprinting north for two seconds, the dead standing at
+/// `dead`: how far they got.
+fn sprint_into(dead: &[Vec3]) -> f64 {
+    let mut world = World::new();
+    world.insert_resource(Solid(floor()));
+    world.insert_resource(Controls { walk: Vec2::new(0.0, 1.0), sprint: true, ..Default::default() });
+    world.insert_resource(crate::zombie::Nav(None));
+    world.insert_resource(crate::zombie::Noises::default());
+    world.insert_resource(crate::zombie::Horde::default());
+    world.spawn((Player, Body::at(Vec3::ZERO), View::facing(0.0)));
+    for &at in dead {
+        crate::zombie::spawn_kind(&mut world, at, std::f64::consts::PI, crate::zombie::kind::Kind::Shambler, crate::zombie::looks::Theme::Drifter);
+    }
+    let mut fixed = Schedule::default();
+    install(&mut fixed);
+    let mut the_dead = crate::zombie::stepper();
+    for _ in 0..(2.0 / STEP) as usize {
+        fixed.run(&mut world);
+        the_dead.run(&mut world);
+    }
+    -world.query_filtered::<&Body, With<Player>>().single(&world).expect("the player").pos.z
+}
+
+#[test]
+fn a_crowd_is_waded_through_slowly_never_sprinted_through_nor_walled_in() {
+    let free = sprint_into(&[]);
+    // A crowd across the way, five deep.
+    let crowd: Vec<Vec3> = (0..5).flat_map(|row| (-3..=3).map(move |k| Vec3::new(f64::from(k) * 0.8 + f64::from(row % 2) * 0.4, 0.0, -1.6 - f64::from(row) * 0.8))).collect();
+    let waded = sprint_into(&crowd);
+    assert!(free > 15.0, "{free:.1} m free");
+    assert!(waded < free * 0.4, "sprinted through the crowd: {waded:.1} m of {free:.1}");
+    assert!(waded > 1.5, "walled in: {waded:.1} m");
+}
