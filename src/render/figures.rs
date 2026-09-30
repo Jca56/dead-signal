@@ -76,7 +76,7 @@ impl Figures {
                 count: None,
             }],
         });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("figures"), bind_group_layouts: &[globals, &layout], immediate_size: 0 });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("figures"), bind_group_layouts: &[Some(globals), Some(&layout)], immediate_size: 0 });
         let vertex = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Uint32x4, 4 => Float32x4];
         let instance = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4, 12 => Float32x4, 13 => Float32x4, 14 => Float32x4, 15 => Uint32];
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -87,8 +87,8 @@ impl Figures {
                 entry_point: Some("vs"),
                 compilation_options: Default::default(),
                 buffers: &[
-                    wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<SkinnedVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex },
-                    wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance },
+                    Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<SkinnedVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex }),
+                    Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance }),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
@@ -100,8 +100,8 @@ impl Figures {
             primitive: wgpu::PrimitiveState { cull_mode: Some(wgpu::Face::Back), ..Default::default() },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Greater,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Greater),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
