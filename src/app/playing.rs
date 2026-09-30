@@ -123,7 +123,15 @@ impl DeadSignal {
         if !active {
             return;
         }
-        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons);
+        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons, &[self.pads.all()]);
+        // The pads shake for what happened to their players.
+        let rumble = self.game.world.resource::<crate::settings::Settings>().rumble;
+        for arms in &mut self.combat.arms {
+            let r = std::mem::take(&mut arms.rumble);
+            if rumble {
+                self.pads.rumble(r);
+            }
+        }
         self.map_screen(ui, active);
         // The run just ended: it's settled (and saved) at once.
         if self.run.ending.is_some() {

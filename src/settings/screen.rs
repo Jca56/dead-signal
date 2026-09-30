@@ -19,6 +19,7 @@ use crate::{feedback, style};
 enum Tab {
     Controls,
     Keys,
+    Gamepad,
     Video,
     Audio,
     Hud,
@@ -26,12 +27,13 @@ enum Tab {
 }
 
 impl Tab {
-    const ALL: [Tab; 6] = [Tab::Controls, Tab::Keys, Tab::Video, Tab::Audio, Tab::Hud, Tab::Game];
+    const ALL: [Tab; 7] = [Tab::Controls, Tab::Keys, Tab::Gamepad, Tab::Video, Tab::Audio, Tab::Hud, Tab::Game];
 
     fn label(self) -> &'static str {
         match self {
             Tab::Controls => "CONTROLS",
             Tab::Keys => "KEYS",
+            Tab::Gamepad => "GAMEPAD",
             Tab::Video => "VIDEO",
             Tab::Audio => "AUDIO",
             Tab::Hud => "HUD",
@@ -43,6 +45,7 @@ impl Tab {
         match self {
             Tab::Controls => &[Field::Sensitivity, Field::AdsSensitivity, Field::ToggleCrouch, Field::ToggleSprint],
             Tab::Keys => &[],
+            Tab::Gamepad => &[Field::StickSensitivity, Field::InvertLook, Field::AimAssist, Field::Rumble],
             Tab::Video => &[Field::Fov, Field::Fullscreen, Field::Vsync],
             Tab::Audio => &[Field::Master, Field::Music, Field::Effects, Field::Zombies, Field::MusicInRuns],
             Tab::Hud => &[Field::Crosshair, Field::HeadBob, Field::UiScale],
@@ -82,6 +85,12 @@ impl SettingsScreen {
         self.held == Some(field)
     }
 
+    /// Whether it's waiting for a key to bind (a pad's buttons aren't keys
+    /// then).
+    pub fn listening(&self) -> bool {
+        self.listening.is_some()
+    }
+
     /// A frame of it, `active` unless a fade is running. Whether it was
     /// closed (BACK, or Esc).
     pub fn frame(&mut self, ui: &mut Ui, settings: &mut Settings, active: bool) -> bool {
@@ -100,14 +109,17 @@ impl SettingsScreen {
         ui.text_at("SETTINGS", &heading, Vec2::new(left, top), screen.width(), style::BONE);
         ui.draw.rect(Rect::from_min_size(Vec2::new(left + 4.0 * s, top + f64::from(heading.line_height()) + 4.0 * s), Vec2::new(160.0 * s, 5.0 * s)), style::SIGNAL);
 
-        // The tabs.
+        // The tabs, their words smaller if they'd run off the edge.
         let tab_style = TextStyle::new((34.0 * s) as f32).bold().family(style::FONT);
+        let wide = Tab::ALL.iter().map(|t| ui.measure(t.label(), &tab_style) + 66.0 * s).sum::<f64>() - 16.0 * s;
+        let fit = ((screen.max.x - 80.0 * s - left) / wide).min(1.0);
+        let tab_style = TextStyle::new((34.0 * s * fit) as f32).bold().family(style::FONT);
         let mut tx = left;
         let tab_y = screen.min.y + screen.height() * 0.105;
         let tab_h = f64::from(tab_style.line_height()) + 18.0 * s;
         for tab in Tab::ALL {
             let label = tab.label();
-            let w = ui.measure(label, &tab_style) + 50.0 * s;
+            let w = ui.measure(label, &tab_style) + 50.0 * s * fit;
             let r = Rect::from_min_size(Vec2::new(tx, tab_y), Vec2::new(w, tab_h));
             let hit = ui.interact(ui.id(label), r, Sense::CLICK);
             let on = self.tab == tab;
@@ -115,12 +127,12 @@ impl SettingsScreen {
             if on {
                 ui.draw.rect(Rect::from_min_size(Vec2::new(r.min.x, r.max.y - 4.0 * s), Vec2::new(r.width(), 4.0 * s)), style::SIGNAL);
             }
-            ui.text_at(label, &tab_style, Vec2::new(r.min.x + 25.0 * s, r.min.y + 9.0 * s), w, if on { style::BONE } else { style::DIM });
+            ui.text_at(label, &tab_style, Vec2::new(r.min.x + 25.0 * s * fit, r.min.y + 9.0 * s), w, if on { style::BONE } else { style::DIM });
             if feedback::button(label, active && hit.hovered && !on, active && hit.clicked && !on) {
                 self.tab = tab;
                 self.held = None;
             }
-            tx += w + 16.0 * s;
+            tx += w + 16.0 * s * fit;
         }
 
         // A row a setting.

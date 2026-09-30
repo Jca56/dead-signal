@@ -1,10 +1,10 @@
-//! The player's settings: how the mouse feels, how wide they see, how loud
-//! everything is, how the window and HUD are. Kept apart from the profile
-//! (they're the player's, not a character's), in
+//! The player's settings: how the mouse and a pad feel, how wide they
+//! see, how loud everything is, how the window and HUD are. Kept apart
+//! from the profile (they're the player's, not a character's), in
 //! `~/.lantern/config/dead-signal/settings.toml`, plain TOML. Each setting
 //! is a [`Field`]: its name on disk and on screen, and what it can be (a
-//! slider's range, or on/off), so the screen (`screen.rs`) and the file are
-//! both made from the one list.
+//! slider's range, or on/off), so the screen (`screen.rs`) and the file
+//! are both made from the one list.
 
 pub mod keys;
 pub mod screen;
@@ -34,6 +34,10 @@ pub enum Field {
     HeadBob,
     UiScale,
     DevMode,
+    StickSensitivity,
+    InvertLook,
+    AimAssist,
+    Rumble,
 }
 
 /// What a setting can be.
@@ -56,7 +60,7 @@ pub enum Show {
 }
 
 impl Field {
-    pub const ALL: [Field; 16] = [
+    pub const ALL: [Field; 20] = [
         Field::Sensitivity,
         Field::AdsSensitivity,
         Field::ToggleCrouch,
@@ -73,6 +77,10 @@ impl Field {
         Field::HeadBob,
         Field::UiScale,
         Field::DevMode,
+        Field::StickSensitivity,
+        Field::InvertLook,
+        Field::AimAssist,
+        Field::Rumble,
     ];
 
     /// Its name in the file.
@@ -94,6 +102,10 @@ impl Field {
             Field::HeadBob => "head_bob",
             Field::UiScale => "ui_scale",
             Field::DevMode => "developer_mode",
+            Field::StickSensitivity => "stick_sensitivity",
+            Field::InvertLook => "invert_look",
+            Field::AimAssist => "aim_assist",
+            Field::Rumble => "rumble",
         }
     }
 
@@ -116,6 +128,10 @@ impl Field {
             Field::HeadBob => "HEAD BOB",
             Field::UiScale => "UI SCALE",
             Field::DevMode => "DEVELOPER MODE",
+            Field::StickSensitivity => "LOOK SENSITIVITY",
+            Field::InvertLook => "INVERT LOOK",
+            Field::AimAssist => "AIM ASSIST",
+            Field::Rumble => "RUMBLE",
         }
     }
 
@@ -138,6 +154,10 @@ impl Field {
             Field::HeadBob => "How much the view and the gun bob as you walk",
             Field::UiScale => "Menus and the HUD, bigger or smaller",
             Field::DevMode => "A DEV save slot with test tools (F1 in it); your own slots are never touched",
+            Field::StickSensitivity => "How fast the right stick turns the view",
+            Field::InvertLook => "On: push the stick up to look down",
+            Field::AimAssist => "The view slows a little as the crosshair crosses one of the dead",
+            Field::Rumble => "The pad shakes with shots, blows and blasts",
         }
     }
 
@@ -145,12 +165,13 @@ impl Field {
         let slider = |min, max, step, show| Range::Slider { min, max, step, show };
         match self {
             Field::Sensitivity => slider(0.1, 3.0, 0.05, Show::Times),
+            Field::StickSensitivity => slider(0.3, 2.5, 0.05, Show::Times),
             Field::AdsSensitivity => slider(0.2, 2.0, 0.05, Show::Times),
             Field::Fov => slider(55.0, 100.0, 1.0, Show::Degrees),
             Field::Master | Field::Music | Field::Effects | Field::Zombies => slider(0.0, 1.0, 0.01, Show::Percent),
             Field::HeadBob => slider(0.0, 1.5, 0.05, Show::Percent),
             Field::UiScale => slider(0.75, 1.5, 0.05, Show::Percent),
-            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint | Field::DevMode => Range::Toggle,
+            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint | Field::DevMode | Field::InvertLook | Field::AimAssist | Field::Rumble => Range::Toggle,
         }
     }
 
@@ -204,6 +225,12 @@ pub struct Settings {
     pub ui_scale: f64,
     /// The DEV save slot and its tools are there.
     pub dev_mode: bool,
+    /// A pad's: times the base look speed; the stick up looks down; aim
+    /// assist's drag; the rumble.
+    pub stick_sensitivity: f64,
+    pub invert_look: bool,
+    pub aim_assist: bool,
+    pub rumble: bool,
 }
 
 impl Default for Settings {
@@ -226,6 +253,10 @@ impl Default for Settings {
             head_bob: 1.0,
             ui_scale: 1.0,
             dev_mode: false,
+            stick_sensitivity: 1.0,
+            invert_look: false,
+            aim_assist: true,
+            rumble: true,
         }
     }
 }
@@ -251,6 +282,10 @@ impl Settings {
             Field::HeadBob => self.head_bob,
             Field::UiScale => self.ui_scale,
             Field::DevMode => on(self.dev_mode),
+            Field::StickSensitivity => self.stick_sensitivity,
+            Field::InvertLook => on(self.invert_look),
+            Field::AimAssist => on(self.aim_assist),
+            Field::Rumble => on(self.rumble),
         }
     }
 
@@ -275,6 +310,10 @@ impl Settings {
             Field::HeadBob => self.head_bob = v,
             Field::UiScale => self.ui_scale = v,
             Field::DevMode => self.dev_mode = on,
+            Field::StickSensitivity => self.stick_sensitivity = v,
+            Field::InvertLook => self.invert_look = on,
+            Field::AimAssist => self.aim_assist = on,
+            Field::Rumble => self.rumble = on,
         }
     }
 

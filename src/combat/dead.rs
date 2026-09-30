@@ -5,6 +5,7 @@
 use lntrn_math::Vec3;
 
 use super::*;
+use crate::input::pad::Rumble;
 
 /// What a Spitter's burst takes off the dead near it (and 30 more), and
 /// the player, all of it close.
@@ -52,6 +53,7 @@ impl Combat {
             self.sound.play(Sfx::Flesh, 0.9);
             if let Some(arms) = self.arms.get_mut(seat) {
                 arms.hurt = 1.0;
+                arms.rumble.add(Rumble::blow());
             }
             if let Some(mut v) = game.player_view_mut(seat) {
                 v.jolt(BLOW_SHAKE);
@@ -86,6 +88,7 @@ impl Combat {
                     let share = spit::burst_share(d);
                     if let Some(arms) = self.arms.get_mut(seat) {
                         arms.hurt = 1.0;
+                        arms.rumble.add(Rumble::blast(share));
                     }
                     if let Some(mut v) = game.player_view_mut(seat) {
                         v.jolt(0.02 + 0.06 * share);

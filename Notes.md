@@ -69,8 +69,8 @@
 
 ## Phase 10: Couch Co-op 🛋️
 - [ ] 2 player local split screen HOLDOUT.
-  - [ ] Players, plural: a seat per player (vitals, bag, hands, stats), zombie hits tagged with who they hit. Solo plays the same.
-  - [ ] Input layer + gamepads (lntrn-sys): keyboard/mouse or pad per seat, stick look, rumble. Solo HOLDOUT on a controller.
+  - [x] Players, plural: a seat per player (vitals, bag, hands, stats), zombie hits tagged with who they hit. Solo plays the same.
+  - [x] Input layer + gamepads (lntrn-sys): keyboard/mouse or pad per seat, stick look, rumble. Solo HOLDOUT on a controller.
   - [ ] Two views: top/bottom by default, side by side in Settings. HUD per half, sound from the nearest player.
   - [ ] Co-op rules: press to join, per-player points, zombies pick a target, waves scaled for 2, downed and revive, game over when both are down.
   - [ ] Survivor figure: a body for your buddy on the shambler rig, holding what they hold.

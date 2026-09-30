@@ -41,6 +41,8 @@ const BLAST_PLAYER: f64 = 80.0;
 const BLAST_HEARD: f64 = 150.0;
 /// How far off a blast still shakes the player.
 const SHAKES: f64 = 45.0;
+/// The hardest a blast shakes a player, metres (right beside it).
+pub const SHAKE: f64 = 0.08;
 /// Bouncing: how much of its speed it keeps, and slower than this, on the
 /// ground, it's come to rest.
 const BOUNCE: f64 = 0.35;
@@ -274,7 +276,7 @@ fn blast(world: &mut World, at: Vec3) {
         if d < BLAST {
             felt.blasted += BLAST_PLAYER * (1.0 - d / BLAST);
         }
-        felt.shake = felt.shake.max((1.0 - d / SHAKES).max(0.0) * 0.08);
+        felt.shake = felt.shake.max((1.0 - d / SHAKES).max(0.0) * SHAKE);
     }
     world.resource_mut::<Horde>().sounds.push((Sfx::Explosion, at + Vec3::new(0.0, 0.5, 0.0), 1.0));
     zombie::noise(world, at, BLAST_HEARD);

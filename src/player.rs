@@ -66,7 +66,8 @@ pub const STEP: f64 = 1.0 / 60.0;
 /// the fixed steps (one of the dead's feet, what its mind wants).
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Controls {
-    /// x: right, y: forward; each -1, 0 or 1.
+    /// x: right, y: forward; each -1 to 1 (a key all the way, a stick as
+    /// far as it's pushed).
     pub walk: Vec2,
     pub sprint: bool,
     /// Pressed since the last step that looked (cleared once used).

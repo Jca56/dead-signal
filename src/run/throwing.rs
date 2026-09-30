@@ -12,6 +12,7 @@ use super::seat::Seat;
 use crate::combat::Combat;
 use crate::settings::keys::Action;
 use crate::sound::Sfx;
+use crate::input::pad::Rumble;
 use crate::throw::{self, Booms, Felt, Throwable};
 use crate::world::Game;
 
@@ -46,7 +47,7 @@ impl Seat {
         if self.throwable.is_none_or(|t| !carried.contains(&t)) {
             self.throwable = carried.first().copied();
         }
-        if self.keys.pressed(ui, Action::NextThrowable)
+        if self.input.pressed(ui, Action::NextThrowable)
             && let Some(at) = self.throwable.and_then(|t| carried.iter().position(|&c| c == t))
             && carried.len() > 1
         {
@@ -57,7 +58,7 @@ impl Seat {
             self.aiming = None;
             return false;
         };
-        let held = free && self.keys.held(ui, Action::Throw);
+        let held = free && self.input.held(ui, Action::Throw);
         let Some((body, view)) = game.player(self.n) else { return false };
         let eye = crate::head::eye_position(&view, &body, game.alpha());
         let (yaw, pitch) = view.aim();
@@ -66,7 +67,7 @@ impl Seat {
         let vel = throw::launch(forward);
         if held {
             let aiming = self.aiming.get_or_insert_with(Aiming::default);
-            aiming.cancelled |= self.keys.pressed(ui, Action::Aim);
+            aiming.cancelled |= self.input.pressed(ui, Action::Aim);
             let (dots, lands) = throw::arc(&game.world.resource::<crate::world::Solid>().0, from, vel, DOTS_EVERY);
             aiming.dots = dots;
             aiming.lands = lands;
@@ -93,10 +94,11 @@ impl Seat {
     /// hurt (unless nothing hurts them, `god`), the shake. Whether they
     /// died of it.
     pub(super) fn blasted(&mut self, game: &mut Game, combat: &mut Combat, felt: Felt, god: bool) -> bool {
-        if felt.shake > 0.0
-            && let Some(mut v) = game.player_view_mut(self.n)
-        {
-            v.jolt(felt.shake);
+        if felt.shake > 0.0 {
+            if let Some(mut v) = game.player_view_mut(self.n) {
+                v.jolt(felt.shake);
+            }
+            combat.arms[self.n].rumble.add(Rumble::blast(felt.shake / throw::SHAKE));
         }
         // Armor takes a blast; fire goes round it.
         let blasted = (felt.blasted - f64::from(self.bag.soak(felt.blasted.round() as u32))).max(0.0);

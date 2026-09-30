@@ -19,6 +19,7 @@ mod hideout;
 mod holdout;
 mod hud;
 mod icons;
+mod input;
 mod items;
 mod levelbar;
 mod loot;

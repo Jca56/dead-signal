@@ -72,8 +72,9 @@ impl Seat {
     fn hold_out(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, icons: &Icons, dt: f64, h: &mut Holdout) {
         let busy = self.open.is_some() || self.vitals.healing.is_some();
         let aimed = if busy { None } else { loot::eye(game, self.n).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir)) };
+        self.input.set_prompting(aimed.is_some());
         if let Some(a) = aimed
-            && self.keys.pressed(ui, Action::Interact)
+            && self.input.pressed(ui, Action::Interact)
         {
             let (sound, note, took) = h.press(&mut game.world, a, &mut self.bag);
             if let Some(sfx) = sound {
@@ -86,7 +87,7 @@ impl Seat {
                 self.take_up(combat, took);
             }
         }
-        if let Some(sfx) = h.hold(&mut game.world, aimed, self.keys.held(ui, Action::Interact), dt) {
+        if let Some(sfx) = h.hold(&mut game.world, aimed, self.input.held(ui, Action::Interact), dt) {
             combat.play(sfx, 0.8);
         }
         let prompt = aimed.map(|a| ("E", h.prompt(a, &self.bag)));

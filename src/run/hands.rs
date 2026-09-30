@@ -1,8 +1,8 @@
-//! What's in hand, from the run's side: the slots' keys (or the wheel) to
-//! switch between what's carried in the slots, bare fists when there's
-//! nothing, and the hands kept in step with the bag: a gun's rounds go
-//! back into it (and rounds loaded into it in the bag come into the
-//! hands), a weapon thrown out of its slot is let go of, one picked up
+//! What's in hand, from the run's side: the slots' keys (or the wheel, or
+//! a pad's Y) to switch between what's carried in the slots, bare fists
+//! when there's nothing, and the hands kept in step with the bag: a gun's
+//! rounds go back into it (and rounds loaded into it in the bag come into
+//! the hands), a weapon thrown out of its slot is let go of, one picked up
 //! into empty hands is taken up.
 
 use lntrn_ui::Ui;
@@ -53,15 +53,19 @@ impl Seat {
         }
         let mut want = None;
         for slot in Slot::ALL {
-            if self.keys.pressed(ui, Action::slot(slot)) && self.bag.slot(slot).is_some() {
+            if self.input.pressed(ui, Action::slot(slot)) && self.bag.slot(slot).is_some() {
                 want = Some(slot);
             }
         }
-        self.wheel += ui.state.wheel.y;
+        self.wheel += self.input.wheel(ui);
         if self.wheel.abs() >= WHEEL_STEP {
             // Up goes back through the slots, down on.
             want = self.step(combat, if self.wheel > 0.0 { -1 } else { 1 }).or(want);
             self.wheel = 0.0;
+        }
+        // A pad's Y: on to the next.
+        if self.input.next_weapon() {
+            want = self.step(combat, 1).or(want);
         }
         // Bare fists and something picked up: it's taken up.
         if want.is_none() && combat.arms[self.n].hands.held.is_none() && combat.arms[self.n].hands.switching().is_none() && !combat.arms[self.n].hands.busy() {

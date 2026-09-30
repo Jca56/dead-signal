@@ -18,11 +18,13 @@ use lntrn_ui::{AreaCx, ShellRequest, Ui};
 use crate::bag_ui::Icons;
 use crate::combat::Combat;
 use crate::ending::{After, Ending, Outcome};
+use crate::input::pad::PadFrame;
 use crate::exits::{self, Way};
 use crate::loot::Dice;
 use crate::loot::bag::Bag;
 use crate::map::Map;
 use crate::profile::perks::Perks;
+use crate::settings::Settings;
 use crate::sound::Sfx;
 use crate::world::Game;
 use crate::zombie::director::Director;
@@ -117,10 +119,16 @@ impl Run {
         any
     }
 
-    /// A frame of a run while everyone's alive: what each one's keys do,
-    /// what the dead do to them, and what came of it.
-    pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons) {
+    /// A frame of a run while everyone's alive: what each one's controls
+    /// do (the keyboard and mouse are the first player's, `pads` each
+    /// one's pad), what the dead do to them, and what came of it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons, pads: &[PadFrame]) {
         let dt = game.clock().dt;
+        let keys = game.world.get_resource::<Settings>().map_or_else(Default::default, |s| s.keys);
+        for seat in &mut self.seats {
+            seat.input.update(ui, (seat.n == 0).then_some(keys), locked, pads.get(seat.n).copied().unwrap_or_default());
+        }
         combat.update(dt);
         for seat in &mut self.seats {
             seat.act(ui, cx, game, combat, locked, dt);
@@ -178,6 +186,7 @@ impl Run {
             return;
         }
         let prompt = if seat.open.is_some() { None } else { seat.prompt(game, &aimed) };
+        seat.input.set_prompting(prompt.as_ref().is_some_and(|(key, _)| !key.is_empty()));
         seat.hud(ui, combat, game, prompt, self.out.progress());
         let o = self.out.hud(game, 0);
         exits::hud::draw(

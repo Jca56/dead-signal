@@ -29,6 +29,7 @@ use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::combat::Combat;
 use crate::hideout::{Hideout, Leave};
+use crate::input::pad::Pads;
 use crate::loot::tables::Source;
 use crate::map::Map;
 use crate::map::build::{Building, Built, Kit};
@@ -176,6 +177,8 @@ pub struct DeadSignal {
     /// Whether what the window can't be told till it's open (vsync) has
     /// been told.
     told_window: bool,
+    /// The pads plugged in or paired, and what they did this frame.
+    pads: Pads,
 }
 
 impl DeadSignal {
@@ -234,6 +237,7 @@ impl DeadSignal {
             dev_fps: 60.0,
             ui_scale,
             told_window: false,
+            pads: Pads::open(),
         }
     }
 
@@ -378,6 +382,10 @@ impl Host for DeadSignal {
         if self.screen == Screen::Hideout {
             self.hideout.set_slot_keys(self.game.world.resource::<Settings>().keys.slot_names());
         }
+        // The pads: what they did, and in the menus, the keys they stand for.
+        self.pads.poll();
+        let playing = self.screen == Screen::Run && !self.paused && self.run.ending.is_none() && self.settings.is_none() && !self.dev_open;
+        self.pads.menu_keys(ui, !playing && !self.settings.as_ref().is_some_and(SettingsScreen::listening));
         let active = self.fading_to.is_none();
         // The DEV slot, with developer mode switched off: back to slot 1
         // (at the title, never mid-run).

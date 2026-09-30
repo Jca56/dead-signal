@@ -1,7 +1,7 @@
 //! The view riding on the player's body, every frame: which way it looks,
 //! how high the eye is (standing or crouched), the head bob, the dip on
 //! landing, the glide up and down stairs, the sprint's wider view, and the
-//! narrower one down a gun's sights (the mouse slowed to match).
+//! narrower one down a gun's sights (the mouse and stick slowed to match).
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
@@ -92,16 +92,22 @@ impl View {
         self.shake = self.shake.max(metres);
     }
 
-    /// Turn by raw mouse counts: slower down the sights, as much as the
-    /// view closes in (the world passes under them as fast as ever), and
-    /// by the aiming sensitivity.
+    /// Turn by raw mouse counts, as fast as the mouse is set to.
     pub fn look(&mut self, counts: Vec2) {
+        let k = SENSITIVITY * self.feel.sensitivity;
+        self.turn(Vec2::new(counts.x * k, -counts.y * k));
+    }
+
+    /// Turn by `by`, radians right and up: slower down the sights, as much
+    /// as the view closes in (the world passes under them as fast as
+    /// ever), and by the aiming sensitivity.
+    pub fn turn(&mut self, by: Vec2) {
         let half = |fov: f64| (fov.to_radians() * 0.5).tan();
         let feel = self.feel;
         let aiming = 1.0 + (feel.ads_sensitivity - 1.0) * self.ads;
-        let sensitivity = SENSITIVITY * feel.sensitivity * aiming * half(feel.fov * self.zoom()) / half(feel.fov);
-        self.yaw -= counts.x * sensitivity;
-        self.pitch = (self.pitch - counts.y * sensitivity).clamp(-PITCH_LIMIT, PITCH_LIMIT);
+        let scale = aiming * half(feel.fov * self.zoom()) / half(feel.fov);
+        self.yaw -= by.x * scale;
+        self.pitch = (self.pitch + by.y * scale).clamp(-PITCH_LIMIT, PITCH_LIMIT);
     }
 
     /// The share of the field of view left down the sights.

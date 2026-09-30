@@ -15,6 +15,7 @@ lntrn-core = { path = "../lantern-ui-2/crates/lntrn-core" }
 lntrn-audio = { path = "../lantern-ui-2/crates/lntrn-audio" }
 lntrn-image = { path = "../lantern-ui-2/crates/lntrn-image" }
 lntrn-data = { path = "../lantern-ui-2/crates/lntrn-data" }
+lntrn-sys = { path = "../lantern-ui-2/crates/lntrn-sys" }
 bevy_ecs = "0.19"
 
 [profile.dev]

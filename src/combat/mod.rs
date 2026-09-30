@@ -12,6 +12,7 @@ mod dead;
 use crate::collide::Surface;
 use crate::fx::Fx;
 use crate::head::{self, View};
+use crate::input::pad::Rumble;
 use crate::items;
 use crate::loot::Dice;
 use crate::loot::bag::Slot;
@@ -49,11 +50,13 @@ pub struct Arms {
     pub hurt: f64,
     /// Melee damage and shove, a multiple of the usual (brawler).
     pub melee: f64,
+    /// How their pad should shake for this frame's shots and blows.
+    pub rumble: Rumble,
 }
 
 impl Default for Arms {
     fn default() -> Self {
-        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0 }
+        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0, rumble: Rumble::default() }
     }
 }
 
@@ -207,6 +210,7 @@ impl Combat {
                     self.sound.play(shot.sound, 0.9);
                     zombie::noise(&mut game.world, aim.eye, shot.heard);
                     self.arms[seat].sprint_block = SPRINT_BLOCK;
+                    self.arms[seat].rumble.add(Rumble::shot(shot.kick));
                     let side = (self.rand() - 0.5) * shot.kick_side;
                     if let Some(mut v) = game.player_view_mut(seat) {
                         v.recoil(shot.kick, side);
@@ -275,6 +279,9 @@ impl Combat {
                         }
                     }
                     stats.blows_landed += heard.struck.len() as u32;
+                    if !heard.struck.is_empty() {
+                        self.arms[seat].rumble.add(Rumble::struck());
+                    }
                     // A heavy blade biting is heard a little way off.
                     if b.heard > 0.0 && !heard.struck.is_empty() {
                         zombie::noise(&mut game.world, aim.eye, b.heard);

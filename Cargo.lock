@@ -378,6 +378,7 @@ dependencies = [
  "lntrn-image",
  "lntrn-math",
  "lntrn-model",
+ "lntrn-sys",
  "lntrn-text",
  "lntrn-ui",
 ]

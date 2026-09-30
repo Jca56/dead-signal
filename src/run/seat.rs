@@ -1,8 +1,8 @@
-//! One player's side of a run: their keys turned into looking, moving,
-//! shots and healing; what the dead and the fires did to them; their
-//! health, stamina and count; and their HUD. What's in their hands is in
-//! `hands.rs`, what they carry and find in `loot.rs`, their throws in
-//! `throwing.rs`.
+//! One player's side of a run: their controls turned into looking,
+//! moving, shots and healing; what the dead and the fires did to them;
+//! their health, stamina and count; and their HUD. What's in their hands
+//! is in `hands.rs`, what they carry and find in `loot.rs`, their throws
+//! in `throwing.rs`.
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::{Vec2, Vec3};
@@ -14,11 +14,12 @@ use crate::bag_ui::BagUi;
 use crate::combat::Combat;
 use crate::ending::Outcome;
 use crate::hud::{self, Hud};
+use crate::input::{Input, look};
 use crate::loot::bag::Bag;
 use crate::loot::{Dice, Kind};
 use crate::profile::perks::Perks;
 use crate::settings::Settings;
-use crate::settings::keys::{Action, Keys};
+use crate::settings::keys::Action;
 use crate::sound::Sfx;
 use crate::stats::Stats;
 use crate::throw::{Felt, Throwable};
@@ -35,6 +36,9 @@ const RUMMAGING_PACE: f64 = 0.5;
 const AIMING_PACE: f64 = 0.6;
 /// How fast a swing goes winded, as a share.
 const WINDED_SWING: f64 = 0.75;
+/// How far forward they have to be going to sprint (the keys are all the
+/// way; a stick has to be pushed well forward).
+const SPRINT_FORWARD: f64 = 0.35;
 
 #[derive(Default)]
 pub struct Seat {
@@ -60,9 +64,9 @@ pub struct Seat {
     pub(super) perks: Perks,
     /// The wheel's turn not yet stepped through the slots, pixels.
     pub(super) wheel: f64,
-    /// Their keys, this frame (`settings::keys`), and whether a sprint's
-    /// been toggled on (sprint set to toggle).
-    pub(super) keys: Keys,
+    /// Their controls, this frame (the keys and mouse, a pad), and whether
+    /// a sprint's been toggled on (sprint set to toggle, or on a pad).
+    pub input: Input,
     sprinting: bool,
     /// Till a heavy sprint's next footfall is heard.
     footfall_in: f64,
@@ -106,14 +110,13 @@ impl Seat {
         self.vitals.poison = 0.0;
     }
 
-    /// A frame of what the keys do: looking, moving, patching up, the
-    /// hands and what they do.
+    /// A frame of what their controls do: looking, moving, patching up,
+    /// the hands and what they do.
     pub(super) fn act(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, dt: f64) {
         let n = self.n;
         let open = self.open.is_some();
-        let (feel, keys, toggle_crouch, toggle_sprint) = game.world.get_resource::<Settings>().map_or((Default::default(), Keys::default(), true, false), |s| (s.feel(), s.keys, s.toggle_crouch, s.toggle_sprint));
-        self.keys = keys;
-        self.bag_ui.slot_keys = keys.slot_names();
+        let settings = game.world.get_resource::<Settings>().cloned().unwrap_or_default();
+        self.bag_ui.slot_keys = settings.keys.slot_names();
         // What's worn weighs on the sprint, the breath and the feet; the
         // armor worn has room for a plate or it hasn't.
         let (fast, breath, _) = crate::loot::gear::burden(self.bag.weight());
@@ -122,37 +125,29 @@ impl Seat {
         let (armor, most) = self.bag.armor();
         self.vitals.armor_room = most - armor;
         if let Some(mut view) = game.player_view_mut(n) {
-            view.feel = feel;
+            view.feel = settings.feel();
         }
-        if open {
-            // The pointer is the inventory's.
-        } else if locked {
-            let motion = ui.state.locked_motion;
-            if let Some(mut view) = game.player_view_mut(n) {
-                view.look(motion);
-            }
-        } else if ui.state.pressed {
-            // The lock was refused or lost: a click takes it back.
-            cx.request(ShellRequest::LockPointer(true));
+        if !open {
+            self.look(ui, cx, game, locked, &settings, dt);
         }
-        let axis = |neg: bool, pos: bool| f64::from(i8::from(pos) - i8::from(neg));
-        let walk = Vec2::new(axis(keys.held(ui, Action::Left), keys.held(ui, Action::Right)), axis(keys.held(ui, Action::Back), keys.held(ui, Action::Forward)));
+        let walk = self.input.walk(ui);
         // Sprinting, held or toggled (a toggled sprint ends when running
-        // forward does).
+        // forward does). On a pad it's always a click, and so is crouching.
+        let (toggle_sprint, toggle_crouch) = (settings.toggle_sprint || self.input.on_pad, settings.toggle_crouch || self.input.on_pad);
         let sprint_key = if toggle_sprint {
-            if keys.pressed(ui, Action::Sprint) {
+            if self.input.pressed(ui, Action::Sprint) {
                 self.sprinting = !self.sprinting;
             }
             self.sprinting
         } else {
-            keys.held(ui, Action::Sprint)
+            self.input.held(ui, Action::Sprint)
         };
-        if walk.y <= 0.0 {
+        if walk.y < SPRINT_FORWARD {
             self.sprinting = false;
         }
-        let wants_sprint = sprint_key && walk.y > 0.0;
+        let wants_sprint = sprint_key && walk.y >= SPRINT_FORWARD;
         let sprint = wants_sprint && combat.arms[n].sprint_allowed() && self.vitals.can_sprint();
-        let jump = keys.pressed(ui, Action::Jump);
+        let jump = self.input.pressed(ui, Action::Jump);
         // Patching up takes both hands and standing still; rummaging, a
         // slow walk at most.
         let (walk, sprint, jump) = if self.vitals.healing.is_some() {
@@ -165,10 +160,10 @@ impl Seat {
         // Crouching, toggled or held: a hold flips it whenever the key and
         // the body disagree.
         let crouch = if toggle_crouch {
-            keys.pressed(ui, Action::Crouch)
+            self.input.pressed(ui, Action::Crouch)
         } else {
             let crouched = game.player(n).is_some_and(|(b, _)| b.want_crouch);
-            keys.held(ui, Action::Crouch) != crouched
+            self.input.held(ui, Action::Crouch) != crouched
         };
         if let Some(mut controls) = game.controls_mut(n) {
             controls.walk = walk;
@@ -186,27 +181,28 @@ impl Seat {
         // Patching up: 4 a bandage, 5 a medkit, from what's carried. Firing,
         // striking or a blow stops it (the kit is kept).
         for (key, kit) in [(Action::Bandage, Kit::Bandage), (Action::Medkit, Kit::Medkit), (Action::Plate, Kit::Plate)] {
-            if keys.pressed(ui, key) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
+            if self.input.pressed(ui, key) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
                 combat.play(Sfx::Heal, 0.8);
             }
         }
-        let firing = locked && !open && keys.pressed(ui, Action::Fire);
-        let holding = locked && !open && keys.held(ui, Action::Fire);
-        let striking = !open && keys.pressed(ui, Action::Bash);
+        // (A mouse button counts only while the pointer's locked.)
+        let firing = !open && self.input.pressed(ui, Action::Fire);
+        let holding = !open && self.input.held(ui, Action::Fire);
+        let striking = !open && self.input.pressed(ui, Action::Bash);
         if self.vitals.healing.is_some() && (firing || striking) {
             self.vitals.interrupt();
         }
         let busy = self.vitals.healing.is_some() || open;
         // A throw being aimed puts the gun down.
-        let busy = self.throwing(ui, game, combat, !busy && locked) || busy;
-        if !busy && keys.pressed(ui, Action::FireMode) && combat.arms[n].hands.switch_fire() {
+        let busy = self.throwing(ui, game, combat, !busy) || busy;
+        if !busy && self.input.pressed(ui, Action::FireMode) && combat.arms[n].hands.switch_fire() {
             combat.play(Sfx::Tick, 0.9);
         }
         self.switch_hands(ui, combat, !busy);
         // The sights up while the right button's held; a sprint takes them
         // down.
-        let aim = locked && keys.held(ui, Action::Aim) && !wants_sprint;
-        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, hold: holding, reload: keys.pressed(ui, Action::Reload), melee: striking, aim } };
+        let aim = self.input.held(ui, Action::Aim) && !wants_sprint;
+        let trigger = if busy { Trigger::default() } else { Trigger { fire: firing, hold: holding, reload: self.input.pressed(ui, Action::Reload), melee: striking, aim } };
         self.pull_rounds(combat);
         // Reloading draws on the rounds carried, of the kind the gun takes.
         let hands = &mut combat.arms[n].hands;
@@ -226,6 +222,37 @@ impl Seat {
             hands.mag = hands.spec().mag;
         }
         self.keep_rounds(combat);
+    }
+
+    /// A frame of looking about: the mouse (theirs, the pointer locked),
+    /// and the look stick, which aim assist drags on over the dead.
+    fn look(&mut self, ui: &Ui, cx: &mut AreaCx<()>, game: &mut Game, locked: bool, settings: &Settings, dt: f64) {
+        let n = self.n;
+        let mouse = self.input.mouse(ui);
+        if locked {
+            if let Some(mut view) = game.player_view_mut(n) {
+                view.look(mouse);
+            }
+        } else if ui.state.pressed && self.input.has_keys() {
+            // The lock was refused or lost: a click takes it back.
+            cx.request(ShellRequest::LockPointer(true));
+        }
+        let turn = look::stick_turn(self.input.stick(), &mut self.input.hard_over, settings.stick_sensitivity, settings.invert_look, dt);
+        if turn == Vec2::ZERO {
+            return;
+        }
+        let Some((body, view)) = game.player(n) else { return };
+        let drag = if settings.aim_assist {
+            let (yaw, pitch) = view.aim();
+            let dir = Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos());
+            let eye = crate::head::eye_position(&view, &body, game.alpha());
+            look::slowdown(&mut game.world, eye, dir, view.ads)
+        } else {
+            1.0
+        };
+        if let Some(mut view) = game.player_view_mut(n) {
+            view.turn(turn * drag);
+        }
     }
 
     /// What the dead and the fires did to them this frame: their `blows`,
@@ -328,14 +355,14 @@ impl Seat {
     pub(super) fn hud(&self, ui: &mut Ui, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>, busy: Option<f64>) {
         let time = game.clock().time;
         let v = &self.vitals;
-        let interact = self.keys.name(Action::Interact);
+        let interact = self.input.name(Action::Interact);
         // The kits, and the throwable picked, each with its key.
-        let mut kits = vec![(self.keys.name(Action::Medkit), "MEDKIT", self.bag.count(Kind::Medkit)), (self.keys.name(Action::Bandage), "BANDAGE", self.bag.count(Kind::Bandage))];
+        let mut kits = vec![(self.input.name(Action::Medkit), "MEDKIT", self.bag.count(Kind::Medkit)), (self.input.name(Action::Bandage), "BANDAGE", self.bag.count(Kind::Bandage))];
         if self.bag.count(Kind::ArmorPlate) > 0 {
-            kits.insert(0, (self.keys.name(Action::Plate), "ARMOR PLATE", self.bag.count(Kind::ArmorPlate)));
+            kits.insert(0, (self.input.name(Action::Plate), "ARMOR PLATE", self.bag.count(Kind::ArmorPlate)));
         }
         if let Some((what, n)) = self.picked() {
-            kits.insert(0, (self.keys.name(Action::Throw), what.kind().def().name, n));
+            kits.insert(0, (self.input.name(Action::Throw), what.kind().def().name, n));
         }
         // A gun that switches says how it's set.
         let arms = &combat.arms[self.n];

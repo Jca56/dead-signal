@@ -14,7 +14,7 @@ use crate::containers::{self, Container};
 use crate::items;
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
-use crate::settings::keys::{Action, Bind};
+use crate::settings::keys::Action;
 use crate::sound::Sfx;
 use crate::world::Game;
 use crate::zombie;
@@ -113,14 +113,14 @@ impl Seat {
             self.inventory(ui, cx, game, open, icons);
             return;
         }
-        if self.keys.pressed(ui, Action::Inventory) {
+        if self.input.pressed(ui, Action::Inventory) {
             self.open_bag(cx, None);
             return;
         }
         match aimed {
             Aimed::Pickup(e, stack) => {
                 self.search = None;
-                if self.keys.pressed(ui, Action::Interact) {
+                if self.input.pressed(ui, Action::Interact) {
                     let left = self.bag.add(stack);
                     if left.count == stack.count {
                         self.note = Some(("NO ROOM", NOTE_FOR));
@@ -147,7 +147,7 @@ impl Seat {
         let (source, searched, locked, middle) = (c.source, c.searched, c.locked, c.middle());
         if searched {
             self.search = None;
-            if self.keys.pressed(ui, Action::Interact) {
+            if self.input.pressed(ui, Action::Interact) {
                 self.open_bag(cx, Some(e));
             }
             return;
@@ -156,7 +156,7 @@ impl Seat {
         let has_key = key.is_some_and(|k| self.bag.count(k) > 0);
         if locked && !has_key {
             self.search = None;
-            if self.keys.pressed(ui, Action::Interact) {
+            if self.input.pressed(ui, Action::Interact) {
                 combat.play(Sfx::Rattle, 0.8);
                 self.note = Some((
                     match key {
@@ -169,7 +169,7 @@ impl Seat {
             }
             return;
         }
-        if !self.keys.held(ui, Action::Interact) {
+        if !self.input.held(ui, Action::Interact) {
             self.search = None;
             return;
         }
@@ -240,7 +240,7 @@ impl Seat {
     /// from what's searched; things dragged out land at the player's feet.
     fn inventory(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, open: Open, icons: &Icons) {
         // (Only a key closes it: a mouse button is for the things in it.)
-        let closing = [Action::Inventory, Action::Interact].into_iter().any(|a| matches!(self.keys.get(a), Bind::Key(_)) && self.keys.pressed(ui, a));
+        let closing = [Action::Inventory, Action::Interact].into_iter().any(|a| self.input.key_pressed(ui, a));
         let feet = game.player(self.n).map(|(b, _)| b.pos);
         let too_far = open.container.is_some_and(|e| {
             let middle = game.world.get::<Container>(e).map(Container::middle);

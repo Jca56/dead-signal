@@ -123,8 +123,8 @@ impl DeadSignal {
             self.map_open = false;
             return;
         }
-        let keys = self.game.world.resource::<crate::settings::Settings>().keys;
-        if active && keys.pressed(ui, crate::settings::keys::Action::Map) {
+        let asked = self.run.seats.first_mut().is_some_and(|s| s.input.pressed(ui, crate::settings::keys::Action::Map));
+        if active && asked {
             self.map_open = !self.map_open;
         }
         if !self.map_open {

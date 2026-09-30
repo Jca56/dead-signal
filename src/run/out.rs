@@ -177,7 +177,7 @@ impl Out {
             }
         }
 
-        let held = seat.keys.held(ui, Action::Interact);
+        let held = seat.input.held(ui, Action::Interact);
         let bag_has = |bag: &crate::loot::bag::Bag, k: Kind| bag.count(k) > 0;
         let mut out = None;
         let mut refresh = None;
