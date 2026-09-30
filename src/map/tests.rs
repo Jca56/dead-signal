@@ -179,7 +179,7 @@ fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     let rig = crate::assets::Rigged { mesh: Vec::new(), gltf: lntrn_model::Gltf::load(path).expect("shambler.glb"), skin: 0 };
     game.world.insert_resource(crate::zombie::figure::Model::new(rig).expect("the model"));
     let (at, yaw) = built.map.spawn;
-    game.spawn_player(at.x, at.z, yaw);
+    game.spawn_player(0, at.x, at.z, yaw);
     let mut run = crate::run::Run::default();
     let mut combat = crate::combat::Combat::new();
     run.start(&mut game, &mut combat, crate::loot::bag::Bag::empty(), 0, crate::profile::perks::Perks::default(), &built.map);
@@ -202,14 +202,14 @@ fn a_run_on_a_fresh_map_goes_on_without_a_hitch() {
     // Ten seconds walking in towards the middle of the map, the dead
     // coming after.
     game.simulating = true;
-    game.controls_mut().walk = Vec2::new(0.0, 1.0);
-    let start = game.player().unwrap().0.pos;
+    game.controls_mut(0).expect("the player").walk = Vec2::new(0.0, 1.0);
+    let start = game.player(0).unwrap().0.pos;
     let started = std::time::Instant::now();
     for step in 1..=600 {
         game.tick(f64::from(step) / 60.0 + 1e-6);
     }
     eprintln!("10 s of a run in {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
-    let (body, _) = game.player().unwrap();
+    let (body, _) = game.player(0).unwrap();
     let ground = built.map.field.height_at(body.pos.x, body.pos.z).unwrap();
     assert!(body.pos.y > ground - 0.3, "fell into the ground: {} under {ground}", body.pos.y);
     let walked = Vec2::new(body.pos.x - start.x, body.pos.z - start.z).length();

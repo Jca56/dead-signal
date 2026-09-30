@@ -1,19 +1,25 @@
 //! The dead, a step at a time: each thinks (as often as its distance from
-//! the player allows) and moves, the near ones keep out of each other's
-//! way; and each frame, each is posed for drawing and hitting, and the
-//! long dead are buried.
+//! the nearest player allows) about the player it's after and moves, the
+//! near ones keep out of each other's way; and each frame, each is posed
+//! for drawing and hitting, and the long dead are buried.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Quat, Vec2, Vec3};
 
 use super::*;
+use super::steer::flat_dist;
 use crate::player::{self, Body, Player, RADIUS, STEP};
 use crate::world::{Blend, Solid};
+
+/// The player nearest `at` (flat): their seat, and where they stand.
+fn nearest(players: &[(usize, Vec3)], at: Vec3) -> Option<(usize, Vec3)> {
+    players.iter().copied().min_by(|a, b| flat_dist(a.1, at).total_cmp(&flat_dist(b.1, at)))
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn think(
     mut dead: Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>,
-    players: Query<&Body, With<Player>>,
+    players: Query<(&Player, &Body)>,
     solid: Res<Solid>,
     nav: Res<Nav>,
     stealth: Option<Res<Stealth>>,
@@ -22,7 +28,7 @@ pub(super) fn think(
     mut horde: ResMut<Horde>,
     mut barriers: Option<ResMut<breach::Barriers>>,
 ) {
-    let player = players.iter().next().map(|b| b.pos);
+    let players: Vec<(usize, Vec3)> = players.iter().map(|(p, b)| (p.0, b.pos)).collect();
     horde.tick = horde.tick.wrapping_add(1);
     let tick = horde.tick;
     let new = std::mem::take(&mut *noises);
@@ -40,11 +46,12 @@ pub(super) fn think(
     let searches = std::cell::Cell::new(SEARCHES);
     let lures = horde.lures.clone();
     let ways_in = barriers.as_ref().map(|b| b.0.clone()).unwrap_or_default();
-    let senses = Senses { barriers: &ways_in, lures: &lures, solids: &solid.0, nav: nav.0.as_ref(), player, noises: &shots, alerts: &snarls, searches: &searches, sight: if cheats.is_some_and(|c| c.ignored) { 0.0 } else { stealth.map_or(1.0, |s| s.0) } };
+    let mut senses = Senses { barriers: &ways_in, lures: &lures, solids: &solid.0, nav: nav.0.as_ref(), player: None, noises: &shots, alerts: &snarls, searches: &searches, sight: if cheats.is_some_and(|c| c.ignored) { 0.0 } else { stealth.map_or(1.0, |s| s.0) } };
     for (mut z, mut body, mut beat) in &mut dead {
         // Far off, it steps less often, and further each time. (What's
         // heard is kept as long as the farthest go between steps.)
-        let far = player.map_or(0.0, |p| Vec2::new(body.pos.x - p.x, body.pos.z - p.z).length());
+        let quarry = nearest(&players, body.pos);
+        let far = quarry.map_or(0.0, |(_, p)| flat_dist(body.pos, p));
         let n = every(far);
         if !(tick + beat.phase).is_multiple_of(n) {
             beat.since += 1;
@@ -52,11 +59,12 @@ pub(super) fn think(
         }
         *beat = Beat { every: n, since: 0, ..*beat };
         let dt = STEP * f64::from(n);
+        senses.player = quarry.map(|(_, p)| p);
         let mut intent = z.think(&body, &senses, dt);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
         horde.sounds.extend(intent.sounds.drain(..).map(|(sfx, gain)| (sfx, voice, gain)));
-        if let Some(blow) = intent.hit {
-            horde.blows.push(blow);
+        if let (Some(blow), Some((seat, _))) = (intent.hit, quarry) {
+            horde.blows.push((seat, blow));
         }
         if let Some(seen) = intent.alert {
             noises.snarls.push((body.pos, seen));
@@ -89,8 +97,8 @@ pub(super) fn think(
         let before = body.pos;
         let gait = z.gait;
         player::step_body(&mut body, z.yaw, &mut intent.controls, &solid.0, &gait, dt);
-        // Kept out of the player's way.
-        if let Some(p) = player {
+        // Kept out of the players' way.
+        for &(_, p) in &players {
             let off = Vec2::new(body.pos.x - p.x, body.pos.z - p.z);
             let d = off.length();
             if d < PERSONAL && d > 1e-6 {
@@ -144,12 +152,12 @@ fn elbow(dead: &mut Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>)
 /// figure, and how it looks.
 type Posed<'a> = (&'a Zombie, &'a Body, &'a Beat, &'a mut Figure, Option<&'a Looks>);
 
-pub(super) fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<&Body, With<Player>>, mut frames: Local<u32>, mut dead: Query<Posed, Without<Player>>) {
+pub(super) fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<(&Player, &Body)>, mut frames: Local<u32>, mut dead: Query<Posed, Without<Player>>) {
     let Some(model) = model else { return };
-    let player = players.iter().next().map(|b| b.pos);
+    let players: Vec<(usize, Vec3)> = players.iter().map(|(p, b)| (p.0, b.pos)).collect();
     *frames = frames.wrapping_add(1);
     for (z, body, beat, mut figure, looks) in &mut dead {
-        let far = player.map_or(0.0, |p| Vec2::new(body.pos.x - p.x, body.pos.z - p.z).length());
+        let far = nearest(&players, body.pos).map_or(0.0, |(_, p)| flat_dist(body.pos, p));
         if far > UNSEEN {
             figure.hide();
             continue;

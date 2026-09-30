@@ -23,7 +23,7 @@ fn world(player: Vec3) -> World {
     w.insert_resource(Booms::default());
     w.insert_resource(zombie::Noises::default());
     w.insert_resource(zombie::Heat::default());
-    w.spawn((Player, Body::at(player)));
+    w.spawn((Player(0), Body::at(player)));
     w
 }
 
@@ -71,7 +71,20 @@ fn the_dead_walking_into_fire_burn_and_burn_on_after() {
     let mut w = world(Vec3::new(0.5, 0.0, 0.0));
     w.spawn(Fire { at: Vec3::ZERO, radius: 3.0, left: 8.0, crackle_in: 0.0 });
     steps(&mut w, 1.0);
-    assert!(w.resource::<Booms>().scorched > 10.0);
+    assert!(w.resource::<Booms>().of(0).scorched > 10.0);
+}
+
+#[test]
+fn a_blast_hurts_the_player_beside_it_and_only_shakes_the_one_off() {
+    // The first player off out of its reach; the second right by it.
+    let mut w = world(Vec3::new(0.0, 0.0, 12.0));
+    w.spawn((Player(1), Body::at(Vec3::new(2.0, 0.0, 0.0))));
+    throw(&mut w, Throwable::PipeBomb, Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0));
+    steps(&mut w, FUSE + 1.0);
+    let booms = w.resource::<Booms>();
+    let (off, beside) = (booms.of(0), booms.of(1));
+    assert!(beside.blasted > 0.0 && beside.shake > off.shake, "beside it: {beside:?}");
+    assert!(off.blasted == 0.0 && off.shake > 0.0, "off out of reach: {off:?}");
 }
 
 #[test]
@@ -89,7 +102,8 @@ fn a_pipe_bomb_draws_the_dead_then_blows_them_apart() {
     steps(&mut w, FUSE);
     let booms = w.resource::<Booms>();
     assert_eq!(booms.kills.len(), 3, "the three close by");
-    assert!(booms.blasted == 0.0 && booms.shake > 0.0, "the player's out of its reach, but it shakes them");
+    let felt = booms.of(0);
+    assert!(felt.blasted == 0.0 && felt.shake > 0.0, "the player's out of its reach, but it shakes them");
     assert!(w.query::<&Thrown>().iter(&w).next().is_none() && w.resource::<Horde>().lures.is_empty());
 }
 

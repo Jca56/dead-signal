@@ -9,7 +9,7 @@ use lntrn_math::{Mat4, Vec3};
 use crate::assets::Prop;
 use crate::collide::{Solids, Surface};
 use crate::head::{self, View};
-use crate::player::{self, Body, Controls, Player};
+use crate::player::{self, Body, Controls, Load, Player};
 use crate::targets::{self, Kind, Target};
 use crate::zombie;
 use crate::render::MeshId;
@@ -150,7 +150,6 @@ impl Game {
         world.insert_resource(Clock::default());
         world.insert_resource(Ground::default());
         world.insert_resource(Solid::default());
-        world.insert_resource(Controls::default());
         world.insert_resource(Blend::default());
         world.insert_resource(zombie::Nav::default());
         world.insert_resource(zombie::Noises::default());
@@ -169,51 +168,88 @@ impl Game {
         Self { world, frame, fixed, owed: 0.0, simulating: false }
     }
 
-    /// Put a player on the ground at `(x, z)`, facing `yaw`, in place of
-    /// any there was.
-    pub fn spawn_player(&mut self, x: f64, z: f64, yaw: f64) {
-        self.despawn_player();
+    /// Put player `seat` on the ground at `(x, z)`, facing `yaw`, in place
+    /// of any in that seat.
+    pub fn spawn_player(&mut self, seat: usize, x: f64, z: f64, yaw: f64) {
+        if let Some(e) = self.player_entity(seat) {
+            self.world.despawn(e);
+        }
         let y = self.ground().height_at(x, z).unwrap_or(0.0);
-        self.world.spawn((Player, Body::at(Vec3::new(x, y, z)), View::facing(yaw)));
-        *self.world.resource_mut::<Controls>() = Controls::default();
+        self.world.spawn((Player(seat), Body::at(Vec3::new(x, y, z)), View::facing(yaw), Controls::default(), Load::default()));
         self.owed = 0.0;
     }
 
-    pub fn despawn_player(&mut self) {
+    /// Every player gone.
+    pub fn despawn_players(&mut self) {
         let players: Vec<Entity> = self.world.query_filtered::<Entity, With<Player>>().iter(&self.world).collect();
         for e in players {
             self.world.despawn(e);
         }
     }
 
-    /// The player's body and view, if one is about.
-    pub fn player(&mut self) -> Option<(Body, View)> {
-        self.world.query_filtered::<(&Body, &View), With<Player>>().iter(&self.world).next().map(|(b, v)| (*b, *v))
+    fn player_entity(&mut self, seat: usize) -> Option<Entity> {
+        self.world.query::<(Entity, &Player)>().iter(&self.world).find(|(_, p)| p.0 == seat).map(|(e, _)| e)
     }
 
-    /// Put the player at `at`, as they are (the dev's teleport).
-    pub fn teleport(&mut self, at: Vec3) {
-        if let Some(mut body) = self.world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut self.world).next() {
+    /// Player `seat`'s body and view, if they're about.
+    pub fn player(&mut self, seat: usize) -> Option<(Body, View)> {
+        let e = self.player_entity(seat)?;
+        Some((*self.world.get::<Body>(e)?, *self.world.get::<View>(e)?))
+    }
+
+    /// Every player about: their seat, body and view, the first first.
+    pub fn players(&mut self) -> Vec<(usize, Body, View)> {
+        let mut all: Vec<(usize, Body, View)> = self.world.query::<(&Player, &Body, &View)>().iter(&self.world).map(|(p, b, v)| (p.0, *b, *v)).collect();
+        all.sort_by_key(|(seat, _, _)| *seat);
+        all
+    }
+
+    /// Put player `seat` at `at`, as they are (the dev's teleport).
+    pub fn teleport(&mut self, seat: usize, at: Vec3) {
+        if let Some(e) = self.player_entity(seat)
+            && let Some(mut body) = self.world.get_mut::<Body>(e)
+        {
             body.pos = at;
             body.prev = at;
             body.vel = Vec3::ZERO;
         }
     }
 
-    /// Shove the player (a blow landing).
-    pub fn push_player(&mut self, push: Vec3) {
-        if let Some(mut body) = self.world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut self.world).next() {
+    /// Shove player `seat` (a blow landing).
+    pub fn push_player(&mut self, seat: usize, push: Vec3) {
+        if let Some(e) = self.player_entity(seat)
+            && let Some(mut body) = self.world.get_mut::<Body>(e)
+        {
             body.push += push;
         }
     }
 
-    /// The player's view, to turn it.
-    pub fn player_view_mut(&mut self) -> Option<Mut<'_, View>> {
-        self.world.query_filtered::<&mut View, With<Player>>().iter_mut(&mut self.world).next()
+    /// Player `seat`'s view, to turn it.
+    pub fn player_view_mut(&mut self, seat: usize) -> Option<Mut<'_, View>> {
+        let e = self.player_entity(seat)?;
+        self.world.get_mut::<View>(e)
     }
 
-    pub fn controls_mut(&mut self) -> Mut<'_, Controls> {
-        self.world.resource_mut::<Controls>()
+    /// What player `seat` is doing with the keys.
+    pub fn controls_mut(&mut self, seat: usize) -> Option<Mut<'_, Controls>> {
+        let e = self.player_entity(seat)?;
+        self.world.get_mut::<Controls>(e)
+    }
+
+    /// Every player's keys let go (paused, or the run over).
+    pub fn release_controls(&mut self) {
+        for mut c in self.world.query::<&mut Controls>().iter_mut(&mut self.world) {
+            *c = Controls::default();
+        }
+    }
+
+    /// How much of a sprint player `seat`'s gear leaves them.
+    pub fn set_load(&mut self, seat: usize, share: f64) {
+        if let Some(e) = self.player_entity(seat)
+            && let Some(mut load) = self.world.get_mut::<Load>(e)
+        {
+            load.0 = share;
+        }
     }
 
     /// How far between its last two steps the simulation is, 0–1: what a
@@ -314,6 +350,22 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn players_keep_their_own_seats() {
+        let mut g = Game::new();
+        g.spawn_player(0, 1.0, 2.0, 0.0);
+        g.spawn_player(1, 5.0, 6.0, 0.0);
+        // Seat 0 again: in place of the first, the second left be.
+        g.spawn_player(0, -3.0, -4.0, 0.0);
+        let seats: Vec<(usize, f64)> = g.players().iter().map(|(seat, b, _)| (*seat, b.pos.x)).collect();
+        assert_eq!(seats, vec![(0, -3.0), (1, 5.0)]);
+        assert!(g.controls_mut(1).is_some() && g.controls_mut(2).is_none());
+        g.push_player(1, Vec3::new(0.0, 0.0, 2.0));
+        assert_eq!(g.player(0).unwrap().0.push, Vec3::ZERO, "only the one shoved");
+        g.despawn_players();
+        assert!(g.players().is_empty());
+    }
 
     #[test]
     fn a_blink_follows_its_pattern() {

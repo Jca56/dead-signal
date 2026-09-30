@@ -9,13 +9,13 @@ use lntrn_ui::{AreaCx, Ui};
 
 use super::loot::{self, NOTE_FOR};
 use super::Run;
+use super::seat::Seat;
 use crate::bag_ui::Icons;
 use crate::combat::Combat;
 use crate::holdout::{Holdout, arena::Arena};
 use crate::profile::perks::Perks;
 use crate::settings::keys::Action;
 use crate::sound::Sfx;
-use crate::vitals::Vitals;
 use crate::world::Game;
 
 impl Run {
@@ -24,17 +24,11 @@ impl Run {
     pub fn start_holdout(&mut self, game: &mut Game, combat: &mut Combat, arena: Arena, best_round: u32) {
         *self = Self::default();
         self.best_round = best_round;
-        self.bag = Holdout::loadout();
-        let perks = Perks::default();
-        self.perks = perks;
-        self.vitals = Vitals::with(&perks);
-        combat.hands.reload_speed = perks.reload_speed();
-        combat.melee = perks.melee();
-        self.take_up(combat, self.first_armed());
+        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
+        combat.reset(1);
+        self.seats = vec![Seat::new(0, Holdout::loadout(), Perks::default(), seed, combat)];
         game.world.insert_resource(crate::zombie::Stealth(1.0));
         game.world.insert_resource(crate::zombie::Heat::default());
-        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
-        self.dice = crate::loot::Dice(seed.rotate_left(7) | 1);
         let mut holdout = Holdout::new(arena, seed.rotate_left(3));
         holdout.begin(&mut game.world);
         self.holdout = Some(holdout);
@@ -49,8 +43,11 @@ impl Run {
     /// dead brought in, the boards and doors shown as they are.
     pub(super) fn holdout_step(&mut self, game: &mut Game, combat: &mut Combat, eye: Vec3, dt: f64) {
         let Some(h) = &mut self.holdout else { return };
-        h.score(&self.stats);
-        self.stats.biggest_horde = self.stats.biggest_horde.max(crate::zombie::alive(&mut game.world) as u32);
+        let alive = crate::zombie::alive(&mut game.world) as u32;
+        for seat in &mut self.seats {
+            h.score(seat.n, &seat.stats);
+            seat.stats.biggest_horde = seat.stats.biggest_horde.max(alive);
+        }
         if h.update(&mut game.world, eye - Vec3::new(0.0, 1.6, 0.0), dt) {
             // A new round: the radio crackles.
             combat.play(Sfx::Static, 0.9);
@@ -58,13 +55,23 @@ impl Run {
         crate::holdout::props::sync(&mut game.world, h);
     }
 
-    /// The rest of a holdout's frame: what's in front of the player used
-    /// (E to buy or open, held to nail boards back), the HUD, the bag.
+    /// The rest of a holdout's frame, for each player: what's in front of
+    /// them used, their HUD, their bag.
     pub(super) fn holdout_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, icons: &Icons, dt: f64) {
-        // (Held apart while the run's own are used alongside.)
-        let Some(mut h) = self.holdout.take() else { return };
+        let Some(h) = &mut self.holdout else { return };
+        for seat in &mut self.seats {
+            seat.hold_out(ui, cx, game, combat, icons, dt, h);
+        }
+    }
+}
+
+impl Seat {
+    /// A holdout's frame for this player: what's in front of them used (E
+    /// to buy or open, held to nail boards back), the HUD, the bag.
+    #[allow(clippy::too_many_arguments)]
+    fn hold_out(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, icons: &Icons, dt: f64, h: &mut Holdout) {
         let busy = self.open.is_some() || self.vitals.healing.is_some();
-        let aimed = if busy { None } else { loot::eye(game).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir)) };
+        let aimed = if busy { None } else { loot::eye(game, self.n).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir)) };
         if let Some(a) = aimed
             && self.keys.pressed(ui, Action::Interact)
         {
@@ -83,8 +90,8 @@ impl Run {
             combat.play(sfx, 0.8);
         }
         let prompt = aimed.map(|a| ("E", h.prompt(a, &self.bag)));
-        self.holdout = Some(h);
-        self.hud(ui, combat, game, prompt);
+        self.hud(ui, combat, game, prompt, h.nail_progress());
+        crate::holdout::hud::draw(ui, h);
         self.looting(ui, cx, game, combat, icons, dt, loot::Aimed::Nothing);
     }
 }

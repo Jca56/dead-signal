@@ -30,18 +30,38 @@ use crate::zombie::{self, Horde, spit};
 const SPRINT_BLOCK: f64 = 0.3;
 
 pub struct Combat {
-    pub hands: Hands,
+    /// Each player's, by seat.
+    pub arms: Vec<Arms>,
     pub fx: Fx,
     sound: Sound,
-    sprint_block: f64,
     seed: u32,
-    /// How red the edges of the screen are from a blow, 0–1, fading.
-    pub hurt: f64,
-    /// Melee damage and shove, a multiple of the usual (brawler).
-    pub melee: f64,
     /// Luck for what the dead drop: its own, so it owes nothing to the
     /// spread of shots.
     loot: Dice,
+}
+
+/// A player's side of the fight: what's in their hands, and how the
+/// fight's going for them.
+pub struct Arms {
+    pub hands: Hands,
+    sprint_block: f64,
+    /// How red the edges of their screen are from a blow, 0–1, fading.
+    pub hurt: f64,
+    /// Melee damage and shove, a multiple of the usual (brawler).
+    pub melee: f64,
+}
+
+impl Default for Arms {
+    fn default() -> Self {
+        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0 }
+    }
+}
+
+impl Arms {
+    /// Whether they may sprint (not just after a shot).
+    pub fn sprint_allowed(&self) -> bool {
+        self.sprint_block <= 0.0
+    }
 }
 
 /// How hard a blow shoves the player, m/s, and shakes the view, metres.
@@ -98,8 +118,9 @@ impl Heard {
     }
 }
 
-/// Where the eye is and which way it looks.
+/// Whose eye (their seat), where it is and which way it looks.
 struct Aim {
+    seat: usize,
     eye: Vec3,
     dir: Vec3,
     right: Vec3,
@@ -109,24 +130,17 @@ struct Aim {
 
 impl Combat {
     pub fn new() -> Self {
-        Self { hands: Hands::default(), fx: Fx::default(), sound: Sound::new(), sprint_block: 0.0, seed: 0x6C8E_9CF5, hurt: 0.0, melee: 1.0, loot: Dice::default() }
+        Self { arms: vec![Arms::default()], fx: Fx::default(), sound: Sound::new(), seed: 0x6C8E_9CF5, loot: Dice::default() }
     }
 
     pub fn init(&mut self, renderer: &mut Renderer) {
         self.fx.init(renderer);
     }
 
-    /// Whether the player may sprint (not just after a shot).
-    pub fn sprint_allowed(&self) -> bool {
-        self.sprint_block <= 0.0
-    }
-
-    /// A fresh run: empty hands (the run says what to take up), nothing
-    /// in the air.
-    pub fn reset(&mut self) {
-        self.hands = Hands::default();
-        self.sprint_block = 0.0;
-        self.hurt = 0.0;
+    /// A fresh run for `players`: each one's hands empty (the run says
+    /// what to take up).
+    pub fn reset(&mut self, players: usize) {
+        self.arms = (0..players).map(|_| Arms::default()).collect();
     }
 
     /// Set how loud everything is.
@@ -151,34 +165,39 @@ impl Combat {
         f64::from(self.seed) / f64::from(u32::MAX)
     }
 
-    /// Take up `weapon` (from `held`, `mag` rounds in it): it comes up
-    /// into view.
-    pub fn take_up(&mut self, held: Option<Slot>, weapon: Weapon, mag: u32) {
-        self.hands.take_up(held, weapon, mag);
+    /// Player `seat` takes up `weapon` (from `held`, `mag` rounds in it):
+    /// it comes up into view.
+    pub fn take_up(&mut self, seat: usize, held: Option<Slot>, weapon: Weapon, mag: u32) {
+        self.arms[seat].hands.take_up(held, weapon, mag);
         if weapon != Weapon::Fists {
             self.sound.play(Sfx::SlideRack, 0.35);
         }
     }
 
-    /// One frame of a run: the hands, what they do, and what flies.
-    /// How much stamina its swings took.
-    pub fn frame(&mut self, game: &mut Game, trigger: Trigger, dt: f64, stats: &mut Stats) -> f64 {
+    /// A frame of what flies, once for everyone (before their hands).
+    pub fn update(&mut self, dt: f64) {
         self.fx.update(dt);
-        self.sprint_block -= dt;
-        self.hurt = (self.hurt - dt * 1.6).max(0.0);
-        let spec = self.hands.spec();
-        let acts = self.hands.update(trigger, dt);
+    }
+
+    /// One frame of a run for player `seat`: their hands, and what they
+    /// do. How much stamina their swings took.
+    pub fn frame(&mut self, game: &mut Game, seat: usize, trigger: Trigger, dt: f64, stats: &mut Stats) -> f64 {
+        let arms = &mut self.arms[seat];
+        arms.sprint_block -= dt;
+        arms.hurt = (arms.hurt - dt * 1.6).max(0.0);
+        let spec = arms.hands.spec();
+        let acts = arms.hands.update(trigger, dt);
         // Down the sights, the view closes in.
-        let sights = self.hands.aim();
-        if let Some(mut v) = game.player_view_mut() {
+        let sights = arms.hands.aim();
+        if let Some(mut v) = game.player_view_mut(seat) {
             v.ads = sights;
             v.ads_zoom = spec.shot.map_or(1.0, |s| s.zoom);
         }
         if acts.is_empty() {
             return 0.0;
         }
-        let Some((body, view)) = game.player() else { return 0.0 };
-        let aim = aim(&view, &body, game.alpha());
+        let Some((body, view)) = game.player(seat) else { return 0.0 };
+        let aim = aim(seat, &view, &body, game.alpha());
         let mut spent = 0.0;
         for act in acts {
             match act {
@@ -187,12 +206,12 @@ impl Combat {
                     stats.shots += 1;
                     self.sound.play(shot.sound, 0.9);
                     zombie::noise(&mut game.world, aim.eye, shot.heard);
-                    self.sprint_block = SPRINT_BLOCK;
+                    self.arms[seat].sprint_block = SPRINT_BLOCK;
                     let side = (self.rand() - 0.5) * shot.kick_side;
-                    if let Some(mut v) = game.player_view_mut() {
+                    if let Some(mut v) = game.player_view_mut(seat) {
                         v.recoil(shot.kick, side);
                     }
-                    let spread = shot.hip.toward(shot.aimed, self.hands.aim());
+                    let spread = shot.hip.toward(shot.aimed, self.arms[seat].hands.aim());
                     let spread = if !body.grounded {
                         spread.air
                     } else if body.speed_flat() > 0.5 {
@@ -224,13 +243,13 @@ impl Combat {
                 Act::SlideRack => self.sound.play(Sfx::SlideRack, 0.8),
                 Act::Pump => {
                     // The pump that finishes a reload counts it.
-                    stats.reloads += u32::from(self.hands.clip().0 == Clip::ReloadEnd);
+                    stats.reloads += u32::from(self.arms[seat].hands.clip().0 == Clip::ReloadEnd);
                     self.sound.play(Sfx::Pump, 0.85);
                 }
                 Act::ShellIn => self.sound.play(Sfx::ShellIn, 0.75),
                 Act::Bolt => {
                     // The bolt that finishes a reload counts it.
-                    stats.reloads += u32::from(self.hands.clip().0 == Clip::ReloadEnd);
+                    stats.reloads += u32::from(self.arms[seat].hands.clip().0 == Clip::ReloadEnd);
                     self.sound.play(Sfx::Bolt, 0.8);
                 }
                 Act::Swing => {
@@ -239,7 +258,8 @@ impl Combat {
                 }
                 Act::Strike => {
                     let b = spec.bash;
-                    let hit = Hit { reach: b.reach, damage: b.damage * self.melee, blow: true, falloff: None, shove: zombie::blow_shove(self.melee * b.shove), stumble: true, pierce: &[], takedown: b.takedown };
+                    let melee = self.arms[seat].melee;
+                    let hit = Hit { reach: b.reach, damage: b.damage * melee, blow: true, falloff: None, shove: zombie::blow_shove(melee * b.shove), stumble: true, pierce: &[], takedown: b.takedown };
                     // Rays across its arc, the middle first, then out either
                     // side: the first thing met stops a lone blow; one that
                     // cleaves goes on through the arc to strike as many of
@@ -320,7 +340,7 @@ impl Combat {
                     self.sound.play_at(Sfx::Flesh, 1.0, point, aim.eye, aim.right, false);
                 }
                 if hit.blow
-                    && let Some(mut v) = game.player_view_mut()
+                    && let Some(mut v) = game.player_view_mut(aim.seat)
                 {
                     v.jolt(0.02);
                 }
@@ -350,7 +370,7 @@ impl Combat {
                 self.sound.play_at(sfx, gain, point, aim.eye, aim.right, false);
             }
             if hit.blow
-                && let Some(mut v) = game.player_view_mut()
+                && let Some(mut v) = game.player_view_mut(aim.seat)
             {
                 v.jolt(0.02);
             }
@@ -370,7 +390,7 @@ impl Combat {
             self.sound.play_at(sfx, gain, wall.point, aim.eye, aim.right, false);
         }
         if hit.blow
-            && let Some(mut v) = game.player_view_mut()
+            && let Some(mut v) = game.player_view_mut(aim.seat)
         {
             v.jolt(0.012);
         }
@@ -383,14 +403,15 @@ impl Combat {
     }
 }
 
-/// The eye and its directions, as the camera has them this frame.
-fn aim(view: &View, body: &Body, alpha: f64) -> Aim {
+/// Player `seat`'s eye and its directions, as their camera has them this
+/// frame.
+fn aim(seat: usize, view: &View, body: &Body, alpha: f64) -> Aim {
     let (yaw, pitch) = view.aim();
     let (sy, cy) = yaw.sin_cos();
     let (sp, cp) = pitch.sin_cos();
     let dir = Vec3::new(-sy * cp, sp, -cy * cp);
     let right = Vec3::new(cy, 0.0, -sy);
-    Aim { eye: head::eye_position(view, body, alpha), dir, right, up: right.cross(dir) }
+    Aim { seat, eye: head::eye_position(view, body, alpha), dir, right, up: right.cross(dir) }
 }
 
 #[cfg(test)]
@@ -403,20 +424,20 @@ mod tests {
         let mut game = Game::new();
         let gltf = lntrn_model::Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb")).expect("shambler.glb");
         game.world.insert_resource(zombie::figure::Model::new(crate::assets::Rigged { mesh: Vec::new(), gltf, skin: 0 }).expect("the model"));
-        game.spawn_player(0.0, 0.0, 0.0);
+        game.spawn_player(0, 0.0, 0.0, 0.0);
         // Aimed at its chest, not over its shoulders.
-        game.player_view_mut().unwrap().pitch = -(0.5f64 / metres).atan();
+        game.player_view_mut(0).unwrap().pitch = -(0.5f64 / metres).atan();
         zombie::spawn_kind(&mut game.world, Vec3::new(0.0, 0.0, -metres), 0.0, zombie::kind::Kind::Shambler, zombie::looks::Theme::Townsfolk);
         game.tick(0.0);
         let hp = |game: &mut Game| game.world.query::<&zombie::brain::Zombie>().iter(&game.world).map(|z| z.hp).sum::<f64>();
         let before = hp(&mut game);
         let mut combat = Combat::new();
-        combat.take_up(Some(Slot::Primary), Weapon::Shotgun, 5);
+        combat.take_up(0, Some(Slot::Primary), Weapon::Shotgun, 5);
         let mut stats = Stats::default();
         // Up into the hands, then the trigger pulled once.
         for frame in 0..90 {
             let trigger = Trigger { fire: frame == 60, ..Trigger::default() };
-            combat.frame(&mut game, trigger, 1.0 / 60.0, &mut stats);
+            combat.frame(&mut game, 0, trigger, 1.0 / 60.0, &mut stats);
         }
         assert_eq!(stats.shots, 1);
         before - hp(&mut game)

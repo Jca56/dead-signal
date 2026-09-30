@@ -7,7 +7,7 @@ use bevy_ecs::entity::Entity;
 use lntrn_math::Vec3;
 use lntrn_ui::{AreaCx, ShellRequest, Ui};
 
-use super::{Open, Run};
+use super::seat::{Open, Seat};
 use crate::bag_ui::{Icons, Shelves};
 use crate::combat::Combat;
 use crate::containers::{self, Container};
@@ -57,22 +57,22 @@ impl Search {
     }
 }
 
-/// Where the player's eye is and which way it looks.
-pub(super) fn eye(game: &mut Game) -> Option<(Vec3, Vec3)> {
-    let (body, view) = game.player()?;
+/// Where player `seat`'s eye is and which way it looks.
+pub(super) fn eye(game: &mut Game, seat: usize) -> Option<(Vec3, Vec3)> {
+    let (body, view) = game.player(seat)?;
     let eye = crate::head::eye_position(&view, &body, game.alpha());
     let (yaw, pitch) = view.aim();
     Some((eye, Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos())))
 }
 
-impl Run {
+impl Seat {
     /// What's looked at: something lying within reach first, else a
     /// container.
     pub(super) fn aim(&self, game: &mut Game) -> Aimed {
         if self.open.is_some() {
             return Aimed::Nothing;
         }
-        let Some((eye, dir)) = eye(game) else { return Aimed::Nothing };
+        let Some((eye, dir)) = eye(game, self.n) else { return Aimed::Nothing };
         if let Some((e, stack)) = items::in_view(&mut game.world, eye, dir) {
             return Aimed::Pickup(e, stack);
         }
@@ -241,7 +241,7 @@ impl Run {
     fn inventory(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, open: Open, icons: &Icons) {
         // (Only a key closes it: a mouse button is for the things in it.)
         let closing = [Action::Inventory, Action::Interact].into_iter().any(|a| matches!(self.keys.get(a), Bind::Key(_)) && self.keys.pressed(ui, a));
-        let feet = game.player().map(|(b, _)| b.pos);
+        let feet = game.player(self.n).map(|(b, _)| b.pos);
         let too_far = open.container.is_some_and(|e| {
             let middle = game.world.get::<Container>(e).map(Container::middle);
             matches!((middle, feet), (Some(m), Some(p)) if (m - p).length() > WANDER_OFF)

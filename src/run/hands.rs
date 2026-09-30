@@ -7,7 +7,7 @@
 
 use lntrn_ui::Ui;
 
-use super::Run;
+use super::seat::Seat;
 use crate::combat::Combat;
 use crate::loot::bag::Slot;
 use crate::settings::keys::Action;
@@ -16,7 +16,7 @@ use crate::weapon::Weapon;
 /// How far the wheel turns for one step through the slots, pixels.
 const WHEEL_STEP: f64 = 30.0;
 
-impl Run {
+impl Seat {
     /// The first slot with something in it, the primary first.
     pub(super) fn first_armed(&self) -> Option<Slot> {
         Slot::ALL.into_iter().find(|&s| self.bag.slot(s).is_some())
@@ -26,8 +26,8 @@ impl Run {
     pub(super) fn take_up(&self, combat: &mut Combat, slot: Option<Slot>) {
         let found = slot.and_then(|s| self.bag.slot(s).and_then(|stack| stack.kind.weapon().map(|w| (s, w, stack.loaded))));
         match found {
-            Some((s, weapon, loaded)) => combat.take_up(Some(s), weapon, loaded),
-            None => combat.take_up(None, Weapon::Fists, 0),
+            Some((s, weapon, loaded)) => combat.take_up(self.n, Some(s), weapon, loaded),
+            None => combat.take_up(self.n, None, Weapon::Fists, 0),
         }
     }
 
@@ -35,7 +35,7 @@ impl Run {
     /// bag, and switched if asked (and `free`: not patching up or in the
     /// bag).
     pub(super) fn switch_hands(&mut self, ui: &mut Ui, combat: &mut Combat, free: bool) {
-        let hands = &combat.hands;
+        let hands = &combat.arms[self.n].hands;
         // What's held was thrown out of its slot: it's gone from the hands.
         let lost = hands.held.is_some_and(|s| self.bag.slot(s).and_then(|st| st.kind.weapon()) != Some(hands.weapon));
         if lost {
@@ -43,7 +43,7 @@ impl Run {
             return;
         }
         // Put away: up with what's next (if it's still there).
-        if let Some(next) = combat.hands.stowed() {
+        if let Some(next) = combat.arms[self.n].hands.stowed() {
             let next = match next {
                 Some(s) if self.bag.slot(s).is_none() => self.first_armed(),
                 next => next,
@@ -64,11 +64,11 @@ impl Run {
             self.wheel = 0.0;
         }
         // Bare fists and something picked up: it's taken up.
-        if want.is_none() && combat.hands.held.is_none() && combat.hands.switching().is_none() && !combat.hands.busy() {
+        if want.is_none() && combat.arms[self.n].hands.held.is_none() && combat.arms[self.n].hands.switching().is_none() && !combat.arms[self.n].hands.busy() {
             want = self.first_armed();
         }
         if free && let Some(slot) = want {
-            combat.hands.put_away(Some(slot));
+            combat.arms[self.n].hands.put_away(Some(slot));
         }
     }
 
@@ -78,7 +78,7 @@ impl Run {
         if armed.is_empty() {
             return None;
         }
-        let now = combat.hands.switching().unwrap_or(combat.hands.held);
+        let now = combat.arms[self.n].hands.switching().unwrap_or(combat.arms[self.n].hands.held);
         // From bare fists, on is the first and back the last.
         let at = now.and_then(|s| armed.iter().position(|&a| a == s)).map_or(if by > 0 { -1 } else { 0 }, |i| i as i32);
         let n = armed.len() as i32;
@@ -88,17 +88,17 @@ impl Run {
     /// The gun in hand has the rounds its slot says (rounds dropped onto
     /// it in the bag load it).
     pub(super) fn pull_rounds(&self, combat: &mut Combat) {
-        if let Some(stack) = combat.hands.held.and_then(|slot| self.bag.slot(slot)) {
-            combat.hands.mag = stack.loaded.min(combat.hands.spec().mag);
+        if let Some(stack) = combat.arms[self.n].hands.held.and_then(|slot| self.bag.slot(slot)) {
+            combat.arms[self.n].hands.mag = stack.loaded.min(combat.arms[self.n].hands.spec().mag);
         }
     }
 
     /// The gun's rounds, kept in it in the bag (so they go where it goes).
     pub(super) fn keep_rounds(&mut self, combat: &Combat) {
-        if let Some(slot) = combat.hands.held
+        if let Some(slot) = combat.arms[self.n].hands.held
             && let Some(stack) = self.bag.slot_mut(slot)
         {
-            stack.loaded = combat.hands.mag;
+            stack.loaded = combat.arms[self.n].hands.mag;
         }
     }
 }

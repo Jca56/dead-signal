@@ -62,9 +62,9 @@ const PUSH_FADE: f64 = 7.0;
 /// The one step every fixed update takes, seconds.
 pub const STEP: f64 = 1.0 / 60.0;
 
-/// What the player is doing with the keys, gathered each frame and read
-/// by the fixed steps.
-#[derive(Resource, Clone, Copy, Debug, Default)]
+/// What a player is doing with the keys, gathered each frame and read by
+/// the fixed steps (one of the dead's feet, what its mind wants).
+#[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Controls {
     /// x: right, y: forward; each -1, 0 or 1.
     pub walk: Vec2,
@@ -113,9 +113,10 @@ impl Body {
     }
 }
 
-/// The player, of whom there is one while a run is on.
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub struct Player;
+/// A player while a run is on, by their seat: 0 is the first, and a
+/// second sits at 1.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Player(pub usize);
 
 pub fn capsule(crouched: bool) -> Capsule {
     Capsule { radius: RADIUS, height: if crouched { CROUCH_HEIGHT } else { STAND_HEIGHT } }
@@ -351,9 +352,9 @@ pub fn wading(at: Vec3, wish: Vec2, others: impl IntoIterator<Item = Vec3>) -> f
     (1.0 / (1.0 + WADE * press)).max(WADE_LEAST / WALK)
 }
 
-/// How much of a sprint the player's gear leaves them, a share (heavy gear
+/// How much of a sprint a player's gear leaves them, a share (heavy gear
 /// slows it).
-#[derive(Resource, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct Load(pub f64);
 
 impl Default for Load {
@@ -362,9 +363,9 @@ impl Default for Load {
     }
 }
 
-fn step_players(mut controls: ResMut<Controls>, solid: Res<Solid>, load: Option<Res<Load>>, mut players: Query<(&mut Body, &View), With<Player>>, dead: Query<(&Zombie, &Body), Without<Player>>) {
-    let gait = Gait { sprint: WALK + (SPRINT - WALK) * load.map_or(1.0, |l| l.0), ..PLAYER_GAIT };
-    for (mut body, view) in &mut players {
+fn step_players(solid: Res<Solid>, mut players: Query<(&mut Body, &View, &mut Controls, Option<&Load>), With<Player>>, dead: Query<(&Zombie, &Body), Without<Player>>) {
+    for (mut body, view, mut controls, load) in &mut players {
+        let gait = Gait { sprint: WALK + (SPRINT - WALK) * load.map_or(1.0, |l| l.0), ..PLAYER_GAIT };
         // Wading through the dead: slowed pressing into them (the lying
         // dead are stepped over).
         let keep = wading(body.pos, wish(view.yaw, controls.walk), dead.iter().filter(|(z, _)| !z.dead()).map(|(_, b)| b.pos));

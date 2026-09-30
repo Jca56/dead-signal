@@ -29,8 +29,10 @@ impl DeadSignal {
             self.combat.set_mix(s.levels());
         }
         // (Paused, the view behind shows a new field of view at once.)
-        if let Some(mut view) = self.game.player_view_mut() {
-            view.feel = s.feel();
+        for (seat, _, _) in self.game.players() {
+            if let Some(mut view) = self.game.player_view_mut(seat) {
+                view.feel = s.feel();
+            }
         }
         if !screen.holding(Field::UiScale) {
             self.ui_scale = s.ui_scale;
@@ -60,7 +62,7 @@ impl DeadSignal {
             }
             Screen::Run => {
                 let alpha = self.game.alpha();
-                if let Some((body, view)) = self.game.player() {
+                if let Some((body, view)) = self.game.player(0) {
                     self.camera.position = head::eye_position(&view, &body, alpha);
                     (self.camera.yaw, self.camera.pitch) = view.aim();
                     self.camera.fov_y = view.fov_y();

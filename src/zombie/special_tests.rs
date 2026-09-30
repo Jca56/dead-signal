@@ -67,7 +67,7 @@ fn a_glob_thrown_at_the_player_hits_them_with_poison_and_a_miss_leaves_a_puddle(
     let mut world = World::new();
     world.insert_resource(crate::world::Solid(floor()));
     world.insert_resource(super::Horde::default());
-    world.spawn((Body::at(Vec3::new(0.0, 0.0, -12.0)), player::Player));
+    world.spawn((Body::at(Vec3::new(0.0, 0.0, -12.0)), player::Player(0)));
     let mut fly = IntoSystem::into_system(spit::fly);
     fly.initialize(&mut world);
     // Thrown straight at them (no luck: aimed as it's thrown).
@@ -84,7 +84,7 @@ fn a_glob_thrown_at_the_player_hits_them_with_poison_and_a_miss_leaves_a_puddle(
     // (Luck throws it up to OFF metres wide: it hits or it lands close.)
     let puddles = world.query::<&Puddle>().iter(&world).count();
     match hit {
-        Some(b) => assert_eq!(b.leaves, Some(crate::vitals::Affliction::Poison)),
+        Some((seat, b)) => assert_eq!((seat, b.leaves), (0, Some(crate::vitals::Affliction::Poison))),
         None => assert_eq!(puddles, 1, "missed, and no puddle"),
     }
 }

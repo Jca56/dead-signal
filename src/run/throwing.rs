@@ -1,17 +1,18 @@
-//! Throwing, from the run's side: which throwable's picked (the first
+//! Throwing, from a player's side: which throwable's picked (the first
 //! carried, or the next with its key), holding the throw key to aim (the
 //! arc and where it lands shown, the gun down), letting go to throw, the
 //! other hand's button to think better of it; and what the fires and
-//! blasts did (to the dead, a kill each; to the player, the hurt).
+//! blasts did (to the dead, a kill each; to each player, the hurt).
 
 use lntrn_math::Vec3;
 use lntrn_ui::Ui;
 
 use super::Run;
+use super::seat::Seat;
 use crate::combat::Combat;
 use crate::settings::keys::Action;
 use crate::sound::Sfx;
-use crate::throw::{self, Booms, Throwable};
+use crate::throw::{self, Booms, Felt, Throwable};
 use crate::world::Game;
 
 /// While aiming: the arc's dots (a dot this many seconds of flight apart)
@@ -27,7 +28,7 @@ pub(super) struct Aiming {
     cancelled: bool,
 }
 
-impl Run {
+impl Seat {
     /// The throwables carried, in their order.
     fn carried(&self) -> Vec<Throwable> {
         Throwable::ALL.into_iter().filter(|t| self.bag.count(t.kind()) > 0).collect()
@@ -57,7 +58,7 @@ impl Run {
             return false;
         };
         let held = free && self.keys.held(ui, Action::Throw);
-        let Some((body, view)) = game.player() else { return false };
+        let Some((body, view)) = game.player(self.n) else { return false };
         let eye = crate::head::eye_position(&view, &body, game.alpha());
         let (yaw, pitch) = view.aim();
         let forward = Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos());
@@ -88,35 +89,44 @@ impl Run {
         self.aiming.as_ref().filter(|a| !a.cancelled).map(|a| (a.dots.as_slice(), a.lands))
     }
 
-    /// What the fires and blasts did since last frame: the dead they killed
-    /// (the player's, each with what it had on it), what they did to the
-    /// player (a hurt, unless nothing hurts them), the chips they threw,
-    /// the shake. Whether the player died of it.
-    pub(super) fn booms(&mut self, game: &mut Game, combat: &mut Combat, god: bool) -> bool {
-        let booms = std::mem::take(&mut *game.world.resource_mut::<Booms>());
-        for e in booms.kills {
-            self.stats.blast_kills += 1;
-            combat.drop_for(game, e);
-        }
-        for at in booms.blasts {
-            combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Metal, 50);
-            combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Dirt, 40);
-        }
-        if booms.shake > 0.0
-            && let Some(mut v) = game.player_view_mut()
+    /// What the fires and blasts did to them since last frame (`felt`): a
+    /// hurt (unless nothing hurts them, `god`), the shake. Whether they
+    /// died of it.
+    pub(super) fn blasted(&mut self, game: &mut Game, combat: &mut Combat, felt: Felt, god: bool) -> bool {
+        if felt.shake > 0.0
+            && let Some(mut v) = game.player_view_mut(self.n)
         {
-            v.jolt(booms.shake);
+            v.jolt(felt.shake);
         }
         // Armor takes a blast; fire goes round it.
-        let blasted = (booms.blasted - f64::from(self.bag.soak(booms.blasted.round() as u32))).max(0.0);
-        let hurt = booms.scorched + blasted;
+        let blasted = (felt.blasted - f64::from(self.bag.soak(felt.blasted.round() as u32))).max(0.0);
+        let hurt = felt.scorched + blasted;
         if hurt <= 0.0 || god {
             return false;
         }
-        if booms.blasted > 0.0 {
-            combat.hurt = 1.0;
+        if felt.blasted > 0.0 {
+            combat.arms[self.n].hurt = 1.0;
         }
         self.stats.damage_taken += hurt.min(self.vitals.hp);
         self.vitals.hurt(hurt)
+    }
+}
+
+impl Run {
+    /// What the fires and blasts did since last frame: the dead they killed
+    /// (the players' kills, each with what it had on it: who threw what
+    /// isn't kept, so they're counted as the first player's), and the chips
+    /// they threw. What each player felt of them, for their own.
+    pub(super) fn booms(&mut self, game: &mut Game, combat: &mut Combat) -> Booms {
+        let mut booms = std::mem::take(&mut *game.world.resource_mut::<Booms>());
+        for e in std::mem::take(&mut booms.kills) {
+            self.seats[0].stats.blast_kills += 1;
+            combat.drop_for(game, e);
+        }
+        for at in std::mem::take(&mut booms.blasts) {
+            combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Metal, 50);
+            combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Dirt, 40);
+        }
+        booms
     }
 }

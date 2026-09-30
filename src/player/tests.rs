@@ -288,11 +288,10 @@ fn pressing_into_the_dead_takes_the_pace_but_never_all_of_it() {
 fn sprint_into(dead: &[Vec3]) -> f64 {
     let mut world = World::new();
     world.insert_resource(Solid(floor()));
-    world.insert_resource(Controls { walk: Vec2::new(0.0, 1.0), sprint: true, ..Default::default() });
     world.insert_resource(crate::zombie::Nav(None));
     world.insert_resource(crate::zombie::Noises::default());
     world.insert_resource(crate::zombie::Horde::default());
-    world.spawn((Player, Body::at(Vec3::ZERO), View::facing(0.0)));
+    world.spawn((Player(0), Body::at(Vec3::ZERO), View::facing(0.0), Controls { walk: Vec2::new(0.0, 1.0), sprint: true, ..Default::default() }));
     for &at in dead {
         crate::zombie::spawn_kind(&mut world, at, std::f64::consts::PI, crate::zombie::kind::Kind::Shambler, crate::zombie::looks::Theme::Drifter);
     }
@@ -315,4 +314,23 @@ fn a_crowd_is_waded_through_slowly_never_sprinted_through_nor_walled_in() {
     assert!(free > 15.0, "{free:.1} m free");
     assert!(waded < free * 0.4, "sprinted through the crowd: {waded:.1} m of {free:.1}");
     assert!(waded > 1.5, "walled in: {waded:.1} m");
+}
+
+#[test]
+fn each_player_moves_by_their_own_keys_and_their_own_gear() {
+    let mut world = World::new();
+    world.insert_resource(Solid(floor()));
+    let sprint = Controls { sprint: true, ..forward() };
+    let light = world.spawn((Player(0), Body::at(Vec3::new(-5.0, 0.0, 0.0)), View::facing(0.0), sprint, Load(1.0))).id();
+    let heavy = world.spawn((Player(1), Body::at(Vec3::new(5.0, 0.0, 0.0)), View::facing(0.0), sprint, Load(0.0))).id();
+    let still = world.spawn((Player(2), Body::at(Vec3::new(0.0, 0.0, 0.0)), View::facing(0.0), Controls::default(), Load(1.0))).id();
+    let mut fixed = Schedule::default();
+    install(&mut fixed);
+    for _ in 0..60 {
+        fixed.run(&mut world);
+    }
+    let went = |e| -world.get::<Body>(e).expect("a player").pos.z;
+    assert!(went(light) > 7.0, "the light one sprinted {:.1} m", went(light));
+    assert!(went(heavy) < went(light) * 0.8 && went(heavy) > 4.0, "the heavy one only walked {:.1} m", went(heavy));
+    assert!(went(still).abs() < 1e-9, "the one not asked to moved");
 }

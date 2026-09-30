@@ -103,11 +103,11 @@ fn launch(commands: &mut Commands, horde: &mut Horde) {
     }
 }
 
-/// The globs fly: into the player (a blow, and poison), or onto whatever
+/// The globs fly: into a player (a blow, and poison), or onto whatever
 /// they meet (a puddle, if it's the ground).
-pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, players: Query<&Body, With<Player>>, solid: Res<Solid>, mut horde: ResMut<Horde>) {
+pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, players: Query<(&Player, &Body)>, solid: Res<Solid>, mut horde: ResMut<Horde>) {
     launch(&mut commands, &mut horde);
-    let chest = players.iter().next().map(|b| b.pos + Vec3::new(0.0, 1.1, 0.0));
+    let chests: Vec<(usize, Vec3)> = players.iter().map(|(p, b)| (p.0, b.pos + Vec3::new(0.0, 1.1, 0.0))).collect();
     for (e, mut g) in &mut globs {
         g.prev = g.pos;
         g.vel.y -= GRAVITY * STEP;
@@ -117,12 +117,10 @@ pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, player
         let dir = step * (1.0 / len.max(1e-9));
         let wall = solid.0.raycast(g.pos, dir, len);
         let reach = wall.map_or(len, |h| h.t);
-        if let Some(c) = chest
-            && near_segment(g.pos, dir, reach, c) < GLOB_HITS
-        {
+        if let Some(&(seat, c)) = chests.iter().find(|(_, c)| near_segment(g.pos, dir, reach, *c) < GLOB_HITS) {
             let push = Vec3::new(dir.x, 0.0, dir.z);
             let push = if push.length() > 1e-6 { push.normalize() } else { Vec3::ZERO };
-            horde.blows.push(Blow { push: push * 0.4, damage: GLOB_DAMAGE, leaves: Some(Affliction::Poison) });
+            horde.blows.push((seat, Blow { push: push * 0.4, damage: GLOB_DAMAGE, leaves: Some(Affliction::Poison) }));
             horde.sounds.push((Sfx::Splat, c, 1.0));
             commands.entity(e).despawn();
             continue;
@@ -143,19 +141,18 @@ pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, player
 }
 
 /// The puddles dry up; standing in one poisons.
-pub fn fester(mut commands: Commands, mut puddles: Query<(Entity, &mut Puddle)>, players: Query<&Body, With<Player>>, mut horde: ResMut<Horde>) {
-    let feet = players.iter().next().map(|b| b.pos);
+pub fn fester(mut commands: Commands, mut puddles: Query<(Entity, &mut Puddle)>, players: Query<(&Player, &Body)>, mut horde: ResMut<Horde>) {
     for (e, mut p) in &mut puddles {
         p.left -= STEP;
         if p.left <= 0.0 {
             commands.entity(e).despawn();
             continue;
         }
-        if let Some(f) = feet
-            && Vec2::new(f.x - p.at.x, f.z - p.at.z).length() < p.size()
-            && (f.y - p.at.y).abs() < 0.8
-        {
-            horde.poisoned = true;
+        for (player, body) in &players {
+            let f = body.pos;
+            if Vec2::new(f.x - p.at.x, f.z - p.at.z).length() < p.size() && (f.y - p.at.y).abs() < 0.8 && !horde.poisoned.contains(&player.0) {
+                horde.poisoned.push(player.0);
+            }
         }
     }
 }

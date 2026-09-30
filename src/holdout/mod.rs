@@ -110,7 +110,8 @@ pub struct Holdout {
     /// Which zones are open, which doors are.
     open: Vec<bool>,
     opened: Vec<bool>,
-    seen: Tally,
+    /// Each player's count as it last stood, by seat.
+    seen: Vec<Tally>,
     /// Nailing a window's boards back: which, and till the next board.
     nailing: Option<(usize, f64)>,
     /// Boards nailed back this round.
@@ -125,7 +126,7 @@ impl Holdout {
         let mut open = vec![false; arena.zones.len()];
         open[arena.start] = true;
         let opened = vec![false; arena.doors.len()];
-        Self { arena, points: START_POINTS, rounds: Rounds::new(seed), open, opened, seen: Tally::default(), nailing: None, nailed: 0, pops: Vec::new() }
+        Self { arena, points: START_POINTS, rounds: Rounds::new(seed), open, opened, seen: Vec::new(), nailing: None, nailed: 0, pops: Vec::new() }
     }
 
     /// What the player starts with: a pistol (loaded, and its rounds) and
@@ -152,10 +153,14 @@ impl Holdout {
         self.opened[door]
     }
 
-    /// Whatever was earned since last asked, from the count `stats`.
-    pub fn score(&mut self, stats: &Stats) {
+    /// Whatever player `seat` earned since last asked, from their count
+    /// `stats`.
+    pub fn score(&mut self, seat: usize, stats: &Stats) {
+        if self.seen.len() <= seat {
+            self.seen.resize(seat + 1, Tally::default());
+        }
         let now = Tally::of(stats);
-        let was = std::mem::replace(&mut self.seen, now);
+        let was = std::mem::replace(&mut self.seen[seat], now);
         let heads = now.headshot_kills - was.headshot_kills;
         let bodies = (now.kills - was.kills).saturating_sub(heads);
         let earned = PER_HIT * (now.hits - was.hits + now.blows - was.blows) + PER_KILL * (bodies + now.blasts - was.blasts) + PER_HEADSHOT_KILL * heads + PER_MELEE_KILL * (now.melee_kills - was.melee_kills);

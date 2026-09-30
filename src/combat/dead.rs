@@ -1,6 +1,6 @@
-//! The dead against the player: what they said (heard where they are),
-//! the blows they landed, the Spitters that burst, and what one had on it
-//! when it fell.
+//! The dead against the players: what they said (heard where they are,
+//! by the nearest), the blows they landed, the Spitters that burst, and
+//! what one had on it when it fell.
 
 use lntrn_math::Vec3;
 
@@ -19,10 +19,11 @@ fn away(from: Vec3, to: Vec3) -> Vec3 {
 
 impl Combat {
     /// What the dead did since last frame: play their sounds where they
-    /// are, and take their blows (a shove, a shake, the edges gone red).
-    /// Once the player is dead (not `alive`) it's all let go unheard. How
-    /// blows landed.
-    pub fn answer_the_dead(&mut self, game: &mut Game, alive: bool) -> Vec<zombie::brain::Blow> {
+    /// are (heard by the nearest player), and take their blows (a shove, a
+    /// shake, the edges of that player's screen gone red). Once the run's
+    /// over (not `alive`) it's all let go unheard. The blows that landed,
+    /// each with whose seat.
+    pub fn answer_the_dead(&mut self, game: &mut Game, alive: bool) -> Vec<(usize, zombie::brain::Blow)> {
         let (sounds, blows) = {
             let mut horde = game.world.resource_mut::<Horde>();
             (std::mem::take(&mut horde.sounds), std::mem::take(&mut horde.blows))
@@ -30,36 +31,41 @@ impl Combat {
         if !alive {
             return Vec::new();
         }
-        let Some((body, view)) = game.player() else { return Vec::new() };
-        let aim = aim(&view, &body, game.alpha());
+        let alpha = game.alpha();
+        let ears: Vec<Aim> = game.players().iter().map(|(seat, body, view)| aim(*seat, view, body, alpha)).collect();
+        if ears.is_empty() {
+            return Vec::new();
+        }
         let solids = &game.world.resource::<Solid>().0;
         for (sfx, at, gain) in sounds {
+            let ear = ears.iter().min_by(|a, b| (a.eye - at).length().total_cmp(&(b.eye - at).length())).expect("an ear, checked above");
             // Only what could be heard at all is checked for walls between.
-            let to = at - aim.eye;
+            let to = at - ear.eye;
             let d = to.length();
             if d >= sfx.range() {
                 continue;
             }
-            let blocked = d > 1.0 && solids.raycast(aim.eye, to * (1.0 / d), d - 0.5).is_some();
-            self.sound.play_at(sfx, gain, at, aim.eye, aim.right, blocked);
+            let blocked = d > 1.0 && solids.raycast(ear.eye, to * (1.0 / d), d - 0.5).is_some();
+            self.sound.play_at(sfx, gain, at, ear.eye, ear.right, blocked);
         }
-        for blow in &blows {
-            let push = blow.push;
+        for &(seat, blow) in &blows {
             self.sound.play(Sfx::Flesh, 0.9);
-            self.hurt = 1.0;
-            if let Some(mut v) = game.player_view_mut() {
+            if let Some(arms) = self.arms.get_mut(seat) {
+                arms.hurt = 1.0;
+            }
+            if let Some(mut v) = game.player_view_mut(seat) {
                 v.jolt(BLOW_SHAKE);
                 v.recoil(-3.0, (self.rand() - 0.5) * 6.0);
             }
-            game.push_player(push * BLOW_SHOVE);
+            game.push_player(seat, blow.push * BLOW_SHOVE);
         }
         blows
     }
 
-    /// The Spitters that burst: the dead near each take it (and a kill is
-    /// the player's), and so does the player, poisoned. The blows it dealt
-    /// the player.
-    pub fn bursts(&mut self, game: &mut Game, stats: &mut Stats) -> Vec<zombie::brain::Blow> {
+    /// The Spitters that burst: the dead near each take it (a kill counted
+    /// in `stats`), and so does each player near, poisoned. The blows it
+    /// dealt the players, each with whose seat.
+    pub fn bursts(&mut self, game: &mut Game, stats: &mut Stats) -> Vec<(usize, zombie::brain::Blow)> {
         let bursts = std::mem::take(&mut game.world.resource_mut::<Horde>().bursts);
         let mut blows = Vec::new();
         for at in bursts {
@@ -74,16 +80,18 @@ impl Combat {
                     self.drop_something(game, e);
                 }
             }
-            if let Some((body, _)) = game.player() {
+            for (seat, body, _) in game.players() {
                 let d = (body.pos - at).length();
                 if d < spit::BURST_REACH {
                     let share = spit::burst_share(d);
-                    self.hurt = 1.0;
-                    if let Some(mut v) = game.player_view_mut() {
+                    if let Some(arms) = self.arms.get_mut(seat) {
+                        arms.hurt = 1.0;
+                    }
+                    if let Some(mut v) = game.player_view_mut(seat) {
                         v.jolt(0.02 + 0.06 * share);
                     }
-                    game.push_player(away(at, body.pos) * BLOW_SHOVE * (1.0 + 2.0 * share));
-                    blows.push(zombie::brain::Blow { push: Vec3::ZERO, damage: BURST_PLAYER * share + 5.0, leaves: Some(crate::vitals::Affliction::Poison) });
+                    game.push_player(seat, away(at, body.pos) * BLOW_SHOVE * (1.0 + 2.0 * share));
+                    blows.push((seat, zombie::brain::Blow { push: Vec3::ZERO, damage: BURST_PLAYER * share + 5.0, leaves: Some(crate::vitals::Affliction::Poison) }));
                 }
             }
         }

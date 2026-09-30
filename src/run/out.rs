@@ -9,6 +9,7 @@ use lntrn_math::Vec3;
 use lntrn_ui::Ui;
 
 use super::Run;
+use super::seat::Seat;
 use crate::combat::Combat;
 use crate::exits::hud::{Mark, Under};
 use crate::exits::{self, Exits, HANDS, Way};
@@ -108,7 +109,9 @@ impl Run {
         let ways: Vec<(Way, bool, Vec3, &str)> = game.world.get_resource::<Exits>().map(|x| x.list.iter().map(|e| (e.way, e.open, e.zone, map.near(e.zone.x, e.zone.z))).collect()).unwrap_or_default();
         self.out = Out { chatter: chatter(&ways, &mut self.dice), ..Out::default() };
     }
+}
 
+impl Seat {
     /// The prompt for the way out `i`, aimed at.
     pub(super) fn exit_prompt(&self, game: &Game, i: usize) -> Option<(&'static str, String)> {
         let e = game.world.get_resource::<Exits>()?.list.get(i)?;
@@ -128,49 +131,53 @@ impl Run {
         })
     }
 
+}
+
+impl Out {
     /// How far through the hands' task, for the ring at the middle.
-    pub(super) fn out_progress(&self) -> Option<f64> {
-        self.out.hold.and_then(|(_, task, t)| (task != Task::Crank).then_some((t / HANDS).min(1.0)))
+    pub(super) fn progress(&self) -> Option<f64> {
+        self.hold.and_then(|(_, task, t)| (task != Task::Crank).then_some((t / HANDS).min(1.0)))
     }
 
-    /// A frame of getting out: finding, working the one aimed at (`aimed`,
-    /// E held), the ones under way. How the player got out, if they did.
-    pub(super) fn getting_out(&mut self, ui: &Ui, game: &mut Game, combat: &mut Combat, aimed: Option<usize>, dt: f64) -> Option<Way> {
+    /// A frame of getting out, for the player in `seat`: finding, working
+    /// the one aimed at (`aimed`, E held), the ones under way. How they got
+    /// out, if they did.
+    pub(super) fn getting_out(&mut self, seat: &mut Seat, ui: &Ui, game: &mut Game, combat: &mut Combat, aimed: Option<usize>, dt: f64) -> Option<Way> {
         let (feet, eye) = {
-            let (body, view) = game.player()?;
+            let (body, view) = game.player(seat.n)?;
             (body.pos, crate::head::eye_position(&view, &body, game.alpha()))
         };
         let now = game.clock().time;
         exits::glow(&mut game.world, now);
         for way in exits::look_about(&mut game.world, eye) {
             combat.play(Sfx::Static, 0.6);
-            self.note = Some((match way {
+            seat.note = Some((match way {
                 Way::Radio => "FOUND: RADIO TOWER",
                 Way::Road => "FOUND: ROAD OUT",
                 Way::Truck => "FOUND: TRUCK",
             }, 2.5));
         }
         // The chatter, a line at a time, each opened by static.
-        let before = self.out.chatter_t;
-        self.out.chatter_t += dt;
+        let before = self.chatter_t;
+        self.chatter_t += dt;
         let line = |t: f64| (t / CHATTER_FOR) as usize;
-        if (before == 0.0 || line(before) != line(self.out.chatter_t)) && line(self.out.chatter_t) < self.out.chatter.len() {
+        if (before == 0.0 || line(before) != line(self.chatter_t)) && line(self.chatter_t) < self.chatter.len() {
             combat.play(Sfx::Static, 0.5);
         }
         // The surge.
-        if !self.out.surging && self.stats.seconds >= SURGE_AT {
-            self.out.surging = true;
-            self.out.shout = Some(("THEY'RE SURGING", SHOUT_FOR));
+        if !self.surging && seat.stats.seconds >= SURGE_AT {
+            self.surging = true;
+            self.shout = Some(("THEY'RE SURGING", SHOUT_FOR));
             combat.play(Sfx::Snarl, 1.0);
         }
-        if let Some((_, t)) = &mut self.out.shout {
+        if let Some((_, t)) = &mut self.shout {
             *t -= dt;
             if *t <= 0.0 {
-                self.out.shout = None;
+                self.shout = None;
             }
         }
 
-        let held = self.keys.held(ui, Action::Interact);
+        let held = seat.keys.held(ui, Action::Interact);
         let bag_has = |bag: &crate::loot::bag::Bag, k: Kind| bag.count(k) > 0;
         let mut out = None;
         let mut refresh = None;
@@ -183,27 +190,27 @@ impl Run {
                 match e.way {
                     Way::Radio if !e.started => Some(Task::Call),
                     Way::Truck if e.fuel && e.battery => Some(Task::Crank),
-                    Way::Truck if !e.fuel && bag_has(&self.bag, Kind::Fuel) => Some(Task::Fuel),
-                    Way::Truck if !e.battery && bag_has(&self.bag, Kind::Battery) => Some(Task::Battery),
+                    Way::Truck if !e.fuel && bag_has(&seat.bag, Kind::Fuel) => Some(Task::Fuel),
+                    Way::Truck if !e.battery && bag_has(&seat.bag, Kind::Battery) => Some(Task::Battery),
                     _ => None,
                 }
                 .map(|t| (i, t))
             });
             match (task, held) {
                 (Some((i, t)), true) => {
-                    let so_far = match self.out.hold {
+                    let so_far = match self.hold {
                         Some((j, u, s)) if j == i && u == t => s,
                         _ => 0.0,
                     };
                     let so_far = so_far + dt;
-                    self.out.hold = Some((i, t, so_far));
+                    self.hold = Some((i, t, so_far));
                     let e = &mut exits.list[i];
                     match t {
                         Task::Crank => {
                             e.progress = so_far;
-                            self.out.crank_in -= dt;
-                            if self.out.crank_in <= 0.0 {
-                                self.out.crank_in = 0.45;
+                            self.crank_in -= dt;
+                            if self.crank_in <= 0.0 {
+                                self.crank_in = 0.45;
                                 combat.play(Sfx::Crank, 0.9);
                             }
                             if so_far >= e.wait() {
@@ -211,11 +218,11 @@ impl Run {
                             }
                         }
                         _ if so_far >= HANDS => {
-                            self.out.hold = None;
+                            self.hold = None;
                             match t {
                                 Task::Call => {
                                     e.started = true;
-                                    self.out.noise_in = 0.0;
+                                    self.noise_in = 0.0;
                                     combat.play(Sfx::Static, 0.9);
                                 }
                                 Task::Fuel => {
@@ -236,10 +243,10 @@ impl Run {
                 }
                 _ => {
                     // Let go: a crank dies and has to start over.
-                    if let Some((i, Task::Crank, _)) = self.out.hold {
+                    if let Some((i, Task::Crank, _)) = self.hold {
                         exits.list[i].progress = 0.0;
                     }
-                    self.out.hold = None;
+                    self.hold = None;
                 }
             }
 
@@ -265,7 +272,7 @@ impl Run {
             }
         }
         for k in used {
-            self.bag.remove(k, 1);
+            seat.bag.remove(k, 1);
             combat.play(Sfx::Unlock, 0.8);
         }
         if let Some(i) = refresh {
@@ -275,32 +282,32 @@ impl Run {
         let (calling, rotor_left, cranking) = {
             let exits = game.world.resource::<Exits>();
             let radio = exits.list.iter().find(|e| e.way == Way::Radio && e.started);
-            (radio.map(|e| e.zone), radio.map(|e| e.wait() - e.progress), self.out.hold.is_some_and(|(_, t, _)| t == Task::Crank))
+            (radio.map(|e| e.zone), radio.map(|e| e.wait() - e.progress), self.hold.is_some_and(|(_, t, _)| t == Task::Crank))
         };
-        self.out.noise_in -= dt;
-        if self.out.noise_in <= 0.0 {
+        self.noise_in -= dt;
+        if self.noise_in <= 0.0 {
             if let Some(at) = calling {
                 zombie::noise(&mut game.world, at, LOUD);
             }
             if cranking {
                 zombie::noise(&mut game.world, feet, LOUD);
             }
-            self.out.noise_in = if cranking { CRANK_NOISE_EVERY } else { RADIO_NOISE_EVERY };
+            self.noise_in = if cranking { CRANK_NOISE_EVERY } else { RADIO_NOISE_EVERY };
         }
         if let Some(left) = rotor_left.filter(|l| *l < ROTOR_FROM) {
-            self.out.rotor_in -= dt;
-            if self.out.rotor_in <= 0.0 {
+            self.rotor_in -= dt;
+            if self.rotor_in <= 0.0 {
                 let near = 1.0 - left / ROTOR_FROM;
                 combat.play(Sfx::Rotor, (0.25 + 0.75 * near) as f32);
-                self.out.rotor_in = 0.32 - 0.14 * near;
+                self.rotor_in = 0.32 - 0.14 * near;
             }
         }
         out
     }
 
     /// The compass's marks, what's under way, and the words for the HUD.
-    pub(super) fn out_hud(&self, game: &mut Game) -> OutHud {
-        let Some((body, view)) = game.player() else { return OutHud::default() };
+    pub(super) fn hud(&self, game: &mut Game, seat: usize) -> OutHud {
+        let Some((body, view)) = game.player(seat) else { return OutHud::default() };
         let Some(exits) = game.world.get_resource::<Exits>() else { return OutHud { heading: view.yaw, ..OutHud::default() } };
         let marks = exits
             .list
@@ -325,9 +332,9 @@ impl Run {
                 Under { label, done: e.progress / e.wait(), left: e.wait() - e.progress, slipping }
             })
             .max_by(|a, b| a.done.total_cmp(&b.done));
-        let line = (self.out.chatter_t / CHATTER_FOR) as usize;
-        let chatter = self.out.chatter.get(line).map(|l| {
-            let into = self.out.chatter_t - line as f64 * CHATTER_FOR;
+        let line = (self.chatter_t / CHATTER_FOR) as usize;
+        let chatter = self.chatter.get(line).map(|l| {
+            let into = self.chatter_t - line as f64 * CHATTER_FOR;
             (l.clone(), (into / 0.4).min(1.0).min((CHATTER_FOR - into) / 0.6))
         });
         OutHud { heading: view.yaw, marks, under, chatter }

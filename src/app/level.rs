@@ -130,7 +130,7 @@ impl DeadSignal {
         if !self.map_open {
             return;
         }
-        let (Some(map), Some(picture), Some((body, view))) = (&self.map, self.picture, self.game.player()) else { return };
+        let (Some(map), Some(picture), Some((body, view))) = (&self.map, self.picture, self.game.player(0)) else { return };
         let list: &[exits::Exit] = self.game.world.get_resource::<Exits>().map_or(&[], |x| &x.list);
         crate::map::screen::draw(ui, picture, map, list, body.pos, view.yaw);
     }

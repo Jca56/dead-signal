@@ -7,7 +7,6 @@ use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
 
 use super::{DeadSignal, LeaveItem, PAUSE_DIM, PauseItem, Screen, Then};
 use crate::ending::After;
-use crate::player::Controls;
 use crate::settings::screen::SettingsScreen;
 
 impl DeadSignal {
@@ -15,7 +14,7 @@ impl DeadSignal {
     /// settled, the player gone.
     pub(super) fn leave_run(&mut self) {
         self.settle_run();
-        self.game.despawn_player();
+        self.game.despawn_players();
         self.run.ending = None;
         self.show_title_scene();
     }
@@ -45,7 +44,7 @@ impl DeadSignal {
         self.paused = true;
         self.leaving = false;
         self.pause_menu.reset();
-        *self.game.controls_mut() = Controls::default();
+        self.game.release_controls();
         cx.request(ShellRequest::LockPointer(false));
     }
 
@@ -84,7 +83,7 @@ impl DeadSignal {
             }
             return;
         }
-        if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() && !self.run.shut_bag(&mut self.game, cx) {
+        if active && ui.state.take_key(|k| k.key == Key::Escape).is_some() && !self.run.shut_bags(&mut self.game, cx) {
             // Asked about leaving, Esc is staying.
             if self.leaving {
                 self.leaving = false;

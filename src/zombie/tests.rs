@@ -347,7 +347,7 @@ fn a_crowd_spreads_round_you_instead_of_stacking() {
     world.insert_resource(super::Nav(None));
     world.insert_resource(super::Noises::default());
     world.insert_resource(super::Horde::default());
-    world.spawn((Body::at(Vec3::ZERO), player::Player));
+    world.spawn((Body::at(Vec3::ZERO), player::Player(0)));
     // Ten on one spot, all after the player.
     for i in 0..10 {
         let mut z = Zombie::new(0.0, 100 + i);
@@ -403,6 +403,31 @@ fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
 
 
 #[test]
+fn it_goes_for_the_nearest_player_and_its_blows_land_on_them() {
+    use bevy_ecs::prelude::*;
+    let mut world = World::new();
+    world.insert_resource(crate::world::Solid(floor()));
+    world.insert_resource(super::Nav(None));
+    world.insert_resource(super::Noises::default());
+    world.insert_resource(super::Horde::default());
+    // The first player well off; the second a few steps from it.
+    world.spawn((Body::at(Vec3::new(0.0, 0.0, 25.0)), player::Player(0)));
+    world.spawn((Body::at(Vec3::new(0.0, 0.0, -6.0)), player::Player(1)));
+    let mut z = Zombie::new(0.0, 7);
+    z.relentless = true;
+    world.spawn((z, Body::at(Vec3::ZERO), super::Beat::new(0)));
+    let mut schedule = Schedule::default();
+    schedule.add_systems(super::step::think);
+    let mut blows = Vec::new();
+    for _ in 0..(6.0 / STEP) as usize {
+        schedule.run(&mut world);
+        blows.append(&mut world.resource_mut::<super::Horde>().blows);
+    }
+    assert!(!blows.is_empty(), "it never struck");
+    assert!(blows.iter().all(|(seat, _)| *seat == 1), "a blow landed on the far one: {blows:?}");
+}
+
+#[test]
 fn a_round_goes_on_past_the_ones_already_hit() {
     use bevy_ecs::prelude::*;
     use super::figure::{Figure, Model};
@@ -410,7 +435,7 @@ fn a_round_goes_on_past_the_ones_already_hit() {
     let gltf = lntrn_model::Gltf::load(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/models/shambler.glb")).expect("shambler.glb");
     world.insert_resource(Model::new(crate::assets::Rigged { mesh: Vec::new(), gltf, skin: 0 }).expect("the model"));
     world.insert_resource(crate::world::Blend::default());
-    world.spawn((Body::at(Vec3::new(0.0, 0.0, 10.0)), player::Player));
+    world.spawn((Body::at(Vec3::new(0.0, 0.0, 10.0)), player::Player(0)));
     // Three in a line down the range, 3 m apart.
     for (k, z) in [-5.0, -8.0, -11.0].into_iter().enumerate() {
         world.spawn((Zombie::new(0.0, k as u32 + 1), Body::at(Vec3::new(0.0, 0.0, z)), Figure::default(), super::Beat::new(0)));

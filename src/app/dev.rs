@@ -57,12 +57,13 @@ impl DeadSignal {
 
     /// Do what the panel asked.
     fn dev_do(&mut self, action: DevAction) {
-        let player = self.game.player();
+        let player = self.game.player(0);
         match action {
             DevAction::Give(kind) => {
                 let stack = Stack::fresh(kind, kind.def().stack);
                 if self.screen == Screen::Run {
-                    let rest = self.run.bag.add(stack);
+                    let Some(seat) = self.run.seats.first_mut() else { return };
+                    let rest = seat.bag.add(stack);
                     if rest.count > 0
                         && let Some((body, view)) = player
                     {
@@ -106,7 +107,7 @@ impl DeadSignal {
                 let Some(site) = self.map.as_ref().and_then(|m| m.sites.get(i)) else { return };
                 let middle = site.plot.world(Vec2::ZERO);
                 let y = self.game.ground().height_at(middle.x, middle.y).unwrap_or(site.plot.height);
-                self.game.teleport(Vec3::new(middle.x, y + 0.2, middle.y));
+                self.game.teleport(0, Vec3::new(middle.x, y + 0.2, middle.y));
             }
             DevAction::RevealExits => {
                 if let Some(mut exits) = self.game.world.get_resource_mut::<crate::exits::Exits>() {
@@ -146,7 +147,7 @@ impl DeadSignal {
             counts[z.kind as usize] += 1;
         }
         let heat = self.game.world.get_resource::<zombie::Heat>().map_or(0.0, |h| h.0);
-        let at = self.game.player().map_or(Vec3::ZERO, |(b, _)| b.pos);
+        let at = self.game.player(0).map_or(Vec3::ZERO, |(b, _)| b.pos);
         let cheats = *self.game.world.resource::<Cheats>();
         let on: Vec<&str> = [(cheats.god, "GOD"), (cheats.ammo, "AMMO"), (cheats.ignored, "IGNORED"), (cheats.one_shot, "ONE-SHOT")].into_iter().filter(|(on, _)| *on).map(|(_, n)| n).collect();
         let lines = vec![

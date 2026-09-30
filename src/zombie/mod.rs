@@ -107,19 +107,19 @@ pub struct Noises {
 }
 
 /// What the dead did that the rest of the game hears of: sounds where they
-/// are, blows that landed on the player (the way they push), and how many
-/// have gone for good since last asked.
+/// are, blows that landed on the players (whose seat, the way they push),
+/// and how many have gone for good since last asked.
 #[derive(Resource, Default)]
 pub struct Horde {
     pub sounds: Vec<(Sfx, Vec3, f32)>,
-    pub blows: Vec<brain::Blow>,
+    pub blows: Vec<(usize, brain::Blow)>,
     /// Globs thrown this step (from, at), Spitters bursting (where), and
     /// the bursts the combat side has yet to deal out.
     pub spits: Vec<(Vec3, Vec3)>,
     pub bursting: Vec<Vec3>,
     pub bursts: Vec<Vec3>,
-    /// The player's standing in a puddle of bile.
-    pub poisoned: bool,
+    /// The players standing in a puddle of bile, by seat.
+    pub poisoned: Vec<usize>,
     /// Pipe bombs beeping, drawing the dead near to them.
     pub lures: Vec<Vec3>,
     pub gone: usize,

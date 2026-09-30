@@ -31,7 +31,7 @@ fn crowd(n: usize, player: Option<Vec3>) -> World {
         world.spawn((z, Body::at(Vec3::new(at.x, h, at.z)), Figure::default(), super::Beat::new(k)));
         placed += 1;
     }
-    world.spawn((Body::at(player), Player));
+    world.spawn((Body::at(player), Player(0)));
     world.insert_resource(Solid(solids));
     world.insert_resource(super::Nav(Some(nav)));
     world.insert_resource(super::Noises::default());

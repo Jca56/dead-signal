@@ -25,7 +25,7 @@ fn world_of(built: Built) -> (World, Holdout) {
     world.insert_resource(zombie::Noises::default());
     world.insert_resource(zombie::Horde::default());
     world.insert_resource(zombie::Heat::default());
-    world.spawn((Body::at(map.spawn.0), Player));
+    world.spawn((Body::at(map.spawn.0), Player(0)));
     let mut h = Holdout::new(arena.expect("the arena"), 7);
     h.begin(&mut world);
     (world, h)
@@ -156,7 +156,7 @@ fn a_door_bought_open_lets_the_player_and_the_dead_through() {
 fn hits_and_kills_earn_points_the_head_and_the_blade_more() {
     let (_, mut h) = world_of(built());
     let mut stats = Stats::default();
-    h.score(&stats);
+    h.score(0, &stats);
     assert_eq!(h.points, START_POINTS);
     // Four hits, a body kill, a headshot kill; two blows, the second a
     // kill.
@@ -165,11 +165,27 @@ fn hits_and_kills_earn_points_the_head_and_the_blade_more() {
     stats.headshot_kills = 1;
     stats.blows_landed = 2;
     stats.melee_kills = 1;
-    h.score(&stats);
+    h.score(0, &stats);
     assert_eq!(h.points, START_POINTS + 40 + 50 + 90 + 20 + 120);
     // Counted once.
-    h.score(&stats);
+    h.score(0, &stats);
     assert_eq!(h.points, START_POINTS + 320);
+}
+
+#[test]
+fn each_player_s_hits_are_counted_once_apart_from_the_other_s() {
+    let (_, mut h) = world_of(built());
+    let (mut first, mut second) = (Stats::default(), Stats::default());
+    first.hits = 3;
+    second.hits = 1;
+    second.gun_kills = 1;
+    h.score(0, &first);
+    h.score(1, &second);
+    assert_eq!(h.points, START_POINTS + 30 + 10 + 50);
+    // The second's count doesn't make the first's new again.
+    h.score(0, &first);
+    h.score(1, &second);
+    assert_eq!(h.points, START_POINTS + 90);
 }
 
 #[test]

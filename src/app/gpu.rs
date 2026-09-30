@@ -76,12 +76,13 @@ impl AppHost for DeadSignal {
         }
         let time = self.game.clock().time;
         if self.screen == Screen::Run
-            && let (Some(vm), Some((_, view))) = (&self.viewmodel, self.game.player())
+            && let (Some(vm), Some((_, view)), Some(seat)) = (&self.viewmodel, self.game.player(0), self.run.seats.first())
         {
             // (Looking through a scope, the gun's out of the way.)
+            let hands = &self.combat.arms[seat.n].hands;
             if self.run.ending.is_none()
-                && self.combat.hands.scoped() < SCOPE_HIDES
-                && let Some(draw) = vm.draw(&view, &self.combat.hands, time, self.run.lowered())
+                && hands.scoped() < SCOPE_HIDES
+                && let Some(draw) = vm.draw(&view, hands, time, seat.lowered())
             {
                 renderer.draw_viewmodel(draw);
             }
@@ -89,7 +90,7 @@ impl AppHost for DeadSignal {
             let alpha = self.game.alpha();
             zombie::spit::draw(&mut self.game.world, renderer, alpha);
             crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
-            if let Some((dots, lands)) = self.run.throw_arc() {
+            if let Some((dots, lands)) = seat.throw_arc() {
                 crate::throw::draw::aim(&self.game.world, renderer, dots, lands);
             }
         }

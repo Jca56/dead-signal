@@ -271,12 +271,11 @@ impl DeadSignal {
             Screen::Loading => self.start_loading(),
             Screen::Run => {
                 let (at, yaw) = self.spawn_point();
-                self.game.spawn_player(at.x, at.z, yaw);
+                self.game.spawn_player(0, at.x, at.z, yaw);
                 self.map_open = false;
                 if let Some(vm) = &mut self.viewmodel {
                     vm.reset();
                 }
-                self.combat.reset();
                 zombie::clear(&mut self.game.world);
                 zombie::spit::clear(&mut self.game.world);
                 crate::throw::clear(&mut self.game.world);
@@ -451,7 +450,7 @@ impl Host for DeadSignal {
         self.dev_readout(ui);
         self.place_camera(clock.time);
         if self.screen == Screen::Run
-            && let (Some(vm), Some((body, view))) = (&mut self.viewmodel, self.game.player())
+            && let (Some(vm), Some((body, view))) = (&mut self.viewmodel, self.game.player(0))
         {
             vm.update(&view, &body, clock.dt);
         }
