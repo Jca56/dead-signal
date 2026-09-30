@@ -6,12 +6,14 @@
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
 
-use crate::player::{Body, Player, WALK};
+use crate::player::{Body, Fallen, Player, WALK};
 use crate::world::Clock;
 
 /// Eye heights, metres, and how fast the eye moves between them.
 pub const EYE_STAND: f64 = 1.7;
 pub const EYE_CROUCH: f64 = 1.1;
+/// Down on the ground.
+pub const EYE_DOWN: f64 = 0.55;
 const EYE_RATE: f64 = 20.0;
 /// Radians of turn per count of raw mouse motion.
 pub const SENSITIVITY: f64 = 0.0013;
@@ -120,10 +122,17 @@ impl View {
     }
 }
 
-/// The view's motion, every frame: eye height, bob, landing dip, stairs,
-/// sprint. Takes the landings and stairs the body has made since.
-pub fn settle_view(view: &mut View, body: &mut Body, dt: f64) {
-    let eye = if body.crouched { EYE_CROUCH } else { EYE_STAND };
+/// The view's motion, every frame: eye height (low, `down`), bob, landing
+/// dip, stairs, sprint. Takes the landings and stairs the body has made
+/// since.
+pub fn settle_view(view: &mut View, body: &mut Body, down: bool, dt: f64) {
+    let eye = if down {
+        EYE_DOWN
+    } else if body.crouched {
+        EYE_CROUCH
+    } else {
+        EYE_STAND
+    };
     view.eye += (eye - view.eye) * (1.0 - (-EYE_RATE * dt).exp());
 
     let speed = body.speed_flat();
@@ -171,9 +180,9 @@ pub fn eye_position(view: &View, body: &Body, alpha: f64) -> Vec3 {
     feet + Vec3::new(0.0, view.eye + bob_y + view.dip + view.stair, 0.0) + right * bob_x + shake
 }
 
-fn settle_views(clock: Res<Clock>, mut players: Query<(&mut View, &mut Body), With<Player>>) {
-    for (mut view, mut body) in &mut players {
-        settle_view(&mut view, &mut body, clock.dt);
+fn settle_views(clock: Res<Clock>, mut players: Query<(&mut View, &mut Body, Option<&Fallen>), With<Player>>) {
+    for (mut view, mut body, fallen) in &mut players {
+        settle_view(&mut view, &mut body, fallen.is_some(), clock.dt);
     }
 }
 
@@ -193,11 +202,11 @@ mod tests {
         let mut view = View::facing(0.0);
         let mut body = Body::at(Vec3::ZERO);
         body.landed = 8.0;
-        settle_view(&mut view, &mut body, DT);
+        settle_view(&mut view, &mut body, false, DT);
         assert_eq!(body.landed, 0.0, "taken once");
         let mut low: f64 = 0.0;
         for _ in 0..120 {
-            settle_view(&mut view, &mut body, DT);
+            settle_view(&mut view, &mut body, false, DT);
             low = low.min(view.dip);
         }
         assert!(low < -0.05 && low > -0.2, "dipped {low}");
@@ -211,7 +220,7 @@ mod tests {
         view.recoil(1.5, 0.3);
         assert!((view.aim().1 - 1.5f64.to_radians()).abs() < 1e-12);
         for _ in 0..30 {
-            settle_view(&mut view, &mut body, DT);
+            settle_view(&mut view, &mut body, false, DT);
         }
         assert!(view.aim().1.abs() < 0.02f64.to_radians(), "settled at {}", view.aim().1.to_degrees());
         assert_eq!(view.pitch, 0.0, "the held aim never moved");
@@ -222,10 +231,10 @@ mod tests {
         let mut view = View::facing(0.0);
         let mut body = Body::at(Vec3::ZERO);
         body.stepped = 0.4;
-        settle_view(&mut view, &mut body, DT);
+        settle_view(&mut view, &mut body, false, DT);
         assert!(view.stair < -0.3, "starts below, {}", view.stair);
         for _ in 0..30 {
-            settle_view(&mut view, &mut body, DT);
+            settle_view(&mut view, &mut body, false, DT);
         }
         assert!(view.stair.abs() < 0.01, "caught up in half a second, {}", view.stair);
     }

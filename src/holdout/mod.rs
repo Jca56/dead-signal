@@ -103,30 +103,59 @@ pub enum Aimed {
     Window(usize),
 }
 
+/// One player's side of a holdout: their points, and all they've earned;
+/// their count as it last stood (what's earned is what's new in it); a
+/// window's boards they're nailing back (which, and till the next board)
+/// and how many they've been paid for this round; and the points just
+/// earned, each with how long it's been up.
+#[derive(Clone, Debug)]
+pub struct Wallet {
+    pub points: u32,
+    pub earned: u32,
+    seen: Tally,
+    nailing: Option<(usize, f64)>,
+    nailed: u32,
+    pub pops: Vec<(u32, f64)>,
+}
+
+impl Wallet {
+    fn new() -> Self {
+        Self { points: START_POINTS, earned: 0, seen: Tally::default(), nailing: None, nailed: 0, pops: Vec::new() }
+    }
+
+    fn earn(&mut self, points: u32) {
+        if points > 0 {
+            self.points += points;
+            self.earned += points;
+            self.pops.push((points, 0.0));
+        }
+    }
+}
+
 pub struct Holdout {
     pub arena: Arena,
-    pub points: u32,
     pub rounds: Rounds,
     /// Which zones are open, which doors are.
     open: Vec<bool>,
     opened: Vec<bool>,
-    /// Each player's count as it last stood, by seat.
-    seen: Vec<Tally>,
-    /// Nailing a window's boards back: which, and till the next board.
-    nailing: Option<(usize, f64)>,
-    /// Boards nailed back this round.
-    nailed: u32,
-    /// Points just earned, each with how long it's been up.
-    pub pops: Vec<(u32, f64)>,
+    /// Each player's, by seat: they earn and spend their own.
+    pub wallets: Vec<Wallet>,
 }
 
 impl Holdout {
-    /// The arena, its first zone open, every window boarded up.
-    pub fn new(arena: Arena, seed: u32) -> Self {
+    /// The arena, its first zone open, every window boarded up, for
+    /// `players`.
+    pub fn new(arena: Arena, seed: u32, players: usize) -> Self {
         let mut open = vec![false; arena.zones.len()];
         open[arena.start] = true;
         let opened = vec![false; arena.doors.len()];
-        Self { arena, points: START_POINTS, rounds: Rounds::new(seed), open, opened, seen: Vec::new(), nailing: None, nailed: 0, pops: Vec::new() }
+        let players = players.max(1);
+        Self { arena, rounds: Rounds::new(seed, players), open, opened, wallets: vec![Wallet::new(); players] }
+    }
+
+    /// Player `seat`'s wallet.
+    pub fn wallet(&self, seat: usize) -> Option<&Wallet> {
+        self.wallets.get(seat)
     }
 
     /// What the player starts with: a pistol (loaded, and its rounds) and
@@ -156,35 +185,30 @@ impl Holdout {
     /// Whatever player `seat` earned since last asked, from their count
     /// `stats`.
     pub fn score(&mut self, seat: usize, stats: &Stats) {
-        if self.seen.len() <= seat {
-            self.seen.resize(seat + 1, Tally::default());
-        }
+        let Some(wallet) = self.wallets.get_mut(seat) else { return };
         let now = Tally::of(stats);
-        let was = std::mem::replace(&mut self.seen[seat], now);
+        let was = std::mem::replace(&mut wallet.seen, now);
         let heads = now.headshot_kills - was.headshot_kills;
         let bodies = (now.kills - was.kills).saturating_sub(heads);
         let earned = PER_HIT * (now.hits - was.hits + now.blows - was.blows) + PER_KILL * (bodies + now.blasts - was.blasts) + PER_HEADSHOT_KILL * heads + PER_MELEE_KILL * (now.melee_kills - was.melee_kills);
-        self.earn(earned);
+        wallet.earn(earned);
     }
 
-    fn earn(&mut self, points: u32) {
-        if points > 0 {
-            self.points += points;
-            self.pops.push((points, 0.0));
-        }
-    }
-
-    /// A step of the holdout, the player's feet at `feet`: the rounds on
+    /// A step of the holdout, the players' feet at `feet`: the rounds on
     /// (the paid boards counted afresh each round), the points flown off.
     /// Whether a round began.
-    pub fn update(&mut self, world: &mut World, feet: Vec3, dt: f64) -> bool {
-        for p in &mut self.pops {
-            p.1 += dt;
+    pub fn update(&mut self, world: &mut World, feet: &[Vec3], dt: f64) -> bool {
+        for w in &mut self.wallets {
+            for p in &mut w.pops {
+                p.1 += dt;
+            }
+            w.pops.retain(|p| p.1 < hud::POP_FOR);
         }
-        self.pops.retain(|p| p.1 < hud::POP_FOR);
         let began = self.rounds.update(world, &self.arena, &self.open, feet, dt);
         if began {
-            self.nailed = 0;
+            for w in &mut self.wallets {
+                w.nailed = 0;
+            }
         }
         began
     }
@@ -237,18 +261,20 @@ impl Holdout {
         }
     }
 
-    /// Use `aimed` (E pressed): buy what's on the wall, or the door open.
-    /// What happened: the sound to play, a word for the player, and the
-    /// slot of a weapon just bought (to take it up).
-    pub fn press(&mut self, world: &mut World, aimed: Aimed, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+    /// Player `seat` uses `aimed` (E pressed): buys what's on the wall
+    /// (into `bag`), or opens the door, from their own points. What
+    /// happened: the sound to play, a word for them, and the slot of a
+    /// weapon just bought (to take it up).
+    pub fn press(&mut self, world: &mut World, seat: usize, aimed: Aimed, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+        let Some(points) = self.wallets.get(seat).map(|w| w.points) else { return (None, None, None) };
         match aimed {
-            Aimed::Buy(i) => self.buy(i, bag),
+            Aimed::Buy(i) => self.buy(i, seat, bag),
             Aimed::Door(i) => {
                 let cost = self.arena.doors[i].cost;
-                if self.points < cost {
+                if points < cost {
                     return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
                 }
-                self.points -= cost;
+                self.wallets[seat].points -= cost;
                 self.open_door(world, i);
                 (Some(if self.arena.doors[i].heap { Sfx::Rummage } else { Sfx::Unlock }), None, None)
             }
@@ -256,7 +282,7 @@ impl Holdout {
         }
     }
 
-    fn buy(&mut self, i: usize, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+    fn buy(&mut self, i: usize, seat: usize, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
         let (kind, cost, ammo_only) = match self.arena.buys[i].wares {
             Wares::Weapon(kind) if has(bag, kind) => match spare(kind) {
                 Some(_) => (kind, price(kind) / 2, true),
@@ -264,7 +290,7 @@ impl Holdout {
             },
             Wares::Weapon(kind) | Wares::Kit(kind) => (kind, price(kind), false),
         };
-        if self.points < cost {
+        if self.wallets[seat].points < cost {
             return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
         }
         if let Some((ammo, most)) = spare(kind) {
@@ -286,7 +312,7 @@ impl Holdout {
         } else if !ammo_only && bag.add(Stack::one(kind)).count > 0 {
             return (None, Some("NO ROOM"), None);
         }
-        self.points -= cost;
+        self.wallets[seat].points -= cost;
         (Some(if ammo_only || took.is_none() { Sfx::Pickup } else { Sfx::SlideRack }), None, took)
     }
 
@@ -304,38 +330,40 @@ impl Holdout {
         self.open[b] = true;
     }
 
-    /// E held (or not) at `aimed`, for `dt`: nailing a window's boards
-    /// back, one every so often. The sound of one going up.
-    pub fn hold(&mut self, world: &mut World, aimed: Option<Aimed>, held: bool, dt: f64) -> Option<Sfx> {
+    /// Player `seat`'s E held (or not) at `aimed`, for `dt`: nailing a
+    /// window's boards back, one every so often. The sound of one going up.
+    pub fn hold(&mut self, world: &mut World, seat: usize, aimed: Option<Aimed>, held: bool, dt: f64) -> Option<Sfx> {
+        let wallet = self.wallets.get_mut(seat)?;
         let Some(Aimed::Window(i)) = aimed.filter(|_| held) else {
-            self.nailing = None;
+            wallet.nailing = None;
             return None;
         };
-        let t = match self.nailing {
+        let t = match wallet.nailing {
             Some((w, t)) if w == i => t - dt,
             _ => NAIL_EVERY - dt,
         };
         if t > 0.0 {
-            self.nailing = Some((i, t));
+            wallet.nailing = Some((i, t));
             return None;
         }
-        self.nailing = Some((i, t + NAIL_EVERY));
+        wallet.nailing = Some((i, t + NAIL_EVERY));
         let mut barriers = world.resource_mut::<Barriers>();
         let b = barriers.0.get_mut(i)?;
         if b.boards >= BOARDS {
             return None;
         }
         b.boards += 1;
-        if self.nailed < PAID_BOARDS {
-            self.nailed += 1;
-            self.earn(PER_BOARD);
+        if wallet.nailed < PAID_BOARDS {
+            wallet.nailed += 1;
+            wallet.earn(PER_BOARD);
         }
         Some(Sfx::HitWood)
     }
 
-    /// How far along the next board is (for the ring), while nailing.
-    pub fn nail_progress(&self) -> Option<f64> {
-        self.nailing.map(|(_, t)| 1.0 - t / NAIL_EVERY)
+    /// How far along player `seat`'s next board is (for the ring), while
+    /// they're nailing.
+    pub fn nail_progress(&self, seat: usize) -> Option<f64> {
+        self.wallets.get(seat)?.nailing.map(|(_, t)| 1.0 - t / NAIL_EVERY)
     }
 }
 

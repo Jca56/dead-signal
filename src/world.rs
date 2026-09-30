@@ -9,7 +9,7 @@ use lntrn_math::{Mat4, Vec3};
 use crate::assets::Prop;
 use crate::collide::{Solids, Surface};
 use crate::head::{self, View};
-use crate::player::{self, Body, Controls, Load, Player};
+use crate::player::{self, Body, Controls, Fallen, Load, Player};
 use crate::targets::{self, Kind, Target};
 use crate::zombie;
 use crate::render::MeshId;
@@ -163,6 +163,7 @@ impl Game {
         frame.add_systems(blink);
         player::install(&mut fixed);
         head::install(&mut frame);
+        crate::survivor::install(&mut frame);
         targets::install(&mut frame);
         zombie::install(&mut fixed, &mut frame);
         Self { world, frame, fixed, owed: 0.0, simulating: false }
@@ -240,6 +241,16 @@ impl Game {
     pub fn release_controls(&mut self) {
         for mut c in self.world.query::<&mut Controls>().iter_mut(&mut self.world) {
             *c = Controls::default();
+        }
+    }
+
+    /// Player `seat` fallen (down, or out) or up again.
+    pub fn set_fallen(&mut self, seat: usize, fallen: bool) {
+        let Some(e) = self.player_entity(seat) else { return };
+        if fallen {
+            self.world.entity_mut(e).insert(Fallen);
+        } else {
+            self.world.entity_mut(e).remove::<Fallen>();
         }
     }
 

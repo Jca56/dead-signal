@@ -78,7 +78,7 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
         }
     }
     for (b, burning) in world.query::<(&Body, &Burning)>().iter(world) {
-        let fade = burning.0.min(1.0);
+        let fade = burning.left.min(1.0);
         for k in 0..3 {
             let a = k as f64 * 2.1 + time * 0.7;
             flame(renderer, m.flame, b.pos + Vec3::new(a.cos() * 0.15, 0.4 + 0.45 * k as f64, a.sin() * 0.15), 1.1 * fade, time, 20.0 + k as f64);
@@ -87,13 +87,13 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
 }
 
 /// The arc a throw would take (its `dots`), and a ring where it'd come
-/// down.
-pub fn aim(world: &World, renderer: &mut Renderer, dots: &[Vec3], lands: Option<Vec3>) {
+/// down: in the thrower's pane only.
+pub fn aim(world: &World, renderer: &mut Renderer, pane: usize, dots: &[Vec3], lands: Option<Vec3>) {
     let Some(m) = world.get_resource::<Meshes>().copied() else { return };
     for &p in dots {
-        renderer.draw(Draw { mesh: m.dot, model: Mat4::from_translation(p), emissive: 0.9, fog: 0.3, tint: [1.0; 3] });
+        renderer.draw_in(pane, Draw { mesh: m.dot, model: Mat4::from_translation(p), emissive: 0.9, fog: 0.3, tint: [1.0; 3] });
     }
     if let Some(p) = lands {
-        renderer.draw(Draw { mesh: m.ring, model: Mat4::from_translation(p), emissive: 0.9, fog: 0.3, tint: [1.0, 0.8, 0.4] });
+        renderer.draw_in(pane, Draw { mesh: m.ring, model: Mat4::from_translation(p), emissive: 0.9, fog: 0.3, tint: [1.0, 0.8, 0.4] });
     }
 }

@@ -54,42 +54,46 @@ impl Sway {
     }
 }
 
+/// How one player's arms are moving: the lag behind their turn, and up
+/// or down in the air, metres.
+#[derive(Clone, Copy, Debug, Default)]
+struct Motion {
+    sway: Sway,
+    lift: f64,
+}
+
 pub struct Viewmodel {
     /// Every weapon's viewmodel.
     rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>,
-    sway: Sway,
-    /// Up or down in the air, metres.
-    lift: f64,
+    /// Each player's arms' motion, by seat.
+    motions: Vec<Motion>,
 }
 
 impl Viewmodel {
     pub fn new(rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>) -> Self {
-        Self { rigs, sway: Sway::default(), lift: 0.0 }
+        Self { rigs, motions: vec![Motion::default()] }
     }
 
-    /// Forget the last run's motion.
-    pub fn reset(&mut self) {
-        self.sway = Sway::default();
-        self.lift = 0.0;
+    /// Forget the last run's motion: fresh, for each of `players`.
+    pub fn reset(&mut self, players: usize) {
+        self.motions = vec![Motion::default(); players];
     }
 
-    /// Move the lag and the lift along by `dt`.
-    pub fn update(&mut self, view: &View, body: &Body, dt: f64) {
-        if dt <= 0.0 {
-            return;
-        }
-        self.sway.update(view.yaw, view.pitch, dt);
+    /// Move player `seat`'s lag and lift along by `dt`.
+    pub fn update(&mut self, seat: usize, view: &View, body: &Body, dt: f64) {
+        let Some(m) = self.motions.get_mut(seat).filter(|_| dt > 0.0) else { return };
+        m.sway.update(view.yaw, view.pitch, dt);
 
         // Rising, the arms trail down; falling, they float up.
         let lift = if body.grounded { 0.0 } else { (-body.vel.y * 0.004).clamp(-0.025, 0.025) };
-        self.lift += (lift - self.lift) * (1.0 - (-12.0 * dt).exp());
+        m.lift += (lift - m.lift) * (1.0 - (-12.0 * dt).exp());
     }
 
-    /// The arms and what's in `hands` as they are drawn this frame (the
-    /// clip playing, blended toward the weapon's aimed one as far as the
-    /// sights are up; idles loop on the game's clock, `time`); none if that
-    /// weapon's viewmodel didn't load.
-    pub fn draw(&self, view: &View, hands: &Hands, time: f64, lowered: f64) -> Option<SkinnedDraw> {
+    /// Player `seat`'s arms and what's in `hands` as they are drawn this
+    /// frame (the clip playing, blended toward the weapon's aimed one as far
+    /// as the sights are up; idles loop on the game's clock, `time`); none
+    /// if that weapon's viewmodel didn't load.
+    pub fn draw(&self, seat: usize, view: &View, hands: &Hands, time: f64, lowered: f64) -> Option<SkinnedDraw> {
         let rig = self.rigs.get(&hands.weapon)?;
         let gltf = &rig.gltf;
         let (clip, t) = hands.clip();
@@ -103,36 +107,37 @@ impl Viewmodel {
             }
         }
         let joints = gltf.skins[rig.skin].joint_matrices(&gltf.world_matrices(&pose));
-        Some(SkinnedDraw { mesh: rig.mesh, model: self.placement(view, lowered, hands.stowed_amount(), aim), joints })
+        let motion = self.motions.get(seat).copied().unwrap_or_default();
+        Some(SkinnedDraw { mesh: rig.mesh, model: placement(&motion, view, lowered, hands.stowed_amount(), aim), joints })
     }
+}
 
-    /// Where the whole rig sits in front of the eye.
-    /// `lowered` (0–1) drops the gun out of the way (patching up);
-    /// `stowed` (0–1) takes it right down out of view, tipping forward;
-    /// `aim` (0–1) steadies it, the sights held on the middle: all the
-    /// way up, nothing moves it (moved, the near sight would slide off the
-    /// far one), and what's left of the sway and bob turns it about the eye
-    /// (which keeps both sights on one line through it).
-    fn placement(&self, view: &View, lowered: f64, stowed: f64, aim: f64) -> Mat4 {
-        let steady = 1.0 - AIM_STEADY * aim;
-        let still = 1.0 - aim;
-        let sway = self.sway.angle * steady;
-        let sprint = view.sprint_amount.max(lowered);
-        let amount = view.bob_amount * view.feel.bob * (1.0 + 0.6 * sprint) * steady;
-        let phase = view.bob_phase;
-        let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0) * (1.0 - aim);
-        let stow = stowed.clamp(0.0, 1.0);
-        let stow = stow * stow * (3.0 - 2.0 * stow);
-        let offset = Vec3::new(
-            (phase.cos() * 0.012 * amount - sway.x * 0.1) * still + 0.04 * stow,
-            ((phase * 2.0).sin() * 0.008 * amount + sway.y * 0.1 + self.lift + view.dip * 0.35) * still - 0.06 * sprint - 0.015 * crouch - STOW_DROP * stow,
-            0.02 * sprint,
-        );
-        let turn = Quat::from_rotation_y(sway.x) * Quat::from_rotation_x(sway.y - 0.3 * sprint - STOW_TIP * stow) * Quat::from_rotation_z(phase.cos() * 0.015 * amount - sway.x * 0.3 + 0.1 * sprint);
-        // Turned about the chest from the hip, about the eye down the sights.
-        let pivot = PIVOT * still;
-        Mat4::from_translation(offset + pivot) * Mat4::from_quat(turn) * Mat4::from_translation(-pivot)
-    }
+/// Where the whole rig sits in front of the eye, moving as `motion` is.
+/// `lowered` (0–1) drops the gun out of the way (patching up);
+/// `stowed` (0–1) takes it right down out of view, tipping forward;
+/// `aim` (0–1) steadies it, the sights held on the middle: all the
+/// way up, nothing moves it (moved, the near sight would slide off the
+/// far one), and what's left of the sway and bob turns it about the eye
+/// (which keeps both sights on one line through it).
+fn placement(motion: &Motion, view: &View, lowered: f64, stowed: f64, aim: f64) -> Mat4 {
+    let steady = 1.0 - AIM_STEADY * aim;
+    let still = 1.0 - aim;
+    let sway = motion.sway.angle * steady;
+    let sprint = view.sprint_amount.max(lowered);
+    let amount = view.bob_amount * view.feel.bob * (1.0 + 0.6 * sprint) * steady;
+    let phase = view.bob_phase;
+    let crouch = ((EYE_STAND - view.eye) / (EYE_STAND - EYE_CROUCH)).clamp(0.0, 1.0) * (1.0 - aim);
+    let stow = stowed.clamp(0.0, 1.0);
+    let stow = stow * stow * (3.0 - 2.0 * stow);
+    let offset = Vec3::new(
+        (phase.cos() * 0.012 * amount - sway.x * 0.1) * still + 0.04 * stow,
+        ((phase * 2.0).sin() * 0.008 * amount + sway.y * 0.1 + motion.lift + view.dip * 0.35) * still - 0.06 * sprint - 0.015 * crouch - STOW_DROP * stow,
+        0.02 * sprint,
+    );
+    let turn = Quat::from_rotation_y(sway.x) * Quat::from_rotation_x(sway.y - 0.3 * sprint - STOW_TIP * stow) * Quat::from_rotation_z(phase.cos() * 0.015 * amount - sway.x * 0.3 + 0.1 * sprint);
+    // Turned about the chest from the hip, about the eye down the sights.
+    let pivot = PIVOT * still;
+    Mat4::from_translation(offset + pivot) * Mat4::from_quat(turn) * Mat4::from_translation(-pivot)
 }
 
 /// `clip` of `gltf` at `t` seconds (a looping clip wraps round), over its
@@ -175,19 +180,17 @@ mod tests {
     #[test]
     fn down_the_sights_the_sway_and_bob_never_part_the_sights() {
         use crate::head::View;
-        let mut vm = Viewmodel::new(HashMap::new());
         // Mid-turn, mid-stride, just landed, in the air.
-        vm.sway.angle = Vec2::new(0.05, -0.04);
-        vm.lift = 0.02;
+        let motion = Motion { sway: Sway { angle: Vec2::new(0.05, -0.04), ..Sway::default() }, lift: 0.02 };
         let mut view = View::facing(0.0);
         (view.bob_amount, view.bob_phase, view.dip) = (1.0, 0.9, -0.1);
-        let m = vm.placement(&view, 0.0, 0.0, 1.0);
+        let m = placement(&motion, &view, 0.0, 0.0, 1.0);
         // The sight line (the eye's own axis) stays a line through the eye.
         let (rear, front) = (m.transform_point(Vec3::new(0.0, 0.0, -0.17)), m.transform_point(Vec3::new(0.0, 0.0, -0.34)));
         let apart = rear.normalize().cross(front.normalize()).length();
         assert!(apart < 1e-9, "the sights part by {apart}");
         // From the hip the same motion does move the gun about.
-        let m = vm.placement(&view, 0.0, 0.0, 0.0);
+        let m = placement(&motion, &view, 0.0, 0.0, 0.0);
         let (rear, front) = (m.transform_point(Vec3::new(0.0, 0.0, -0.17)), m.transform_point(Vec3::new(0.0, 0.0, -0.34)));
         assert!(rear.normalize().cross(front.normalize()).length() > 1e-3);
     }

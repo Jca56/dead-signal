@@ -26,7 +26,7 @@ fn world_of(built: Built) -> (World, Holdout) {
     world.insert_resource(zombie::Horde::default());
     world.insert_resource(zombie::Heat::default());
     world.spawn((Body::at(map.spawn.0), Player(0)));
-    let mut h = Holdout::new(arena.expect("the arena"), 7);
+    let mut h = Holdout::new(arena.expect("the arena"), 7, 1);
     h.begin(&mut world);
     (world, h)
 }
@@ -54,8 +54,8 @@ fn the_dead_get_to_every_window_and_in_only_by_the_windows() {
 fn open_everything(world: &mut World, h: &mut Holdout) {
     let mut bag = Holdout::loadout();
     for i in 0..h.arena.doors.len() {
-        h.points = 1_000_000;
-        h.press(world, Aimed::Door(i), &mut bag);
+        h.wallets[0].points = 1_000_000;
+        h.press(world, 0, Aimed::Door(i), &mut bag);
     }
 }
 
@@ -139,14 +139,14 @@ fn a_door_bought_open_lets_the_player_and_the_dead_through() {
     assert!(solid_at_door(&world), "the door isn't there");
     assert!(!world.resource::<Nav>().0.as_ref().unwrap().connects(start, beyond));
     // Short of points: nothing.
-    h.points = door.cost - 1;
+    h.wallets[0].points = door.cost - 1;
     let mut bag = Holdout::loadout();
-    let (_, note, _) = h.press(&mut world, Aimed::Door(i), &mut bag);
+    let (_, note, _) = h.press(&mut world, 0, Aimed::Door(i), &mut bag);
     assert_eq!(note, Some("NOT ENOUGH POINTS"));
     assert!(!h.door_open(i));
-    h.points = door.cost + 5;
-    h.press(&mut world, Aimed::Door(i), &mut bag);
-    assert!(h.door_open(i) && h.points == 5);
+    h.wallets[0].points = door.cost + 5;
+    h.press(&mut world, 0, Aimed::Door(i), &mut bag);
+    assert!(h.door_open(i) && h.wallets[0].points == 5);
     assert!(!solid_at_door(&world), "the door's still solid");
     assert!(world.resource::<Nav>().0.as_ref().unwrap().connects(start, beyond), "no way through the open door");
     assert!(h.open[start_zone] && h.open[other], "the zones either side open");
@@ -157,7 +157,7 @@ fn hits_and_kills_earn_points_the_head_and_the_blade_more() {
     let (_, mut h) = world_of(built());
     let mut stats = Stats::default();
     h.score(0, &stats);
-    assert_eq!(h.points, START_POINTS);
+    assert_eq!(h.wallets[0].points, START_POINTS);
     // Four hits, a body kill, a headshot kill; two blows, the second a
     // kill.
     stats.hits = 4;
@@ -166,26 +166,36 @@ fn hits_and_kills_earn_points_the_head_and_the_blade_more() {
     stats.blows_landed = 2;
     stats.melee_kills = 1;
     h.score(0, &stats);
-    assert_eq!(h.points, START_POINTS + 40 + 50 + 90 + 20 + 120);
+    assert_eq!(h.wallets[0].points, START_POINTS + 40 + 50 + 90 + 20 + 120);
     // Counted once.
     h.score(0, &stats);
-    assert_eq!(h.points, START_POINTS + 320);
+    assert_eq!(h.wallets[0].points, START_POINTS + 320);
 }
 
 #[test]
-fn each_player_s_hits_are_counted_once_apart_from_the_other_s() {
-    let (_, mut h) = world_of(built());
+fn each_player_earns_and_spends_their_own_points() {
+    let Built { arena, .. } = built();
+    let mut h = Holdout::new(arena.expect("the arena"), 7, 2);
+    let mut world = World::new();
+    h.begin(&mut world);
     let (mut first, mut second) = (Stats::default(), Stats::default());
     first.hits = 3;
     second.hits = 1;
     second.gun_kills = 1;
     h.score(0, &first);
     h.score(1, &second);
-    assert_eq!(h.points, START_POINTS + 30 + 10 + 50);
-    // The second's count doesn't make the first's new again.
+    assert_eq!((h.wallets[0].points, h.wallets[1].points), (START_POINTS + 30, START_POINTS + 10 + 50));
+    // Counted once each.
     h.score(0, &first);
     h.score(1, &second);
-    assert_eq!(h.points, START_POINTS + 90);
+    assert_eq!((h.wallets[0].points, h.wallets[1].points), (START_POINTS + 30, START_POINTS + 60));
+    // A door out of the second's pocket, the first's left be.
+    world.insert_resource(Solid(crate::collide::Solids::default()));
+    world.insert_resource(Nav(None));
+    h.wallets[1].points = h.arena.doors[0].cost + 5;
+    h.press(&mut world, 1, Aimed::Door(0), &mut Holdout::loadout());
+    assert!(h.door_open(0));
+    assert_eq!((h.wallets[0].points, h.wallets[1].points), (START_POINTS + 30, 5));
 }
 
 #[test]
@@ -193,26 +203,26 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
     let (mut world, mut h) = world_of(built());
     let smg = h.arena.buys.iter().position(|b| b.wares == Wares::Weapon(Kind::Smg)).expect("an SMG on a wall");
     let mut bag = Holdout::loadout();
-    h.points = price(Kind::Smg);
-    let (_, _, took) = h.press(&mut world, Aimed::Buy(smg), &mut bag);
+    h.wallets[0].points = price(Kind::Smg);
+    let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(smg), &mut bag);
     assert_eq!(took, Some(Slot::Sidearm));
-    assert_eq!(h.points, 0);
+    assert_eq!(h.wallets[0].points, 0);
     let held = bag.slot(Slot::Sidearm).expect("the SMG in hand");
     assert_eq!((held.kind, held.loaded), (Kind::Smg, 30));
     let (ammo, most) = spare(Kind::Smg).unwrap();
     assert_eq!(bag.count(ammo), most, "a full carry of its rounds");
     // Full up, more isn't sold.
-    h.points = 10_000;
-    let (_, note, _) = h.press(&mut world, Aimed::Buy(smg), &mut bag);
-    assert_eq!((note, h.points), (Some("AMMO FULL"), 10_000));
+    h.wallets[0].points = 10_000;
+    let (_, note, _) = h.press(&mut world, 0, Aimed::Buy(smg), &mut bag);
+    assert_eq!((note, h.wallets[0].points), (Some("AMMO FULL"), 10_000));
     // Some spent: topped up again, for half.
     bag.remove(ammo, 50);
-    h.press(&mut world, Aimed::Buy(smg), &mut bag);
-    assert_eq!((bag.count(ammo), h.points), (most, 10_000 - price(Kind::Smg) / 2));
+    h.press(&mut world, 0, Aimed::Buy(smg), &mut bag);
+    assert_eq!((bag.count(ammo), h.wallets[0].points), (most, 10_000 - price(Kind::Smg) / 2));
     assert!(h.prompt(Aimed::Buy(smg), &bag).contains("AMMO"));
     // A kit goes in the bag.
     let medkit = h.arena.buys.iter().position(|b| b.wares == Wares::Kit(Kind::Medkit)).expect("a medkit on a wall");
-    h.press(&mut world, Aimed::Buy(medkit), &mut bag);
+    h.press(&mut world, 0, Aimed::Buy(medkit), &mut bag);
     assert_eq!(bag.count(Kind::Medkit), 1);
 }
 
@@ -236,23 +246,23 @@ fn boards_are_nailed_back_one_at_a_time_while_held_and_only_so_many_pay() {
     let (mut world, mut h) = world_of(built());
     world.resource_mut::<Barriers>().0[0].boards = 0;
     let window = Some(Aimed::Window(0));
-    let before = h.points;
+    let before = h.wallets[0].points;
     for _ in 0..(3.0 * NAIL_EVERY / STEP) as usize + 4 {
-        h.hold(&mut world, window, true, STEP);
+        h.hold(&mut world, 0, window, true, STEP);
     }
     assert_eq!(world.resource::<Barriers>().0[0].boards, 3);
-    assert_eq!(h.points, before + 3 * PER_BOARD);
+    assert_eq!(h.wallets[0].points, before + 3 * PER_BOARD);
     // Let go, and it starts over.
-    h.hold(&mut world, window, false, STEP);
-    assert!(h.nail_progress().is_none());
+    h.hold(&mut world, 0, window, false, STEP);
+    assert!(h.nail_progress(0).is_none());
     // Only so many a round pay.
-    h.nailed = PAID_BOARDS;
-    let before = h.points;
+    h.wallets[0].nailed = PAID_BOARDS;
+    let before = h.wallets[0].points;
     for _ in 0..(NAIL_EVERY / STEP) as usize + 4 {
-        h.hold(&mut world, window, true, STEP);
+        h.hold(&mut world, 0, window, true, STEP);
     }
     assert_eq!(world.resource::<Barriers>().0[0].boards, 4);
-    assert_eq!(h.points, before);
+    assert_eq!(h.wallets[0].points, before);
 }
 
 #[test]
@@ -263,7 +273,7 @@ fn the_first_round_comes_in_by_the_windows_and_comes_for_the_player() {
     let (mut came, mut inside) = (0, 0);
     // A minute of the first round, the player standing still.
     for _ in 0..(60.0 / STEP) as usize {
-        h.update(&mut world, player, STEP);
+        h.update(&mut world, &[player], STEP);
         think.run(&mut world);
         came = came.max(zombie::alive(&mut world));
         inside = world.query::<(&zombie::brain::Zombie, &Body)>().iter(&world).filter(|(z, b)| z.barrier.is_none() && (b.pos - player).length() < 3.0).count().max(inside);
@@ -286,7 +296,7 @@ fn reach_the_player_at(at: Vec3, seconds: f64) -> usize {
     let mut think = zombie::stepper();
     let mut most = 0;
     for _ in 0..(seconds / STEP) as usize {
-        h.update(&mut world, at, STEP);
+        h.update(&mut world, &[at], STEP);
         think.run(&mut world);
         let close = world.query::<(&zombie::brain::Zombie, &Body)>().iter(&world).filter(|(z, b)| !z.dead() && (b.pos - at).length() < 3.0).count();
         most = most.max(close);
@@ -312,22 +322,22 @@ fn every_round_ends_once_its_dead_are_dead() {
     let player = feet(&mut world);
     // Past the wait, into the first round, all of it brought in.
     for _ in 0..(40.0 / STEP) as usize {
-        h.update(&mut world, player, STEP);
+        h.update(&mut world, &[player], STEP);
     }
     assert_eq!(zombie::alive(&mut world), rounds::count(1) as usize);
     assert!(!h.rounds.resting());
     for mut z in world.query::<&mut zombie::brain::Zombie>().iter_mut(&mut world) {
         z.hurt(1e9, false, false, player);
     }
-    h.update(&mut world, player, STEP);
+    h.update(&mut world, &[player], STEP);
     assert!(h.rounds.resting(), "the round didn't end");
     for _ in 0..(rounds::BREATHER / STEP) as usize + 2 {
-        h.update(&mut world, player, STEP);
+        h.update(&mut world, &[player], STEP);
     }
     assert_eq!(h.rounds.round, 2);
     // Tougher.
     for _ in 0..(5.0 / STEP) as usize {
-        h.update(&mut world, player, STEP);
+        h.update(&mut world, &[player], STEP);
     }
     let hp = world.query::<&zombie::brain::Zombie>().iter(&world).filter(|z| !z.dead()).map(|z| z.hp).next();
     assert_eq!(hp, Some(rounds::toughness(2)));

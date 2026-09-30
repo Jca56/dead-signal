@@ -3,7 +3,7 @@
 //! new one begins and dim between; under it the points, and what was just
 //! earned rising off them.
 
-use lntrn_math::{Color, Vec2};
+use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
@@ -17,9 +17,10 @@ const BLOOD: Color = Color::rgb(0.66, 0.08, 0.06);
 const FLARE: Color = Color::rgb(0.95, 0.85, 0.75);
 const FLARE_FOR: f64 = 2.5;
 
-pub fn draw(ui: &mut Ui, h: &Holdout) {
+/// The round and player `seat`'s points (and the others', smaller), over
+/// `screen`: their own part of the window.
+pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize) {
     let s = ui.m.scale;
-    let screen = ui.clip();
     let left = screen.min.x + 60.0 * s;
     let top = screen.min.y + 50.0 * s;
     let round = h.rounds.round;
@@ -48,17 +49,28 @@ pub fn draw(ui: &mut Ui, h: &Holdout) {
     // The points, and what was just earned rising off them.
     let points = TextStyle::new((40.0 * s) as f32).bold().family(style::FONT);
     let small = TextStyle::new((28.0 * s) as f32).bold().family(style::FONT);
-    let y = top + tall + 24.0 * s;
-    let text = h.points.to_string();
+    let mut y = top + tall + 24.0 * s;
+    let Some(wallet) = h.wallet(seat) else { return };
+    let text = wallet.points.to_string();
     let w = ui.measure(&text, &points);
     ui.text_at(&text, &points, Vec2::new(left, y), w + 8.0, style::BONE);
-    for (k, &(n, t)) in h.pops.iter().rev().take(6).enumerate() {
+    for (k, &(n, t)) in wallet.pops.iter().rev().take(6).enumerate() {
         let f = t / POP_FOR;
         let pop = format!("+{n}");
         let pw = ui.measure(&pop, &small);
         let at = Vec2::new(left + w + 20.0 * s + f64::from(k as u32) * 6.0 * s, y - f * 40.0 * s);
         let c = Color::rgba(0.95, 0.80, 0.30, 1.0 - f);
         ui.text_at(&pop, &small, at, pw + 8.0, c);
+    }
+    // Playing together: the others' points, in their colours.
+    if h.wallets.len() > 1 {
+        y += 50.0 * s;
+        for (other, w) in h.wallets.iter().enumerate().filter(|&(other, _)| other != seat) {
+            let line = format!("P{}  {}", other + 1, w.points);
+            let lw = ui.measure(&line, &small);
+            ui.text_at(&line, &small, Vec2::new(left, y), lw + 8.0, style::player(other));
+            y += f64::from(small.line_height()) + 6.0 * s;
+        }
     }
     // Resting: when the next round comes.
     if h.rounds.resting() {

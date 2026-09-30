@@ -64,21 +64,26 @@ impl Combat {
         blows
     }
 
-    /// The Spitters that burst: the dead near each take it (a kill counted
-    /// in `stats`), and so does each player near, poisoned. The blows it
-    /// dealt the players, each with whose seat.
-    pub fn bursts(&mut self, game: &mut Game, stats: &mut Stats) -> Vec<(usize, zombie::brain::Blow)> {
+    /// The Spitters that burst: the dead near each take it, and so does
+    /// each player near, poisoned. The blows it dealt the players (each
+    /// with whose seat), and the kills (each the seat of whoever killed the
+    /// Spitter).
+    pub fn bursts(&mut self, game: &mut Game) -> (Vec<(usize, zombie::brain::Blow)>, Vec<usize>) {
         let bursts = std::mem::take(&mut game.world.resource_mut::<Horde>().bursts);
         let mut blows = Vec::new();
-        for at in bursts {
+        let mut kills = Vec::new();
+        for (at, by) in bursts {
             self.fx.burst(at + Vec3::new(0.0, 1.0, 0.0), Vec3::Y, Surface::Bile, 45);
             let near: Vec<(bevy_ecs::entity::Entity, Vec3)> =
                 game.world.query::<(bevy_ecs::entity::Entity, &zombie::brain::Zombie, &Body)>().iter(&game.world).filter(|(_, z, b)| !z.dead() && (b.pos - at).length() < spit::BURST_REACH).map(|(e, _, b)| (e, b.pos)).collect();
             for (e, pos) in near {
                 let share = spit::burst_share((pos - at).length());
                 let impact = zombie::Impact { damage: BURST_DEAD * share + 30.0, head: false, limb: false, blow: false, shove: 3.0 + 9.0 * share, stumble: true, takedown: false };
+                if let (Some(by), Some(mut z)) = (by, game.world.get_mut::<zombie::brain::Zombie>(e)) {
+                    z.by = Some(by);
+                }
                 if zombie::hurt(&mut game.world, e, away(at, pos), at, impact) {
-                    stats.burst_kills += 1;
+                    kills.extend(by);
                     self.drop_something(game, e);
                 }
             }
@@ -98,7 +103,7 @@ impl Combat {
                 }
             }
         }
-        blows
+        (blows, kills)
     }
 
     /// Now and then one of the dead had something on it (a soldier more

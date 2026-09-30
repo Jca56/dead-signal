@@ -81,6 +81,8 @@ pub struct Thrown {
     beep_in: f64,
     /// Its light's on (a beep just now).
     pub lit: f64,
+    /// Who threw it (their seat): what it kills is theirs.
+    pub by: usize,
 }
 
 /// A pool of fire on the ground.
@@ -90,17 +92,23 @@ pub struct Fire {
     pub radius: f64,
     pub left: f64,
     crackle_in: f64,
+    /// Whose Molotov it was.
+    pub by: usize,
 }
 
-/// One of the dead on fire: how much longer.
+/// One of the dead on fire: how much longer, and whose fire it caught.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct Burning(pub f64);
+pub struct Burning {
+    pub left: f64,
+    pub by: usize,
+}
 
-/// What came of it for the run: the dead it killed (the players' kills),
-/// blasts to throw chips from, and what it did to each player.
+/// What came of it for the run: the dead it killed (each a player's kill:
+/// their seat), blasts to throw chips from, and what it did to each
+/// player.
 #[derive(Resource, Default)]
 pub struct Booms {
-    pub kills: Vec<Entity>,
+    pub kills: Vec<(usize, Entity)>,
     pub blasts: Vec<Vec3>,
     /// Each player's, by seat.
     felt: Vec<Felt>,
@@ -137,9 +145,9 @@ pub fn launch(forward: Vec3) -> Vec3 {
     Vec3::new(flat.x * pitch.cos(), pitch.sin(), flat.y * pitch.cos()) * THROW_SPEED
 }
 
-/// Throw `what` from `from` along the arc `vel`.
-pub fn throw(world: &mut World, what: Throwable, from: Vec3, vel: Vec3) {
-    world.spawn(Thrown { what, pos: from, prev: from, vel, spin: 0.0, age: 0.0, resting: false, beep_in: 0.0, lit: 0.0 });
+/// Player `by` throws `what` from `from` along the arc `vel`.
+pub fn throw(world: &mut World, what: Throwable, from: Vec3, vel: Vec3, by: usize) {
+    world.spawn(Thrown { what, pos: from, prev: from, vel, spin: 0.0, age: 0.0, resting: false, beep_in: 0.0, lit: 0.0, by });
 }
 
 /// Where a throw from `from` along `vel` comes down (following it as it
@@ -197,7 +205,7 @@ fn fly(world: &mut World) {
                         let at = if h.normal.y > 0.5 { Some(h.point) } else { solid.raycast(h.point + h.normal * 0.1, -Vec3::Y, 4.0).map(|g| g.point) };
                         sounds.push((Sfx::Shatter, h.point, 1.0));
                         if let Some(at) = at {
-                            fires.push(at);
+                            fires.push((at, t.by));
                             sounds.push((Sfx::Ignite, at, 1.0));
                         }
                         gone.push(*e);
@@ -227,7 +235,7 @@ fn fly(world: &mut World) {
                     sounds.push((Sfx::Beep, t.pos, 1.0));
                 }
                 if t.age >= FUSE {
-                    blasts.push(t.pos);
+                    blasts.push((t.pos, t.by));
                     gone.push(*e);
                 }
             } else if t.age > 8.0 {
@@ -243,27 +251,29 @@ fn fly(world: &mut World) {
     for e in gone {
         world.despawn(e);
     }
-    for at in fires {
-        world.spawn(Fire { at, radius: FIRE_RADIUS, left: FIRE_FOR, crackle_in: 0.0 });
+    for (at, by) in fires {
+        world.spawn(Fire { at, radius: FIRE_RADIUS, left: FIRE_FOR, crackle_in: 0.0, by });
     }
     world.resource_mut::<Horde>().lures = lures;
-    for at in blasts {
-        blast(world, at);
+    for (at, by) in blasts {
+        blast(world, at, by);
     }
     world.resource_mut::<Horde>().sounds.extend(sounds);
 }
 
-/// A pipe bomb goes off at `at`: the dead near it torn apart (plate is no
-/// help), the players hurt and shaken if near, and it's heard far off.
-fn blast(world: &mut World, at: Vec3) {
+/// Player `by`'s pipe bomb goes off at `at`: the dead near it torn apart
+/// (plate is no help; the kills theirs), the players hurt and shaken if
+/// near, and it's heard far off.
+fn blast(world: &mut World, at: Vec3, by: usize) {
     let dead: Vec<(Entity, Vec3)> = world.query::<(Entity, &Zombie, &Body)>().iter(world).filter(|(_, z, b)| !z.dead() && (b.pos - at).length() < BLAST).map(|(e, _, b)| (e, b.pos)).collect();
     let mut kills = Vec::new();
     for (e, pos) in dead {
         let share = 1.0 - (pos - at).length() / BLAST;
         // (A blast finds everything: `limb` so no plate turns it.)
         let hit = zombie::Impact { damage: BLAST_DEAD * share + 120.0, head: false, limb: true, blow: false, shove: 4.0 + 14.0 * share, stumble: true, takedown: false };
+        blame(world, e, by);
         if zombie::hurt(world, e, pos - at, at, hit) {
-            kills.push(e);
+            kills.push((by, e));
         }
     }
     let players: Vec<(usize, Vec3)> = world.query::<(&Player, &Body)>().iter(world).map(|(p, b)| (p.0, b.pos)).collect();
@@ -305,18 +315,23 @@ fn burn(world: &mut World) {
         world.despawn(e);
     }
     let fires: Vec<Fire> = world.query::<&Fire>().iter(world).copied().collect();
-    let within = |p: Vec3| fires.iter().any(|f| Vec2::new(p.x - f.at.x, p.z - f.at.z).length() < f.size() && (p.y - f.at.y).abs() < 1.2);
+    // The fire `p` stands in, if any: whose it is.
+    let within = |p: Vec3| fires.iter().find(|f| Vec2::new(p.x - f.at.x, p.z - f.at.z).length() < f.size() && (p.y - f.at.y).abs() < 1.2).map(|f| f.by);
     // The dead: those in a fire catch; those on fire burn.
-    let dead: Vec<(Entity, Vec3, Option<f64>)> = world.query::<(Entity, &Zombie, &Body, Option<&Burning>)>().iter(world).filter(|(_, z, _, _)| !z.dead()).map(|(e, _, b, burning)| (e, b.pos, burning.map(|b| b.0))).collect();
+    let dead: Vec<(Entity, Vec3, Option<Burning>)> = world.query::<(Entity, &Zombie, &Body, Option<&Burning>)>().iter(world).filter(|(_, z, _, _)| !z.dead()).map(|(e, _, b, burning)| (e, b.pos, burning.copied())).collect();
     let mut kills = Vec::new();
     for (e, pos, burning) in dead {
-        let left = if within(pos) { Some(BURNS_ON) } else { burning.map(|l| l - STEP).filter(|&l| l > 0.0) };
-        match left {
-            Some(l) => {
-                world.entity_mut(e).insert(Burning(l));
+        let now = match within(pos) {
+            Some(by) => Some(Burning { left: BURNS_ON, by }),
+            None => burning.map(|b| Burning { left: b.left - STEP, ..b }).filter(|b| b.left > 0.0),
+        };
+        match now {
+            Some(b) => {
+                world.entity_mut(e).insert(b);
+                blame(world, e, b.by);
                 let hit = zombie::Impact { damage: BURN_DEAD * STEP, head: false, limb: true, blow: false, shove: 0.0, stumble: false, takedown: false };
                 if zombie::hurt(world, e, Vec3::ZERO, pos, hit) {
-                    kills.push(e);
+                    kills.push((b.by, e));
                 }
             }
             None if burning.is_some() => {
@@ -329,11 +344,19 @@ fn burn(world: &mut World) {
     let mut booms = world.resource_mut::<Booms>();
     booms.kills.extend(kills);
     for (seat, p) in players {
-        if within(p) {
+        if within(p).is_some() {
             booms.felt(seat).scorched += BURN_PLAYER * STEP;
         }
     }
     world.resource_mut::<Horde>().sounds.extend(sounds);
+}
+
+/// One of the dead was hurt by player `by`: whatever it takes with it is
+/// theirs.
+fn blame(world: &mut World, e: Entity, by: usize) {
+    if let Some(mut z) = world.get_mut::<Zombie>(e) {
+        z.by = Some(by);
+    }
 }
 
 impl Fire {

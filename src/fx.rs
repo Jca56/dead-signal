@@ -1,6 +1,7 @@
 //! What a hit throws up: chips of whatever was struck (dirt, splinters,
 //! concrete, sparks off steel) flying off the surface, tumbling, falling
-//! and shrinking away; and the hitmarker at the crosshair.
+//! and shrinking away; and the hitmarker a hit flashes at the crosshair
+//! (each player's own, kept with their arms).
 
 use lntrn_math::{Color, Mat4, Quat, Vec3};
 
@@ -31,11 +32,23 @@ pub struct Marker {
     pub head: bool,
 }
 
+impl Marker {
+    /// A hit's flash: longer if it beat what it struck.
+    pub fn of(beaten: bool, head: bool) -> Marker {
+        Marker { left: if beaten { 0.35 } else { 0.15 }, beaten, head }
+    }
+
+    /// What's left of it `dt` on: nothing, once it's faded.
+    pub fn faded(self, dt: f64) -> Option<Marker> {
+        let left = self.left - dt;
+        (left > 0.0).then_some(Marker { left, ..self })
+    }
+}
+
 #[derive(Default)]
 pub struct Fx {
     chips: Vec<Chip>,
     mesh: Option<MeshId>,
-    pub marker: Option<Marker>,
     /// A little noise source, the same every run.
     seed: u32,
 }
@@ -102,11 +115,6 @@ impl Fx {
         }
     }
 
-    /// Flash the hitmarker.
-    pub fn mark(&mut self, beaten: bool, head: bool) {
-        self.marker = Some(Marker { left: if beaten { 0.35 } else { 0.15 }, beaten, head });
-    }
-
     pub fn update(&mut self, dt: f64) {
         for c in &mut self.chips {
             c.vel.y -= GRAVITY * dt;
@@ -116,12 +124,6 @@ impl Fx {
             c.left -= dt;
         }
         self.chips.retain(|c| c.left > 0.0);
-        if let Some(m) = self.marker.as_mut() {
-            m.left -= dt;
-            if m.left <= 0.0 {
-                self.marker = None;
-            }
-        }
     }
 
     /// Queue the chips for this frame.
@@ -150,10 +152,13 @@ mod tests {
             fx.update(1.0 / 60.0);
         }
         assert_eq!(fx.chips.len(), 0, "gone within a second");
-        fx.mark(true, false);
-        fx.update(0.2);
-        assert!(fx.marker.is_some_and(|m| m.beaten));
-        fx.update(0.2);
-        assert!(fx.marker.is_none());
+    }
+
+    #[test]
+    fn a_hitmarker_flashes_longer_for_a_kill_and_fades() {
+        let kill = Marker::of(true, false).faded(0.2);
+        assert!(kill.is_some_and(|m| m.beaten));
+        assert!(kill.and_then(|m| m.faded(0.2)).is_none());
+        assert!(Marker::of(false, true).faded(0.2).is_none(), "a plain hit's gone sooner");
     }
 }

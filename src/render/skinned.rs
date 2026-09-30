@@ -2,6 +2,7 @@
 //! after the world into the same image with depth of their own, so they
 //! are never cut by a tree the camera stands in. Their bones are uploaded
 //! each frame; their projection is fixed, whatever the world's is doing.
+//! A pane each (a player each), with its own.
 
 use lntrn_app::lntrn_render::Gpu;
 use lntrn_app::wgpu;
@@ -59,25 +60,29 @@ unsafe impl Pod for Uniform {}
 
 pub(super) struct Skinned {
     pipeline: wgpu::RenderPipeline,
-    uniform: wgpu::Buffer,
-    bind: wgpu::BindGroup,
+    layout: wgpu::BindGroupLayout,
+    /// Each pane's uniform, and its bind group.
+    uniforms: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     staged: Vec<SkinnedVertex>,
     vertices: Option<wgpu::Buffer>,
     meshes: Vec<(u32, u32)>,
-    /// What this frame draws: at most one (the viewmodel).
-    frame: Option<(u32, u32)>,
+    /// What this frame draws in each pane: at most one each (its arms).
+    frame: Vec<Option<(u32, u32)>>,
 }
+
+/// A pane's arms this frame (if any), how they're seen (their projection),
+/// and its camera's basis (right, up, forward), which turns their normals
+/// to the world's for the light.
+pub(super) type PaneArms = (Option<SkinnedDraw>, Mat4, (Vec3, Vec3, Vec3));
 
 impl Skinned {
     pub(super) fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Self {
         let device = &gpu.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("skinned"), source: wgpu::ShaderSource::Wgsl(include_str!("skinned.wgsl").into()) });
-        let uniform = device.create_buffer(&wgpu::BufferDescriptor { label: Some("viewmodel"), size: std::mem::size_of::<Uniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewmodel"),
             entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }],
         });
-        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("viewmodel"), layout: &layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() }] });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("skinned"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
         let attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Uint32x4, 4 => Float32x4];
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -96,7 +101,7 @@ impl Skinned {
             multiview_mask: None,
             cache: None,
         });
-        Self { pipeline, uniform, bind, staged: Vec::new(), vertices: None, meshes: Vec::new(), frame: None }
+        Self { pipeline, layout, uniforms: Vec::new(), staged: Vec::new(), vertices: None, meshes: Vec::new(), frame: Vec::new() }
     }
 
     pub(super) fn add_mesh(&mut self, vertices: &[SkinnedVertex]) -> SkinnedMeshId {
@@ -112,37 +117,42 @@ impl Skinned {
         }
     }
 
-    /// Set this frame's viewmodel up: its bones, where it sits, how it is
-    /// seen (`proj`) and lit (the camera's basis turns its normals to the
-    /// world's).
-    pub(super) fn prepare(&mut self, gpu: &Gpu, draw: Option<&SkinnedDraw>, proj: Mat4, basis: (Vec3, Vec3, Vec3), air: &Atmosphere) {
-        self.frame = None;
-        let Some(d) = draw else { return };
-        let Some(&range) = self.meshes.get(d.mesh.0) else { return };
-        let mut joints = [Mat4::IDENTITY.to_gpu(); MAX_JOINTS];
-        for (slot, m) in joints.iter_mut().zip(&d.joints) {
-            *slot = m.to_gpu();
+    /// Set this frame's arms up, a pane's at a time: their bones, where
+    /// they sit, how they're seen and lit.
+    pub(super) fn prepare(&mut self, gpu: &Gpu, panes: &[PaneArms], air: &Atmosphere) {
+        self.frame.clear();
+        for (i, (draw, proj, (right, up, forward))) in panes.iter().enumerate() {
+            let range = draw.as_ref().and_then(|d| self.meshes.get(d.mesh.0).copied());
+            self.frame.push(range);
+            let (Some(d), Some(_)) = (draw, range) else { continue };
+            if self.uniforms.len() <= i {
+                let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("viewmodel"), size: std::mem::size_of::<Uniform>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+                let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("viewmodel"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() }] });
+                self.uniforms.push((buffer, bind));
+            }
+            let mut joints = [Mat4::IDENTITY.to_gpu(); MAX_JOINTS];
+            for (slot, m) in joints.iter_mut().zip(&d.joints) {
+                *slot = m.to_gpu();
+            }
+            let u = Uniform {
+                proj: proj.to_gpu(),
+                model: d.model.to_gpu(),
+                to_world: [vec4(*right, 0.0), vec4(*up, 0.0), vec4(-*forward, 0.0)],
+                sun_dir: vec4(air.sun_dir.normalize(), 0.0),
+                sun_color: color4(air.sun, 1.0),
+                ambient_sky: color4(air.ambient_sky, 1.0),
+                ambient_ground: color4(air.ambient_ground, 1.0),
+                joints,
+            };
+            gpu.queue.write_buffer(&self.uniforms[i].0, 0, bytes_of(&u));
         }
-        let (right, up, forward) = basis;
-        let u = Uniform {
-            proj: proj.to_gpu(),
-            model: d.model.to_gpu(),
-            to_world: [vec4(right, 0.0), vec4(up, 0.0), vec4(-forward, 0.0)],
-            sun_dir: vec4(air.sun_dir.normalize(), 0.0),
-            sun_color: color4(air.sun, 1.0),
-            ambient_sky: color4(air.ambient_sky, 1.0),
-            ambient_ground: color4(air.ambient_ground, 1.0),
-            joints,
-        };
-        gpu.queue.write_buffer(&self.uniform, 0, bytes_of(&u));
-        self.frame = Some(range);
     }
 
-    /// Draw what `prepare` set up into an open pass.
-    pub(super) fn draw<'p>(&'p self, pass: &mut wgpu::RenderPass<'p>) {
-        let (Some((first, count)), Some(vertices)) = (self.frame, &self.vertices) else { return };
+    /// Draw what `prepare` set up for pane `pane` into an open pass.
+    pub(super) fn draw<'p>(&'p self, pass: &mut wgpu::RenderPass<'p>, pane: usize) {
+        let (Some(Some((first, count))), Some(vertices), Some((_, bind))) = (self.frame.get(pane).copied(), &self.vertices, self.uniforms.get(pane)) else { return };
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind, &[]);
+        pass.set_bind_group(0, bind, &[]);
         pass.set_vertex_buffer(0, vertices.slice(..));
         pass.draw(first..first + count, 0..1);
     }

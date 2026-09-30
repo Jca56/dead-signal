@@ -63,6 +63,15 @@ impl Camera {
     }
 }
 
+/// The vertical field of view for a pane `aspect` wide, cut from a
+/// window `window_aspect` wide that would see `fov_y`: a wide, short pane
+/// (one above the other) sees across as much as the window would, cropped
+/// top and bottom, never stretched wider; a narrow one sees as high.
+pub fn pane_fov(fov_y: f64, window_aspect: f64, aspect: f64) -> f64 {
+    let across = (fov_y * 0.5).tan() * window_aspect;
+    fov_y.min(2.0 * (across / aspect.max(1e-6)).atan())
+}
+
 /// What a camera sees: its eye, how far, and each side of its view (the
 /// normal, pointing in).
 #[derive(Clone, Copy, Debug)]
@@ -97,6 +106,21 @@ mod tests {
         // The view puts the target straight ahead, down -Z.
         let seen = c.view().transform_point(target);
         assert!(seen.x.abs() < 1e-9 && seen.y.abs() < 1e-9 && seen.z < 0.0);
+    }
+
+    #[test]
+    fn a_pane_is_cropped_from_the_window_never_stretched() {
+        let fov = 65f64.to_radians();
+        let window = 16.0 / 9.0;
+        assert!((pane_fov(fov, window, window) - fov).abs() < 1e-12, "the whole window");
+        // One above the other: twice as wide for its height, as wide a view
+        // across, half as high.
+        let wide = pane_fov(fov, window, window * 2.0);
+        let across = |v: f64, aspect: f64| (v * 0.5).tan() * aspect;
+        assert!((across(wide, window * 2.0) - across(fov, window)).abs() < 1e-12);
+        assert!(wide < fov * 0.6);
+        // Side by side: as high a view, narrower across.
+        assert_eq!(pane_fov(fov, window, window * 0.5), fov);
     }
 
     #[test]

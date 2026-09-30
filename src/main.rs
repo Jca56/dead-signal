@@ -22,8 +22,10 @@ mod icons;
 mod input;
 mod items;
 mod levelbar;
+mod lobby;
 mod loot;
 mod map;
+mod mates;
 mod menu;
 mod perf;
 mod player;
@@ -35,6 +37,7 @@ mod slots_ui;
 mod sound;
 mod stats;
 mod style;
+mod survivor;
 mod targets;
 mod throw;
 #[cfg(test)]

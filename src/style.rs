@@ -14,6 +14,14 @@ pub const BONE: Color = Color::rgb(0.87, 0.85, 0.79);
 pub const DIM: Color = Color::rgb(0.56, 0.56, 0.53);
 /// The one accent: the beacon's red.
 pub const SIGNAL: Color = Color::rgb(0.78, 0.14, 0.10);
+/// Each player's own colour, by seat (playing together): a cold blue and
+/// a warm amber, both clear against the fog.
+pub const PLAYERS: [Color; 2] = [Color::rgb(0.40, 0.66, 0.98), Color::rgb(0.98, 0.68, 0.22)];
+
+/// Player `seat`'s colour.
+pub fn player(seat: usize) -> Color {
+    PLAYERS[seat % PLAYERS.len()]
+}
 
 /// A grey-green overcast afternoon, the fog thick past a hundred metres.
 pub const AIR: Atmosphere = Atmosphere {

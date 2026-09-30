@@ -2,7 +2,7 @@
 //! twice about walking out), and settling it into the profile once it's
 //! over.
 
-use lntrn_math::Color;
+use lntrn_math::{Color, Rect};
 use lntrn_ui::{AreaCx, Key, ShellRequest, Ui};
 
 use super::{DeadSignal, LeaveItem, PAUSE_DIM, PauseItem, Screen, Then};
@@ -57,6 +57,7 @@ impl DeadSignal {
 
     /// A run's frame: look, move, pause; or, dead, the way out.
     pub(super) fn run_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, active: bool) {
+        self.draw_rules(ui);
         if self.run.ending.is_some() {
             match self.run.ending(ui, cx, &mut self.game, &mut self.combat, active, &self.icons) {
                 Some(After::Hideout) => self.fade_to(Then::Show(Screen::Hideout)),
@@ -123,15 +124,12 @@ impl DeadSignal {
         if !active {
             return;
         }
-        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons, &[self.pads.all()]);
-        // The pads shake for what happened to their players.
-        let rumble = self.game.world.resource::<crate::settings::Settings>().rumble;
-        for arms in &mut self.combat.arms {
-            let r = std::mem::take(&mut arms.rumble);
-            if rumble {
-                self.pads.rumble(r);
-            }
-        }
+        let area = ui.clip();
+        let panes: Vec<Rect> = self.shares.iter().map(|&share| super::panes::in_rect(share, area)).collect();
+        let feeds = self.feeds();
+        self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons, &feeds, &panes);
+        self.draw_marks(ui, &panes);
+        self.shake_pads();
         self.map_screen(ui, active);
         // The run just ended: it's settled (and saved) at once.
         if self.run.ending.is_some() {

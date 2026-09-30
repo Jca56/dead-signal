@@ -58,9 +58,9 @@ const ARMOR: Color = Color::rgb(0.26, 0.52, 0.86);
 /// The hitmarker's gold, for a shot to the head.
 const HEADSHOT: Color = Color::rgb(0.98, 0.76, 0.16);
 
-pub fn draw(ui: &mut Ui, h: &Hud) {
+/// Draw `h` over `screen`: the player's own part of the window.
+pub fn draw(ui: &mut Ui, screen: Rect, h: &Hud) {
     let s = ui.m.scale;
-    let screen = ui.clip();
     let mid = screen.center();
     let low = h.hp < LOW_HP;
     let pulse = 0.5 + 0.5 * (h.time * 5.5).sin();
@@ -265,7 +265,7 @@ fn ring(ui: &mut Ui, centre: Vec2, radius: f64, width: f64, progress: f64) {
 
 /// Red closing in from every edge, `amount` (0–1) strong: thin bands, each
 /// fainter going in.
-fn vignette(ui: &mut Ui, screen: Rect, amount: f64) {
+pub fn vignette(ui: &mut Ui, screen: Rect, amount: f64) {
     let depth = screen.height().min(screen.width()) * 0.28;
     let bands = 24;
     for k in 0..bands {

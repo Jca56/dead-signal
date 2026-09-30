@@ -38,6 +38,7 @@ pub enum Field {
     InvertLook,
     AimAssist,
     Rumble,
+    SideBySide,
 }
 
 /// What a setting can be.
@@ -60,7 +61,7 @@ pub enum Show {
 }
 
 impl Field {
-    pub const ALL: [Field; 20] = [
+    pub const ALL: [Field; 21] = [
         Field::Sensitivity,
         Field::AdsSensitivity,
         Field::ToggleCrouch,
@@ -81,6 +82,7 @@ impl Field {
         Field::InvertLook,
         Field::AimAssist,
         Field::Rumble,
+        Field::SideBySide,
     ];
 
     /// Its name in the file.
@@ -106,6 +108,7 @@ impl Field {
             Field::InvertLook => "invert_look",
             Field::AimAssist => "aim_assist",
             Field::Rumble => "rumble",
+            Field::SideBySide => "side_by_side",
         }
     }
 
@@ -132,6 +135,7 @@ impl Field {
             Field::InvertLook => "INVERT LOOK",
             Field::AimAssist => "AIM ASSIST",
             Field::Rumble => "RUMBLE",
+            Field::SideBySide => "SIDE BY SIDE",
         }
     }
 
@@ -158,6 +162,7 @@ impl Field {
             Field::InvertLook => "On: push the stick up to look down",
             Field::AimAssist => "The view slows a little as the crosshair crosses one of the dead",
             Field::Rumble => "The pad shakes with shots, blows and blasts",
+            Field::SideBySide => "Two players' halves side by side, not one above the other",
         }
     }
 
@@ -171,7 +176,7 @@ impl Field {
             Field::Master | Field::Music | Field::Effects | Field::Zombies => slider(0.0, 1.0, 0.01, Show::Percent),
             Field::HeadBob => slider(0.0, 1.5, 0.05, Show::Percent),
             Field::UiScale => slider(0.75, 1.5, 0.05, Show::Percent),
-            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint | Field::DevMode | Field::InvertLook | Field::AimAssist | Field::Rumble => Range::Toggle,
+            Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint | Field::DevMode | Field::InvertLook | Field::AimAssist | Field::Rumble | Field::SideBySide => Range::Toggle,
         }
     }
 
@@ -231,6 +236,9 @@ pub struct Settings {
     pub invert_look: bool,
     pub aim_assist: bool,
     pub rumble: bool,
+    /// Two players' halves of the window side by side, not one above the
+    /// other.
+    pub side_by_side: bool,
 }
 
 impl Default for Settings {
@@ -257,6 +265,7 @@ impl Default for Settings {
             invert_look: false,
             aim_assist: true,
             rumble: true,
+            side_by_side: false,
         }
     }
 }
@@ -286,6 +295,7 @@ impl Settings {
             Field::InvertLook => on(self.invert_look),
             Field::AimAssist => on(self.aim_assist),
             Field::Rumble => on(self.rumble),
+            Field::SideBySide => on(self.side_by_side),
         }
     }
 
@@ -314,6 +324,7 @@ impl Settings {
             Field::InvertLook => self.invert_look = on,
             Field::AimAssist => self.aim_assist = on,
             Field::Rumble => self.rumble = on,
+            Field::SideBySide => self.side_by_side = on,
         }
     }
 

@@ -119,6 +119,14 @@ impl Body {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Player(pub usize);
 
+/// A player who's fallen (playing together): down and crawling, waiting to
+/// be picked up, or out, bled out. The dead leave them be.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct Fallen;
+
+/// How fast the fallen crawl, m/s.
+pub const CRAWL: f64 = 1.2;
+
 pub fn capsule(crouched: bool) -> Capsule {
     Capsule { radius: RADIUS, height: if crouched { CROUCH_HEIGHT } else { STAND_HEIGHT } }
 }
@@ -364,9 +372,20 @@ impl Default for Load {
     }
 }
 
-fn step_players(solid: Res<Solid>, mut players: Query<(&mut Body, &View, &mut Controls, Option<&Load>), With<Player>>, dead: Query<(&Zombie, &Body), Without<Player>>) {
-    for (mut body, view, mut controls, load) in &mut players {
-        let gait = Gait { sprint: WALK + (SPRINT - WALK) * load.map_or(1.0, |l| l.0), ..PLAYER_GAIT };
+/// A player as the fixed steps move them: their body, which way they
+/// face, what they're doing with the keys, their gear's weight, and
+/// whether they've fallen.
+type Moving<'a> = (&'a mut Body, &'a View, &'a mut Controls, Option<&'a Load>, Option<&'a Fallen>);
+
+fn step_players(solid: Res<Solid>, mut players: Query<Moving, With<Player>>, dead: Query<(&Zombie, &Body), Without<Player>>) {
+    for (mut body, view, mut controls, load, fallen) in &mut players {
+        let gait = if fallen.is_some() {
+            // Down, no running nor jumping: a crawl.
+            (controls.sprint, controls.jump) = (false, false);
+            Gait { walk: CRAWL, sprint: CRAWL, crouch: CRAWL }
+        } else {
+            Gait { sprint: WALK + (SPRINT - WALK) * load.map_or(1.0, |l| l.0), ..PLAYER_GAIT }
+        };
         // Wading through the dead: slowed pressing into them (the lying
         // dead are stepped over).
         let keep = wading(body.pos, wish(view.yaw, controls.walk), dead.iter().filter(|(z, _)| !z.dead()).map(|(_, b)| b.pos));

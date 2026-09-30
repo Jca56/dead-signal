@@ -3,7 +3,10 @@
 //! instanced with a model matrix each, over a sky that fades into the
 //! same fog. The frame is multisampled on targets of our own and resolved
 //! into the window's image; the UI draws on top of it afterwards. The
-//! viewmodel (the arms) goes between: see `skinned.rs`.
+//! viewmodel (the arms) goes between: see `skinned.rs`. The window may be
+//! cut into panes, a camera each (a player each, playing together): every
+//! pane its own view of the world, its own things drawn (what it sees) and
+//! its own arms.
 
 mod figures;
 mod skinned;
@@ -17,7 +20,7 @@ use lntrn_app::{RenderCx, lntrn_render::Gpu};
 use lntrn_core::bytes::{Pod, bytes_of, slice_as_bytes};
 use lntrn_math::{Color, Mat4, Vec3};
 
-use crate::camera::Camera;
+use crate::camera::{Camera, pane_fov};
 
 use figures::Figures;
 use skinned::Skinned;
@@ -88,6 +91,12 @@ pub struct Draw {
     pub tint: [f32; 3],
 }
 
+impl Draw {
+    fn instance(&self) -> Instance {
+        Instance { model: self.model.to_gpu(), look: [self.emissive, self.fog, 0.0, 0.0], tint: [self.tint[0], self.tint[1], self.tint[2], 1.0] }
+    }
+}
+
 /// The world's light and air.
 #[derive(Clone, Copy, Debug)]
 pub struct Atmosphere {
@@ -123,6 +132,21 @@ struct Globals {
 // SAFETY: plain `f32`s.
 unsafe impl Pod for Globals {}
 
+/// A part of the window, and the camera whose view fills it.
+#[derive(Clone, Copy, Debug)]
+pub struct Pane {
+    pub camera: Camera,
+    /// Where in the window, pixels: left, top, width, height.
+    pub rect: [u32; 4],
+}
+
+impl Pane {
+    /// How wide it is for its height.
+    pub fn aspect(&self) -> f64 {
+        f64::from(self.rect[2]) / f64::from(self.rect[3].max(1))
+    }
+}
+
 /// The multisampled colour and depth the scene is drawn into.
 struct Targets {
     size: [u32; 2],
@@ -134,18 +158,22 @@ pub struct Renderer {
     format: wgpu::TextureFormat,
     sky: wgpu::RenderPipeline,
     world: wgpu::RenderPipeline,
-    globals: wgpu::Buffer,
-    bind: wgpu::BindGroup,
+    /// Each pane's globals, and the layout to make more with.
+    layout: wgpu::BindGroupLayout,
+    globals: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     /// Every mesh's vertices, gathered on the CPU until `upload`.
     staged: Vec<Vertex>,
     vertices: Option<wgpu::Buffer>,
     meshes: Vec<MeshRange>,
     instances: wgpu::Buffer,
     instance_cap: usize,
-    frame: Vec<(MeshId, Instance)>,
+    /// This frame's things, each with the pane it's drawn in (none: in
+    /// every pane).
+    frame: Vec<(Option<usize>, MeshId, Instance)>,
     targets: Option<Targets>,
     skinned: Skinned,
-    viewmodel: Option<SkinnedDraw>,
+    /// Each pane's arms this frame.
+    viewmodels: Vec<Option<SkinnedDraw>>,
     figures: Figures,
 }
 
@@ -167,12 +195,10 @@ impl Renderer {
     pub fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Self {
         let device = &gpu.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("scene"), source: wgpu::ShaderSource::Wgsl(include_str!("scene.wgsl").into()) });
-        let globals = device.create_buffer(&wgpu::BufferDescriptor { label: Some("globals"), size: std::mem::size_of::<Globals>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("globals"),
             entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }],
         });
-        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("globals"), layout: &layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: globals.as_entire_binding() }] });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("scene"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
         let multisample = wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false };
         let target = [Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::ALL })];
@@ -216,7 +242,14 @@ impl Renderer {
         let instances = Self::instance_buffer(gpu, instance_cap);
         let skinned = Skinned::new(gpu, format);
         let figures = Figures::new(gpu, format, &layout);
-        Self { format, sky, world, globals, bind, staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodel: None, figures }
+        Self { format, sky, world, layout, globals: Vec::new(), staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodels: Vec::new(), figures }
+    }
+
+    /// A pane's globals: the buffer, and its bind group.
+    fn pane_globals(&self, gpu: &Gpu) -> (wgpu::Buffer, wgpu::BindGroup) {
+        let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("globals"), size: std::mem::size_of::<Globals>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("globals"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() }] });
+        (buffer, bind)
     }
 
     fn instance_buffer(gpu: &Gpu, cap: usize) -> wgpu::Buffer {
@@ -260,9 +293,13 @@ impl Renderer {
         self.figures.draw(d);
     }
 
-    /// Draw this over the world this frame, in camera space.
-    pub fn draw_viewmodel(&mut self, d: SkinnedDraw) {
-        self.viewmodel = Some(d);
+    /// Draw this over the world in pane `pane` this frame, in its camera's
+    /// space.
+    pub fn draw_viewmodel(&mut self, pane: usize, d: SkinnedDraw) {
+        if self.viewmodels.len() <= pane {
+            self.viewmodels.resize(pane + 1, None);
+        }
+        self.viewmodels[pane] = Some(d);
     }
 
     /// Send every mesh added so far to the GPU.
@@ -272,62 +309,99 @@ impl Renderer {
         self.vertices = Some(gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("vertices"), contents: slice_as_bytes(&self.staged), usage: wgpu::BufferUsages::VERTEX }));
     }
 
-    /// Queue one thing for this frame.
+    /// Queue one thing for this frame, seen in every pane.
     pub fn draw(&mut self, d: Draw) {
-        let m = d.model.to_gpu();
-        self.frame.push((d.mesh, Instance { model: m, look: [d.emissive, d.fog, 0.0, 0.0], tint: [d.tint[0], d.tint[1], d.tint[2], 1.0] }));
+        self.frame.push((None, d.mesh, d.instance()));
     }
 
-    /// Draw the queued things from `camera` into the window, before the UI.
-    pub fn render<'f>(&'f mut self, cx: &mut RenderCx<'f, '_>, camera: &Camera, air: &Atmosphere, time: f64) {
+    /// Queue one thing for this frame, seen in pane `pane` only.
+    pub fn draw_in(&mut self, pane: usize, d: Draw) {
+        self.frame.push((Some(pane), d.mesh, d.instance()));
+    }
+
+    /// Draw the queued things into the window, before the UI: each pane
+    /// from its camera, into its part of the window.
+    pub fn render<'f>(&'f mut self, cx: &mut RenderCx<'f, '_>, panes: &[Pane], air: &Atmosphere, time: f64) {
         let gpu = cx.gpu;
         let size = cx.size;
         self.ensure_targets(gpu, size);
-        let aspect = f64::from(size[0]) / f64::from(size[1].max(1));
-        let (right, up, forward) = camera.basis();
-        let half_h = (camera.fov_y * 0.5).tan();
-        let globals = Globals {
-            view_proj: (camera.projection(aspect) * camera.view()).to_gpu(),
-            camera: vec4(camera.position, 1.0),
-            cam_right: vec4(right * (half_h * aspect), 0.0),
-            cam_up: vec4(up * half_h, 0.0),
-            cam_forward: vec4(forward, 0.0),
-            fog: color4(air.fog, air.density),
-            zenith: color4(air.zenith, 1.0),
-            sun_dir: vec4(air.sun_dir.normalize(), 0.0),
-            sun_color: color4(air.sun, 1.0),
-            ambient_sky: color4(air.ambient_sky, 1.0),
-            ambient_ground: color4(air.ambient_ground, 1.0),
-            params: [time as f32, 0.0, 0.0, 0.0],
-        };
-        gpu.queue.write_buffer(&self.globals, 0, bytes_of(&globals));
+        let window_aspect = f64::from(size[0]) / f64::from(size[1].max(1));
+        // Each pane within the window (a viewport past its edge is refused).
+        let rects: Vec<[u32; 4]> = panes
+            .iter()
+            .map(|p| {
+                let [x, y, w, h] = p.rect;
+                let (x, y) = (x.min(size[0].saturating_sub(1)), y.min(size[1].saturating_sub(1)));
+                [x, y, w.min(size[0] - x).max(1), h.min(size[1] - y).max(1)]
+            })
+            .collect();
+        while self.globals.len() < panes.len() {
+            let made = self.pane_globals(gpu);
+            self.globals.push(made);
+        }
+        let mut arms = Vec::with_capacity(panes.len());
+        for (i, pane) in panes.iter().enumerate() {
+            let camera = &pane.camera;
+            let aspect = pane.aspect();
+            let (right, up, forward) = camera.basis();
+            let half_h = (camera.fov_y * 0.5).tan();
+            let globals = Globals {
+                view_proj: (camera.projection(aspect) * camera.view()).to_gpu(),
+                camera: vec4(camera.position, 1.0),
+                cam_right: vec4(right * (half_h * aspect), 0.0),
+                cam_up: vec4(up * half_h, 0.0),
+                cam_forward: vec4(forward, 0.0),
+                fog: color4(air.fog, air.density),
+                zenith: color4(air.zenith, 1.0),
+                sun_dir: vec4(air.sun_dir.normalize(), 0.0),
+                sun_color: color4(air.sun, 1.0),
+                ambient_sky: color4(air.ambient_sky, 1.0),
+                ambient_ground: color4(air.ambient_ground, 1.0),
+                params: [time as f32, 0.0, 0.0, 0.0],
+            };
+            gpu.queue.write_buffer(&self.globals[i].0, 0, bytes_of(&globals));
+            // The arms keep their shape, cropped as the pane is.
+            let fov = pane_fov(VIEWMODEL_FOV.to_radians(), window_aspect, aspect);
+            let proj = Mat4::perspective_infinite_reverse_z(fov, aspect, VIEWMODEL_NEAR);
+            arms.push((self.viewmodels.get_mut(i).and_then(Option::take), proj, (right, up, forward)));
+        }
+        self.viewmodels.clear();
 
-        // Instances grouped by mesh, so each mesh is one draw call.
-        self.frame.sort_by_key(|(m, _)| m.0);
-        let instances: Vec<Instance> = self.frame.iter().map(|(_, i)| *i).collect();
+        // Instances grouped by pane (what every pane sees, in each), then by
+        // mesh: each mesh one draw call a pane.
+        let mut frame: Vec<(usize, MeshId, Instance)> = Vec::with_capacity(self.frame.len());
+        for (pane, mesh, instance) in self.frame.drain(..) {
+            match pane {
+                Some(p) => frame.push((p, mesh, instance)),
+                None => frame.extend((0..panes.len()).map(|p| (p, mesh, instance))),
+            }
+        }
+        frame.sort_by_key(|(pane, m, _)| (*pane, m.0));
+        let instances: Vec<Instance> = frame.iter().map(|(_, _, i)| *i).collect();
         if instances.len() > self.instance_cap {
             self.instance_cap = instances.len().next_power_of_two();
             self.instances = Self::instance_buffer(gpu, self.instance_cap);
         }
         gpu.queue.write_buffer(&self.instances, 0, slice_as_bytes(&instances));
-        let mut runs: Vec<(MeshRange, u32, u32)> = Vec::new();
-        for (i, (mesh, _)) in self.frame.iter().enumerate() {
+        let mut runs: Vec<(usize, MeshRange, u32, u32)> = Vec::new();
+        for (i, (pane, mesh, _)) in frame.iter().enumerate() {
             let range = self.meshes[mesh.0];
             match runs.last_mut() {
-                Some((r, _, n)) if r.first == range.first => *n += 1,
-                _ => runs.push((range, i as u32, 1)),
+                Some((p, r, _, n)) if *p == *pane && r.first == range.first => *n += 1,
+                _ => runs.push((*pane, range, i as u32, 1)),
             }
         }
-        self.frame.clear();
-        let vm_proj = Mat4::perspective_infinite_reverse_z(VIEWMODEL_FOV.to_radians(), aspect, VIEWMODEL_NEAR);
-        let viewmodel = self.viewmodel.take();
-        self.skinned.prepare(gpu, viewmodel.as_ref(), vm_proj, (right, up, forward), air);
-        self.figures.prepare(gpu);
+        self.skinned.prepare(gpu, &arms, air);
+        self.figures.prepare(gpu, panes.len());
 
         let this: &'f Renderer = self;
         let backbuffer = cx.backbuffer;
         cx.graph.add_node("world", &[], &[backbuffer], move |_, enc, views| {
             let targets = this.targets.as_ref().expect("targets made above");
+            let into = |pass: &mut wgpu::RenderPass, [x, y, w, h]: [u32; 4]| {
+                pass.set_viewport(x as f32, y as f32, w as f32, h as f32, 0.0, 1.0);
+                pass.set_scissor_rect(x, y, w, h);
+            };
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("world"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -343,21 +417,24 @@ impl Renderer {
                 }),
                 ..Default::default()
             });
-            pass.set_bind_group(0, &this.bind, &[]);
-            pass.set_pipeline(&this.sky);
-            pass.draw(0..3, 0..1);
-            if let Some(vertices) = &this.vertices {
-                pass.set_pipeline(&this.world);
-                pass.set_vertex_buffer(0, vertices.slice(..));
-                pass.set_vertex_buffer(1, this.instances.slice(..));
-                for (range, first, count) in &runs {
-                    pass.draw(range.first..range.first + range.count, *first..*first + *count);
+            for (i, &rect) in rects.iter().enumerate() {
+                into(&mut pass, rect);
+                pass.set_bind_group(0, &this.globals[i].1, &[]);
+                pass.set_pipeline(&this.sky);
+                pass.draw(0..3, 0..1);
+                if let Some(vertices) = &this.vertices {
+                    pass.set_pipeline(&this.world);
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, this.instances.slice(..));
+                    for (_, range, first, count) in runs.iter().filter(|r| r.0 == i) {
+                        pass.draw(range.first..range.first + range.count, *first..*first + *count);
+                    }
                 }
+                this.figures.draw_into(&mut pass, i);
             }
-            this.figures.draw_into(&mut pass);
             drop(pass);
-            // The viewmodel, over the world with depth of its own, and the
-            // whole picture resolved into the window's image.
+            // The viewmodels, over the world with depth of their own, and
+            // the whole picture resolved into the window's image.
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("viewmodel"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -373,7 +450,10 @@ impl Renderer {
                 }),
                 ..Default::default()
             });
-            this.skinned.draw(&mut pass);
+            for (i, &rect) in rects.iter().enumerate() {
+                into(&mut pass, rect);
+                this.skinned.draw(&mut pass, i);
+            }
         });
     }
 

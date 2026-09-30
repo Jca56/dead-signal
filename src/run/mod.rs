@@ -1,10 +1,12 @@
 //! A run: each player's side of it (`seat.rs`: their keys turned into
 //! movement, shots and healing, their health and stamina, the count of
 //! what happened); what's in hand (`hands.rs`); what's carried and found
-//! (`loot.rs`); and what the players share: the dead brought in, the ways
+//! (`loot.rs`); going down and being picked up, playing together
+//! (`down.rs`); and what the players share: the dead brought in, the ways
 //! out (`out.rs`) or a holdout's rounds (`holdout.rs`), and the end, when
 //! it comes to that.
 
+mod down;
 mod hands;
 mod holdout;
 mod loot;
@@ -12,13 +14,13 @@ mod out;
 mod seat;
 mod throwing;
 
-use lntrn_math::Vec3;
+use lntrn_math::{Rect, Vec3};
 use lntrn_ui::{AreaCx, ShellRequest, Ui};
 
 use crate::bag_ui::Icons;
 use crate::combat::Combat;
 use crate::ending::{After, Ending, Outcome};
-use crate::input::pad::PadFrame;
+use crate::input::Feed;
 use crate::exits::{self, Way};
 use crate::loot::Dice;
 use crate::loot::bag::Bag;
@@ -119,15 +121,17 @@ impl Run {
         any
     }
 
-    /// A frame of a run while everyone's alive: what each one's controls
-    /// do (the keyboard and mouse are the first player's, `pads` each
-    /// one's pad), what the dead do to them, and what came of it.
+    /// A frame of a run while anyone's standing: what each one's controls
+    /// do (what their hands are on: `feeds`, by seat), what the dead do to
+    /// them, and what came of it, over each one's part of the window
+    /// (`panes`).
     #[allow(clippy::too_many_arguments)]
-    pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons, pads: &[PadFrame]) {
+    pub fn play(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, icons: &Icons, feeds: &[Feed], panes: &[Rect]) {
         let dt = game.clock().dt;
         let keys = game.world.get_resource::<Settings>().map_or_else(Default::default, |s| s.keys);
         for seat in &mut self.seats {
-            seat.input.update(ui, (seat.n == 0).then_some(keys), locked, pads.get(seat.n).copied().unwrap_or_default());
+            let feed = feeds.get(seat.n).copied().unwrap_or_default();
+            seat.input.update(ui, feed.keys.then_some(keys), locked, feed.pad);
         }
         combat.update(dt);
         for seat in &mut self.seats {
@@ -135,30 +139,34 @@ impl Run {
         }
 
         // Blows from the dead, the bile stood in, and what the fires and
-        // blasts did. (Who killed a Spitter isn't kept: its burst's kills
-        // are the first player's.)
+        // blasts did (a Spitter's burst's kills are whoever killed it's).
         let mut blows = combat.answer_the_dead(game, true);
-        blows.extend(combat.bursts(game, &mut self.seats[0].stats));
+        let (burst, burst_kills) = combat.bursts(game);
+        blows.extend(burst);
+        for by in burst_kills {
+            if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
+                seat.stats.burst_kills += 1;
+            }
+        }
         let poisoned = std::mem::take(&mut game.world.resource_mut::<crate::zombie::Horde>().poisoned);
         let god = game.world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.god);
         let booms = self.booms(game, combat);
         for i in 0..self.seats.len() {
-            let seat = &mut self.seats[i];
-            let n = seat.n;
+            let n = self.seats[i].n;
             let theirs = blows.iter().filter(|(s, _)| *s == n).map(|(_, b)| *b);
-            if let Some(died) = seat.suffer(game, combat, theirs, poisoned.contains(&n), booms.of(n), god) {
-                self.end(game, died, combat);
+            let died = self.seats[i].suffer(game, combat, theirs, poisoned.contains(&n), booms.of(n), god);
+            if let Some(how) = died
+                && self.fall(game, combat, i, how)
+            {
                 return;
             }
         }
 
-        // More of the dead, as the kills mount (and all of them, surging);
-        // in a holdout, round after round of them. (Brought in about the
-        // first player.)
+        // More of the dead, as the kills mount (and all of them, surging:
+        // about the first player, a run with the ways out being theirs
+        // alone); in a holdout, round after round of them.
         if self.holdout.is_some() {
-            if let Some((eye, _)) = Self::watching(game, 0) {
-                self.holdout_step(game, combat, eye, dt);
-            }
+            self.holdout_step(game, combat, dt);
         } else if let Some((eye, forward)) = Self::watching(game, 0) {
             self.director.surge = self.out.surging;
             self.director.update(&mut game.world, eye, forward, dt);
@@ -166,13 +174,16 @@ impl Run {
         }
 
         for i in 0..self.seats.len() {
-            if self.seats[i].live(game, combat, dt) {
-                self.end(game, Outcome::Died(1.0), combat);
+            if self.seats[i].live(game, combat, dt) && self.fall(game, combat, i, Outcome::Died(1.0)) {
                 return;
             }
         }
+        if !self.revive_and_bleed(ui, game, combat, dt) {
+            self.end(game, Outcome::Died(1.0), combat);
+            return;
+        }
         if self.holdout.is_some() {
-            self.holdout_frame(ui, cx, game, combat, icons, dt);
+            self.holdout_frame(ui, cx, game, combat, icons, dt, panes);
             return;
         }
         // Looking about for things, searching, the bag; the ways out. (A
@@ -187,7 +198,8 @@ impl Run {
         }
         let prompt = if seat.open.is_some() { None } else { seat.prompt(game, &aimed) };
         seat.input.set_prompting(prompt.as_ref().is_some_and(|(key, _)| !key.is_empty()));
-        seat.hud(ui, combat, game, prompt, self.out.progress());
+        let whole = ui.clip();
+        seat.hud(ui, whole, combat, game, prompt, self.out.progress());
         let o = self.out.hud(game, 0);
         exits::hud::draw(
             ui,
@@ -196,7 +208,8 @@ impl Run {
         seat.looting(ui, cx, game, combat, icons, dt, aimed);
     }
 
-    /// The run is over: dead, or out. (The end shows the first player's.)
+    /// The run is over: dead, or out. (A holdout played together shows
+    /// everyone's numbers; else the end is the first player's.)
     fn end(&mut self, game: &mut Game, outcome: Outcome, combat: &mut Combat) {
         for seat in &mut self.seats {
             if let Some(open) = seat.open.take() {
@@ -204,13 +217,14 @@ impl Run {
             }
         }
         game.release_controls();
-        let first = &mut self.seats[0];
         if let Some(h) = &self.holdout {
             let round = h.rounds.round;
             self.holdout_over = Some(round);
-            self.ending = Some(Ending::holdout(first.stats.clone(), round, self.best_round));
+            let players = self.seats.iter().map(|s| (s.stats.clone(), h.wallet(s.n).map_or(0, |w| w.earned))).collect();
+            self.ending = Some(Ending::holdout(players, round, self.best_round));
             return;
         }
+        let first = &mut self.seats[0];
         first.stats.loot_value = first.bag.value();
         match outcome {
             Outcome::Extracted(Way::Truck) => combat.play(Sfx::Engine, 1.0),

@@ -113,11 +113,12 @@ pub struct Noises {
 pub struct Horde {
     pub sounds: Vec<(Sfx, Vec3, f32)>,
     pub blows: Vec<(usize, brain::Blow)>,
-    /// Globs thrown this step (from, at), Spitters bursting (where), and
-    /// the bursts the combat side has yet to deal out.
+    /// Globs thrown this step (from, at), Spitters bursting (where, and
+    /// whose kill it was), and the bursts the combat side has yet to deal
+    /// out.
     pub spits: Vec<(Vec3, Vec3)>,
-    pub bursting: Vec<Vec3>,
-    pub bursts: Vec<Vec3>,
+    pub bursting: Vec<(Vec3, Option<usize>)>,
+    pub bursts: Vec<(Vec3, Option<usize>)>,
     /// The players standing in a puddle of bile, by seat.
     pub poisoned: Vec<usize>,
     /// Pipe bombs beeping, drawing the dead near to them.
@@ -273,9 +274,10 @@ pub fn raycast(world: &mut World, from: Vec3, dir: Vec3, max: f64) -> Option<(En
 
 /// The nearest Shambler along a ray within `max`, but for those `past`
 /// (the ones a round has already gone through): which, how far, where.
+/// (Only the dead: a player's figure is never shot.)
 pub fn raycast_past(world: &mut World, from: Vec3, dir: Vec3, max: f64, past: &[Entity]) -> Option<(Entity, f64, Zone)> {
     let mut best = None;
-    for (e, f) in world.query::<(Entity, &Figure)>().iter(world) {
+    for (e, f) in world.query_filtered::<(Entity, &Figure), With<Zombie>>().iter(world) {
         if past.contains(&e) {
             continue;
         }
@@ -384,6 +386,8 @@ fn sound_off(world: &mut World, at: Vec3, range: f64, heats: bool) {
 mod bench;
 #[cfg(test)]
 mod model_tests;
+#[cfg(test)]
+mod players_tests;
 #[cfg(test)]
 mod special_tests;
 #[cfg(test)]

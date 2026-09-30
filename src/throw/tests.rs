@@ -45,7 +45,7 @@ fn a_throw_comes_down_where_its_arc_says() {
     assert!(dots.len() > 10 && dots.iter().all(|d| d.y > 0.0));
     // Thrown for real, it bursts where the arc said.
     let mut w = world(Vec3::new(0.0, 0.0, 30.0));
-    throw(&mut w, Throwable::Molotov, from, vel);
+    throw(&mut w, Throwable::Molotov, from, vel, 0);
     steps(&mut w, 3.0);
     let fire = w.query::<&Fire>().iter(&w).next().copied().expect("a fire");
     assert!((fire.at - lands).length() < 0.3, "{:?} vs {lands:?}", fire.at);
@@ -54,7 +54,7 @@ fn a_throw_comes_down_where_its_arc_says() {
 #[test]
 fn the_dead_walking_into_fire_burn_and_burn_on_after() {
     let mut w = world(Vec3::new(0.0, 0.0, 30.0));
-    w.spawn(Fire { at: Vec3::ZERO, radius: 3.0, left: 8.0, crackle_in: 0.0 });
+    w.spawn(Fire { at: Vec3::ZERO, radius: 3.0, left: 8.0, crackle_in: 0.0, by: 0 });
     zombie::spawn_kind(&mut w, Vec3::new(1.0, 0.0, 0.0), 0.0, Dead::Shambler, Theme::Drifter);
     let z = w.query_filtered::<Entity, With<Zombie>>().iter(&w).next().unwrap();
     steps(&mut w, 1.0);
@@ -69,7 +69,7 @@ fn the_dead_walking_into_fire_burn_and_burn_on_after() {
     assert!(w.get::<Burning>(z).is_none(), "still burning");
     // Standing in it scorches the player.
     let mut w = world(Vec3::new(0.5, 0.0, 0.0));
-    w.spawn(Fire { at: Vec3::ZERO, radius: 3.0, left: 8.0, crackle_in: 0.0 });
+    w.spawn(Fire { at: Vec3::ZERO, radius: 3.0, left: 8.0, crackle_in: 0.0, by: 0 });
     steps(&mut w, 1.0);
     assert!(w.resource::<Booms>().of(0).scorched > 10.0);
 }
@@ -79,7 +79,7 @@ fn a_blast_hurts_the_player_beside_it_and_only_shakes_the_one_off() {
     // The first player off out of its reach; the second right by it.
     let mut w = world(Vec3::new(0.0, 0.0, 12.0));
     w.spawn((Player(1), Body::at(Vec3::new(2.0, 0.0, 0.0))));
-    throw(&mut w, Throwable::PipeBomb, Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0));
+    throw(&mut w, Throwable::PipeBomb, Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0), 0);
     steps(&mut w, FUSE + 1.0);
     let booms = w.resource::<Booms>();
     let (off, beside) = (booms.of(0), booms.of(1));
@@ -94,7 +94,8 @@ fn a_pipe_bomb_draws_the_dead_then_blows_them_apart() {
         zombie::spawn_kind(&mut w, Vec3::new(x, 0.0, 0.0), 0.0, Dead::Shambler, Theme::Drifter);
     }
     zombie::spawn_kind(&mut w, Vec3::new(0.0, 0.0, 20.0), 0.0, Dead::Shambler, Theme::Drifter);
-    throw(&mut w, Throwable::PipeBomb, Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0));
+    // (Thrown by the second player: the kills are theirs.)
+    throw(&mut w, Throwable::PipeBomb, Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0), 1);
     steps(&mut w, 1.0);
     let lures = w.resource::<Horde>().lures.clone();
     assert_eq!(lures.len(), 1, "it draws them while it beeps");
@@ -102,6 +103,7 @@ fn a_pipe_bomb_draws_the_dead_then_blows_them_apart() {
     steps(&mut w, FUSE);
     let booms = w.resource::<Booms>();
     assert_eq!(booms.kills.len(), 3, "the three close by");
+    assert!(booms.kills.iter().all(|&(by, _)| by == 1), "the thrower's kills");
     let felt = booms.of(0);
     assert!(felt.blasted == 0.0 && felt.shake > 0.0, "the player's out of its reach, but it shakes them");
     assert!(w.query::<&Thrown>().iter(&w).next().is_none() && w.resource::<Horde>().lures.is_empty());

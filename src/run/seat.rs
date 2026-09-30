@@ -5,9 +5,10 @@
 //! in `throwing.rs`.
 
 use bevy_ecs::entity::Entity;
-use lntrn_math::{Vec2, Vec3};
+use lntrn_math::{Rect, Vec2, Vec3};
 use lntrn_ui::{AreaCx, ShellRequest, Ui};
 
+use super::down::Down;
 use super::loot;
 use super::throwing::Aiming;
 use crate::bag_ui::BagUi;
@@ -73,6 +74,12 @@ pub struct Seat {
     /// The throwable picked, and a throw being aimed.
     pub(super) throwable: Option<Throwable>,
     pub(super) aiming: Option<Aiming>,
+    /// Playing together: down (bleeding out, crawling), or out (bled out,
+    /// watching); and picking someone downed up (their place in the seats,
+    /// and how far along, 0–1).
+    pub down: Option<Down>,
+    pub out: bool,
+    pub reviving: Option<(usize, f64)>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -92,9 +99,15 @@ impl Seat {
         seat
     }
 
-    /// How far the gun is lowered (patching up, or rummaging), 0–1.
+    /// How far the gun is lowered (patching up, rummaging, or picking
+    /// someone up), 0–1.
     pub fn lowered(&self) -> f64 {
-        if self.vitals.healing.is_some() || self.open.is_some() || self.throw_arc().is_some() { 1.0 } else { 0.0 }
+        if self.vitals.healing.is_some() || self.open.is_some() || self.throw_arc().is_some() || self.picking_up() { 1.0 } else { 0.0 }
+    }
+
+    /// Whether they're at picking someone up right now.
+    fn picking_up(&self) -> bool {
+        self.reviving.is_some_and(|(_, p)| p > 0.0)
     }
 
     /// Whether the pointer should be locked for looking about (not with
@@ -114,7 +127,15 @@ impl Seat {
     /// the hands and what they do.
     pub(super) fn act(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, locked: bool, dt: f64) {
         let n = self.n;
+        if self.out {
+            // Bled out: nothing to do but watch.
+            if let Some(mut c) = game.controls_mut(n) {
+                *c = Default::default();
+            }
+            return;
+        }
         let open = self.open.is_some();
+        let down = self.down.is_some();
         let settings = game.world.get_resource::<Settings>().cloned().unwrap_or_default();
         self.bag_ui.slot_keys = settings.keys.slot_names();
         // What's worn weighs on the sprint, the breath and the feet; the
@@ -152,6 +173,8 @@ impl Seat {
         // slow walk at most.
         let (walk, sprint, jump) = if self.vitals.healing.is_some() {
             (Vec2::ZERO, false, false)
+        } else if down {
+            (walk, false, false)
         } else if open {
             (walk * RUMMAGING_PACE, false, false)
         } else {
@@ -159,7 +182,9 @@ impl Seat {
         };
         // Crouching, toggled or held: a hold flips it whenever the key and
         // the body disagree.
-        let crouch = if toggle_crouch {
+        let crouch = if down {
+            false
+        } else if toggle_crouch {
             self.input.pressed(ui, Action::Crouch)
         } else {
             let crouched = game.player(n).is_some_and(|(b, _)| b.want_crouch);
@@ -180,7 +205,7 @@ impl Seat {
 
         // Patching up: 4 a bandage, 5 a medkit, from what's carried. Firing,
         // striking or a blow stops it (the kit is kept).
-        for (key, kit) in [(Action::Bandage, Kit::Bandage), (Action::Medkit, Kit::Medkit), (Action::Plate, Kit::Plate)] {
+        for (key, kit) in [(Action::Bandage, Kit::Bandage), (Action::Medkit, Kit::Medkit), (Action::Plate, Kit::Plate)].into_iter().filter(|_| !down) {
             if self.input.pressed(ui, key) && self.vitals.start_heal(kit, self.bag.count(kit.kind())) {
                 combat.play(Sfx::Heal, 0.8);
             }
@@ -192,13 +217,14 @@ impl Seat {
         if self.vitals.healing.is_some() && (firing || striking) {
             self.vitals.interrupt();
         }
-        let busy = self.vitals.healing.is_some() || open;
-        // A throw being aimed puts the gun down.
-        let busy = self.throwing(ui, game, combat, !busy) || busy;
+        let busy = self.vitals.healing.is_some() || open || self.picking_up();
+        // A throw being aimed puts the gun down. (Down, there's only the
+        // gun in hand.)
+        let busy = (!down && self.throwing(ui, game, combat, !busy)) || busy;
         if !busy && self.input.pressed(ui, Action::FireMode) && combat.arms[n].hands.switch_fire() {
             combat.play(Sfx::Tick, 0.9);
         }
-        self.switch_hands(ui, combat, !busy);
+        self.switch_hands(ui, combat, !busy && !down);
         // The sights up while the right button's held; a sprint takes them
         // down.
         let aim = self.input.held(ui, Action::Aim) && !wants_sprint;
@@ -260,6 +286,10 @@ impl Seat {
     /// (`felt`); nothing hurts them with `god` on. How they died of it, if
     /// they did.
     pub(super) fn suffer(&mut self, game: &mut Game, combat: &mut Combat, blows: impl IntoIterator<Item = Blow>, poisoned: bool, felt: Felt, god: bool) -> Option<Outcome> {
+        // Down (or out), nothing more can hurt them.
+        if !self.standing() {
+            return None;
+        }
         // Standing in a Spitter's bile.
         if poisoned {
             self.vitals.afflict(Affliction::Poison);
@@ -295,6 +325,17 @@ impl Seat {
     /// A frame of health, stamina, the kit being applied, and the count.
     /// Whether they bled out, or the poison did it.
     pub(super) fn live(&mut self, game: &mut Game, combat: &Combat, dt: f64) -> bool {
+        if let Some((_, t)) = &mut self.note {
+            *t -= dt;
+            if *t <= 0.0 {
+                self.note = None;
+            }
+        }
+        if !self.standing() {
+            // (Down, they bleed out on their own clock: `down.rs`.)
+            self.stats.seconds += dt;
+            return false;
+        }
         let sprinting = game.player(self.n).is_some_and(|(b, _)| b.sprinting && b.speed_flat() > 0.5);
         let change = self.vitals.update(dt, sprinting);
         // Heavy gear, sprinting: footfalls the dead near hear.
@@ -340,19 +381,14 @@ impl Seat {
                 self.heartbeat = HEARTBEAT;
             }
         }
-        if let Some((_, t)) = &mut self.note {
-            *t -= dt;
-            if *t <= 0.0 {
-                self.note = None;
-            }
-        }
         false
     }
 
-    /// Their HUD: `prompt` for what's aimed at, and `busy`, how far through
-    /// a job at hand (a way out, nailing boards) that isn't patching up or
-    /// searching.
-    pub(super) fn hud(&self, ui: &mut Ui, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>, busy: Option<f64>) {
+    /// Their HUD, over `pane` (their part of the window): `prompt` for
+    /// what's aimed at, and `busy`, how far through a job at hand (a way
+    /// out, nailing boards) that isn't patching up or searching.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn hud(&self, ui: &mut Ui, pane: Rect, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>, busy: Option<f64>) {
         let time = game.clock().time;
         let v = &self.vitals;
         let interact = self.input.name(Action::Interact);
@@ -373,12 +409,13 @@ impl Seat {
         };
         hud::draw(
             ui,
+            pane,
             &Hud {
                 weapon: &weapon,
                 rounds: hands.spec().ammo.map(|kind| (hands.mag, self.bag.count(kind))),
                 aim: hands.aim(),
                 scope: hands.scoped(),
-                marker: combat.fx.marker,
+                marker: arms.marker,
                 hurt: arms.hurt,
                 hp: v.hp,
                 max_hp: v.max_hp,

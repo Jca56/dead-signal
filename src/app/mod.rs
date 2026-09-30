@@ -5,9 +5,11 @@
 //! locked for mouse look; Esc (or leaving the window) pauses and lets it
 //! go; walking out of a run is as good as dying, so it's asked twice.
 //! What's loaded at the start is in `load.rs`, the GPU's side in
-//! `gpu.rs`, and every run's map (built behind the loading screen, then
-//! put in) in `level.rs`. The player's profile is saved as a run starts
-//! (as if lost), and again as it ends.
+//! `gpu.rs`, every run's map (built behind the loading screen, then put
+//! in) in `level.rs`, going between screens in `flow.rs`, the window cut
+//! into a pane a player in `panes.rs`, and who's playing with what in
+//! `party.rs`. The player's profile is saved
+//! as a run starts (as if lost), and again as it ends.
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -17,10 +19,13 @@ use lntrn_math::{Color, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
 mod dev;
+mod flow;
 mod gpu;
 mod level;
 mod load;
 mod options;
+mod panes;
+mod party;
 mod playing;
 mod slots;
 
@@ -29,7 +34,9 @@ use crate::bag_ui::Icons;
 use crate::camera::Camera;
 use crate::combat::Combat;
 use crate::hideout::{Hideout, Leave};
+use crate::input::Device;
 use crate::input::pad::Pads;
+use crate::lobby::Lobby;
 use crate::loot::tables::Source;
 use crate::map::Map;
 use crate::map::build::{Building, Built, Kit};
@@ -155,7 +162,11 @@ pub struct DeadSignal {
     /// Whether the pointer was locked last frame: losing the lock without
     /// asking (the window lost focus) pauses.
     was_locked: bool,
-    camera: Camera,
+    /// Each pane's camera this frame, its share of the window, and whose
+    /// eyes it looks through (a seat; see `panes.rs`).
+    cameras: Vec<Camera>,
+    shares: Vec<[f64; 4]>,
+    eyes: Vec<usize>,
     /// How black the screen is, 0–1, and where it is heading.
     black: f64,
     fading_to: Option<Then>,
@@ -179,6 +190,11 @@ pub struct DeadSignal {
     told_window: bool,
     /// The pads plugged in or paired, and what they did this frame.
     pads: Pads,
+    /// The holdout's lobby, while it's up (over the title); what each
+    /// player plays with, by seat; and what was last touched.
+    lobby: Option<Lobby>,
+    devices: Vec<Device>,
+    last_device: Device,
 }
 
 impl DeadSignal {
@@ -225,7 +241,9 @@ impl DeadSignal {
             paused: false,
             leaving: false,
             was_locked: false,
-            camera: Camera::new(TITLE_EYE),
+            cameras: vec![Camera::new(TITLE_EYE)],
+            shares: panes::layout(1, false),
+            eyes: Vec::new(),
             black: 1.0,
             fading_to: None,
             fade_seconds: FIRST_FADE,
@@ -238,84 +256,9 @@ impl DeadSignal {
             ui_scale,
             told_window: false,
             pads: Pads::open(),
-        }
-    }
-
-    fn fade_to(&mut self, then: Then) {
-        if self.fading_to.is_none() {
-            self.fading_to = Some(then);
-            self.fade_seconds = FADE;
-        }
-    }
-
-    /// Move the fade along; what to do now that it is black, if anything.
-    fn step_fade(&mut self, dt: f64) -> Option<Then> {
-        let step = dt / self.fade_seconds.max(1e-3);
-        match self.fading_to {
-            Some(then) => {
-                self.black = (self.black + step).min(1.0);
-                if self.black >= 1.0 {
-                    self.fading_to = None;
-                    self.fade_seconds = FADE;
-                    return Some(then);
-                }
-            }
-            None => self.black = (self.black - step).max(0.0),
-        }
-        None
-    }
-
-    /// The screen is black: change what is behind it.
-    fn show(&mut self, screen: Screen, cx: &mut AreaCx<()>) {
-        let from = std::mem::replace(&mut self.screen, screen);
-        self.paused = false;
-        self.leaving = false;
-        self.was_locked = false;
-        match screen {
-            Screen::Loading => self.start_loading(),
-            Screen::Run => {
-                let (at, yaw) = self.spawn_point();
-                self.game.spawn_player(0, at.x, at.z, yaw);
-                self.map_open = false;
-                if let Some(vm) = &mut self.viewmodel {
-                    vm.reset();
-                }
-                zombie::clear(&mut self.game.world);
-                zombie::spit::clear(&mut self.game.world);
-                crate::throw::clear(&mut self.game.world);
-                if let Some(arena) = self.arena.take() {
-                    // A holdout: nothing of the profile's goes in.
-                    self.settle_run();
-                    self.run.start_holdout(&mut self.game, &mut self.combat, arena, self.profile.best_round);
-                    self.black = 1.0;
-                    cx.request(ShellRequest::LockPointer(true));
-                    return;
-                }
-                // The loadout goes in with the player. On disk it's already
-                // as good as lost (all but the pockets) till they're out:
-                // quitting mid-run is no way round dying.
-                self.settle_run();
-                let loadout = self.profile.take_loadout();
-                let mut committed = self.profile.clone();
-                committed.loadout.pockets = loadout.pockets.clone();
-                self.saves.store(&committed);
-                if let Some(map) = &self.map {
-                    self.run.start(&mut self.game, &mut self.combat, loadout, self.profile.xp, self.profile.perks, map);
-                }
-                self.in_run = true;
-                // In from black, off the loading screen.
-                self.black = 1.0;
-                cx.request(ShellRequest::LockPointer(true));
-            }
-            Screen::Hideout => {
-                if from == Screen::Run {
-                    self.leave_run();
-                }
-            }
-            Screen::Title => {
-                self.leave_run();
-                self.title_menu.reset();
-            }
+            lobby: None,
+            devices: vec![Device::All],
+            last_device: Device::Keys,
         }
     }
 }
@@ -382,11 +325,17 @@ impl Host for DeadSignal {
         if self.screen == Screen::Hideout {
             self.hideout.set_slot_keys(self.game.world.resource::<Settings>().keys.slot_names());
         }
-        // The pads: what they did, and in the menus, the keys they stand for.
+        // The pads: what they did, each player's kept, and (but in the
+        // lobby, which reads them itself) the keys they stand for.
         self.pads.poll();
+        self.note_device(ui);
+        self.keep_pads(cx);
         let playing = self.screen == Screen::Run && !self.paused && self.run.ending.is_none() && self.settings.is_none() && !self.dev_open;
-        self.pads.menu_keys(ui, !playing && !self.settings.as_ref().is_some_and(SettingsScreen::listening));
+        if self.lobby.is_none() {
+            self.pads.menu_keys(ui, !playing && !self.settings.as_ref().is_some_and(SettingsScreen::listening));
+        }
         let active = self.fading_to.is_none();
+        self.lay_out();
         // The DEV slot, with developer mode switched off: back to slot 1
         // (at the title, never mid-run).
         if self.screen == Screen::Title && self.saves.slot == crate::profile::save::DEV && !self.game.world.resource::<Settings>().dev_mode {
@@ -407,12 +356,14 @@ impl Host for DeadSignal {
                     self.title_menu.reset();
                 }
             }
+            Screen::Title if self.lobby.is_some() => {
+                if self.lobby_frame(ui, active) {
+                    self.title_menu.reset();
+                }
+            }
             Screen::Title => match self.title_menu.draw(ui, active) {
                 Some(TitleItem::Hideout) => self.show(Screen::Hideout, cx),
-                Some(TitleItem::Holdout) => {
-                    self.holdout = true;
-                    self.fade_to(Then::Show(Screen::Loading));
-                }
+                Some(TitleItem::Holdout) => self.lobby = Some(Lobby::new(self.last_device)),
                 Some(TitleItem::Slots) => self.slots = Some(SlotsScreen::new(self.slot_cards())),
                 Some(TitleItem::Settings) => self.settings = Some(SettingsScreen::default()),
                 Some(TitleItem::Quit) => self.fade_to(Then::Quit),
@@ -424,7 +375,9 @@ impl Host for DeadSignal {
                     self.show(Screen::Title, cx);
                 }
                 Some(Leave::Play) => {
+                    // (A run with the ways out is played alone.)
                     self.holdout = false;
+                    self.devices = vec![Device::All];
                     self.saves.store(&self.profile);
                     self.fade_to(Then::Show(Screen::Loading));
                 }
@@ -456,11 +409,14 @@ impl Host for DeadSignal {
             None => {}
         }
         self.dev_readout(ui);
-        self.place_camera(clock.time);
+        let area = ui.clip();
+        self.place_cameras(clock.time, area.width() / area.height().max(1.0));
         if self.screen == Screen::Run
-            && let (Some(vm), Some((body, view))) = (&mut self.viewmodel, self.game.player(0))
+            && let Some(vm) = &mut self.viewmodel
         {
-            vm.update(&view, &body, clock.dt);
+            for (seat, body, view) in self.game.players() {
+                vm.update(seat, &view, &body, clock.dt);
+            }
         }
         if self.black > 0.0 {
             let screen = ui.clip();

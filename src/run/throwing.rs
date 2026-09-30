@@ -79,7 +79,7 @@ impl Seat {
             && free
         {
             self.bag.remove(what.kind(), 1);
-            throw::throw(&mut game.world, what, from, vel);
+            throw::throw(&mut game.world, what, from, vel, self.n);
             combat.play(Sfx::Whoosh, 0.9);
         }
         false
@@ -116,13 +116,14 @@ impl Seat {
 
 impl Run {
     /// What the fires and blasts did since last frame: the dead they killed
-    /// (the players' kills, each with what it had on it: who threw what
-    /// isn't kept, so they're counted as the first player's), and the chips
-    /// they threw. What each player felt of them, for their own.
+    /// (each the kill of whoever threw it, with what it had on it), and the
+    /// chips they threw. What each player felt of them, for their own.
     pub(super) fn booms(&mut self, game: &mut Game, combat: &mut Combat) -> Booms {
         let mut booms = std::mem::take(&mut *game.world.resource_mut::<Booms>());
-        for e in std::mem::take(&mut booms.kills) {
-            self.seats[0].stats.blast_kills += 1;
+        for (by, e) in std::mem::take(&mut booms.kills) {
+            if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
+                seat.stats.blast_kills += 1;
+            }
             combat.drop_for(game, e);
         }
         for at in std::mem::take(&mut booms.blasts) {

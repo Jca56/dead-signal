@@ -1,7 +1,8 @@
-//! The rounds: how many of the dead each brings, how tough and how fast
-//! they are, and bringing them in by the windows of the open zones (the
-//! nearer the player, the likelier), never too many up at once. A round is
-//! over when all of it is dead; a short breather, and the next begins.
+//! The rounds: how many of the dead each brings (more for more players),
+//! how tough and how fast they are, and bringing them in by the windows of
+//! the open zones (the nearer a player, the likelier: each player in
+//! turn), never too many up at once. A round is over when all of it is
+//! dead; a short breather, and the next begins.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::Vec3;
@@ -10,14 +11,17 @@ use super::arena::Arena;
 use crate::loot::Dice;
 use crate::zombie::{self, brain::{State, Zombie}, kind::Kind, looks::Theme};
 
-/// The most of the dead up at once.
+/// The most of the dead up at once; each player past the first, this many
+/// more, and a round brings this share of its dead again.
 pub const MOST_UP: usize = 20;
+const MORE_UP: usize = 6;
+const MORE_DEAD: f64 = 0.5;
 /// Seconds before the first round, and between rounds.
 const FIRST_WAIT: f64 = 4.0;
 pub const BREATHER: f64 = 10.0;
 /// Seconds between the dead coming in, early on, and at the quickest.
 const SPAWN_EVERY: (f64, f64) = (2.0, 0.5);
-/// Of the open windows, the dead come in by one of this many nearest the
+/// Of the open windows, the dead come in by one of this many nearest a
 /// player.
 const NEAREST: usize = 4;
 /// How far about a window's spot outside they start.
@@ -30,6 +34,16 @@ pub fn count(round: u32) -> u32 {
         1..=5 => [6, 8, 11, 14, 18][round as usize - 1],
         _ => 18 + 2 * (round - 5),
     }
+}
+
+/// How many of the dead a round brings for `players`.
+pub fn brings(round: u32, players: usize) -> u32 {
+    (f64::from(count(round)) * (1.0 + MORE_DEAD * players.saturating_sub(1) as f64)).round() as u32
+}
+
+/// The most of the dead up at once for `players`.
+pub fn most_up(players: usize) -> usize {
+    MOST_UP + MORE_UP * players.saturating_sub(1)
 }
 
 /// How much a Shambler of a round takes to kill: fifty more each round to
@@ -68,11 +82,15 @@ pub struct Rounds {
     pub begun: f64,
     spawn_in: f64,
     dice: Dice,
+    /// How many are playing, and which of them the next of the dead comes
+    /// in near.
+    players: usize,
+    turn: usize,
 }
 
 impl Rounds {
-    pub fn new(seed: u32) -> Self {
-        Self { round: 0, left: 0, between: FIRST_WAIT, begun: 0.0, spawn_in: 0.0, dice: Dice(seed | 1) }
+    pub fn new(seed: u32, players: usize) -> Self {
+        Self { round: 0, left: 0, between: FIRST_WAIT, begun: 0.0, spawn_in: 0.0, dice: Dice(seed | 1), players, turn: 0 }
     }
 
     /// Whether it's a breather between rounds.
@@ -80,10 +98,10 @@ impl Rounds {
         self.between > 0.0
     }
 
-    /// A step of the rounds, with the player's feet at `feet` and zones
+    /// A step of the rounds, with the players' feet at `feet` and zones
     /// `open`: the next brought in, if it's time; the round over, or the
     /// next begun. Whether a round began this step.
-    pub fn update(&mut self, world: &mut World, arena: &Arena, open: &[bool], feet: Vec3, dt: f64) -> bool {
+    pub fn update(&mut self, world: &mut World, arena: &Arena, open: &[bool], feet: &[Vec3], dt: f64) -> bool {
         if self.between > 0.0 {
             self.between -= dt;
             if self.between > 0.0 {
@@ -91,7 +109,7 @@ impl Rounds {
             }
             self.round += 1;
             self.begun = 0.0;
-            self.left = count(self.round);
+            self.left = brings(self.round, self.players);
             self.spawn_in = 0.5;
             return true;
         }
@@ -104,12 +122,14 @@ impl Rounds {
             return false;
         }
         self.spawn_in -= dt;
-        if self.spawn_in > 0.0 || up >= MOST_UP {
+        if self.spawn_in > 0.0 || up >= most_up(self.players) || feet.is_empty() {
             return false;
         }
         let every = (SPAWN_EVERY.0 - 0.15 * f64::from(self.round - 1)).max(SPAWN_EVERY.1);
         self.spawn_in = every;
-        // By one of the open windows nearest the player.
+        // By one of the open windows nearest a player, each in turn.
+        let feet = feet[self.turn % feet.len()];
+        self.turn += 1;
         let mut windows: Vec<(usize, f64)> = arena.windows.iter().enumerate().filter(|(_, w)| open[w.zone]).map(|(i, w)| (i, (w.outside - feet).length())).collect();
         if windows.is_empty() {
             return false;
@@ -151,6 +171,9 @@ mod tests {
     #[test]
     fn rounds_grow_in_number_and_toughness() {
         assert_eq!((count(1), count(5), count(6)), (6, 18, 20));
+        // Two players: half as many again, and more up at once.
+        assert_eq!((brings(1, 1), brings(1, 2), brings(5, 2)), (6, 9, 27));
+        assert_eq!((most_up(1), most_up(2)), (20, 26));
         assert!((1..40).all(|r| count(r + 1) >= count(r)));
         assert_eq!((toughness(1), toughness(5), toughness(10)), (150.0, 350.0, 600.0));
         assert!((toughness(11) - 648.0).abs() < 1e-9);

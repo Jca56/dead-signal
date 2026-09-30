@@ -1,9 +1,11 @@
 //! Figures: skinned meshes out in the world (the dead), drawn in the world's
 //! pass with its light and fog. Every figure's bones go into one storage
 //! buffer each frame; its instance carries where its own begin, so all the
-//! figures of one mesh are a single draw. A figure is drawn in parts (a
-//! head, a torso, arms...), every part an instance on the same bones, each
-//! painted in the figure's own colours (its palette, by region).
+//! figures of one mesh are a single draw (a pane). A figure is drawn in
+//! parts (a head, a torso, arms...), every part an instance on the same
+//! bones, each painted in the figure's own colours (its palette, by
+//! region). A player's own figure is left out of the panes that look
+//! through their eyes.
 
 use lntrn_app::lntrn_render::Gpu;
 use lntrn_app::wgpu;
@@ -32,6 +34,8 @@ pub struct FigureDraw {
     /// The linear RGB each region of its faces is painted (by the region
     /// its colour's alpha names: skin, top, bottoms, accent, under).
     pub palette: [[f32; 3]; PALETTE],
+    /// The panes it isn't drawn in, a bit each (a player's own, in theirs).
+    pub hidden: u32,
 }
 
 /// How many colour regions a figure has.
@@ -59,8 +63,8 @@ pub(super) struct Figures {
     joints: Option<(wgpu::Buffer, usize)>,
     bind: Option<wgpu::BindGroup>,
     instances: Option<(wgpu::Buffer, usize)>,
-    /// This frame's draws: (mesh range, first instance, instances).
-    runs: Vec<((u32, u32), u32, u32)>,
+    /// This frame's draws: (pane, mesh range, first instance, instances).
+    runs: Vec<(usize, (u32, u32), u32, u32)>,
 }
 
 impl Figures {
@@ -130,33 +134,37 @@ impl Figures {
         self.frame.push(d);
     }
 
-    /// Upload this frame's bones and instances, grouped by mesh.
-    pub(super) fn prepare(&mut self, gpu: &Gpu) {
+    /// Upload this frame's bones and instances, for `panes`, grouped by
+    /// pane and then by mesh.
+    pub(super) fn prepare(&mut self, gpu: &Gpu, panes: usize) {
         self.runs.clear();
         let frame = std::mem::take(&mut self.frame);
-        // Every part of every figure, an instance each, gathered by mesh.
+        // Every part of every figure, an instance each in each pane that
+        // shows it, gathered by mesh.
         let mut joints: Vec<[[f32; 4]; 4]> = Vec::new();
-        let mut parts: Vec<(usize, Instance)> = Vec::new();
+        let mut parts: Vec<(usize, usize, Instance)> = Vec::new();
         for d in &frame {
             let first = joints.len() as u32;
             joints.extend(d.joints.iter().map(Mat4::to_gpu));
             let (model, look) = (d.model.to_gpu(), [d.fog, d.tint[0], d.tint[1], d.tint[2]]);
             let palette = d.palette.map(|[r, g, b]| [r, g, b, 1.0]);
-            for part in d.parts.iter().filter(|p| self.meshes.get(p.0).is_some()) {
-                parts.push((part.0, Instance { model, look, palette, first }));
+            for pane in (0..panes).filter(|p| d.hidden & (1 << p) == 0) {
+                for part in d.parts.iter().filter(|p| self.meshes.get(p.0).is_some()) {
+                    parts.push((pane, part.0, Instance { model, look, palette, first }));
+                }
             }
         }
         if parts.is_empty() {
             return;
         }
-        parts.sort_by_key(|(mesh, _)| *mesh);
+        parts.sort_by_key(|(pane, mesh, _)| (*pane, *mesh));
         let mut instances = Vec::with_capacity(parts.len());
-        for (i, (mesh, instance)) in parts.into_iter().enumerate() {
+        for (i, (pane, mesh, instance)) in parts.into_iter().enumerate() {
             instances.push(instance);
             let range = self.meshes[mesh];
             match self.runs.last_mut() {
-                Some((r, _, n)) if *r == range => *n += 1,
-                _ => self.runs.push((range, i as u32, 1)),
+                Some((p, r, _, n)) if *p == pane && *r == range => *n += 1,
+                _ => self.runs.push((pane, range, i as u32, 1)),
             }
         }
         let device = &gpu.device;
@@ -191,9 +199,9 @@ impl Figures {
         }
     }
 
-    /// Draw what `prepare` set up into the world's open pass (whose group 0
-    /// is bound to the world's globals).
-    pub(super) fn draw_into<'p>(&'p self, pass: &mut wgpu::RenderPass<'p>) {
+    /// Draw what `prepare` set up for pane `pane` into the world's open
+    /// pass (whose group 0 is bound to that pane's globals).
+    pub(super) fn draw_into<'p>(&'p self, pass: &mut wgpu::RenderPass<'p>, pane: usize) {
         let (Some(vertices), Some(bind), Some((instances, _))) = (&self.vertices, &self.bind, &self.instances) else { return };
         if self.runs.is_empty() {
             return;
@@ -202,7 +210,7 @@ impl Figures {
         pass.set_bind_group(1, bind, &[]);
         pass.set_vertex_buffer(0, vertices.slice(..));
         pass.set_vertex_buffer(1, instances.slice(..));
-        for &((first, count), inst, n) in &self.runs {
+        for &(_, (first, count), inst, n) in self.runs.iter().filter(|r| r.0 == pane) {
             pass.draw(first..first + count, inst..inst + n);
         }
     }

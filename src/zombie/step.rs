@@ -1,25 +1,42 @@
 //! The dead, a step at a time: each thinks (as often as its distance from
-//! the nearest player allows) about the player it's after and moves, the
-//! near ones keep out of each other's way; and each frame, each is posed
-//! for drawing and hitting, and the long dead are buried.
+//! the nearest player allows) about the player it's after (of those still
+//! standing) and moves, the near ones keep out of each other's way; and
+//! each frame, each is posed for drawing and hitting, and the long dead are
+//! buried.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Mat4, Quat, Vec2, Vec3};
 
 use super::*;
 use super::steer::flat_dist;
-use crate::player::{self, Body, Player, RADIUS, STEP};
+use crate::player::{self, Body, Fallen, Player, RADIUS, STEP};
 use crate::world::{Blend, Solid};
+
+/// It keeps after the player it's after unless another's nearer than this
+/// share of them, and this much more.
+const SWITCH: f64 = 0.75;
+const SWITCH_BY: f64 = 2.0;
 
 /// The player nearest `at` (flat): their seat, and where they stand.
 fn nearest(players: &[(usize, Vec3)], at: Vec3) -> Option<(usize, Vec3)> {
     players.iter().copied().min_by(|a, b| flat_dist(a.1, at).total_cmp(&flat_dist(b.1, at)))
 }
 
+/// Which of the players `standing` one of the dead at `at` goes for: the
+/// nearest, but it keeps after the one it was after (`was`) unless another
+/// is a good deal nearer.
+pub(super) fn quarry(standing: &[(usize, Vec3)], at: Vec3, was: Option<usize>) -> Option<(usize, Vec3)> {
+    let near = nearest(standing, at)?;
+    match was.and_then(|w| standing.iter().find(|p| p.0 == w)) {
+        Some(&kept) if flat_dist(near.1, at) >= flat_dist(kept.1, at) * SWITCH - SWITCH_BY => Some(kept),
+        _ => Some(near),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn think(
     mut dead: Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>,
-    players: Query<(&Player, &Body)>,
+    players: Query<(&Player, &Body, Option<&Fallen>)>,
     solid: Res<Solid>,
     nav: Res<Nav>,
     stealth: Option<Res<Stealth>>,
@@ -28,7 +45,8 @@ pub(super) fn think(
     mut horde: ResMut<Horde>,
     mut barriers: Option<ResMut<breach::Barriers>>,
 ) {
-    let players: Vec<(usize, Vec3)> = players.iter().map(|(p, b)| (p.0, b.pos)).collect();
+    let standing: Vec<(usize, Vec3)> = players.iter().filter(|(_, _, f)| f.is_none()).map(|(p, b, _)| (p.0, b.pos)).collect();
+    let players: Vec<(usize, Vec3)> = players.iter().map(|(p, b, _)| (p.0, b.pos)).collect();
     horde.tick = horde.tick.wrapping_add(1);
     let tick = horde.tick;
     let new = std::mem::take(&mut *noises);
@@ -50,8 +68,7 @@ pub(super) fn think(
     for (mut z, mut body, mut beat) in &mut dead {
         // Far off, it steps less often, and further each time. (What's
         // heard is kept as long as the farthest go between steps.)
-        let quarry = nearest(&players, body.pos);
-        let far = quarry.map_or(0.0, |(_, p)| flat_dist(body.pos, p));
+        let far = nearest(&players, body.pos).map_or(0.0, |(_, p)| flat_dist(body.pos, p));
         let n = every(far);
         if !(tick + beat.phase).is_multiple_of(n) {
             beat.since += 1;
@@ -59,6 +76,8 @@ pub(super) fn think(
         }
         *beat = Beat { every: n, since: 0, ..*beat };
         let dt = STEP * f64::from(n);
+        let quarry = quarry(&standing, body.pos, z.quarry);
+        z.quarry = quarry.map(|(seat, _)| seat);
         senses.player = quarry.map(|(_, p)| p);
         let mut intent = z.think(&body, &senses, dt);
         let voice = body.pos + Vec3::new(0.0, 1.5, 0.0);
@@ -73,7 +92,7 @@ pub(super) fn think(
             horde.spits.push(throw);
         }
         if intent.burst {
-            horde.bursting.push(body.pos);
+            horde.bursting.push((body.pos, z.by));
             horde.sounds.push((Sfx::Burst, body.pos + Vec3::new(0.0, 0.6, 0.0), 1.0));
         }
         if let Some(at) = intent.tore

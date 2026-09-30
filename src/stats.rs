@@ -37,6 +37,9 @@ pub struct Stats {
     pub items_looted: u32,
     /// What was carried at the end.
     pub loot_value: u32,
+    /// Playing together: times gone down, and the others picked up.
+    pub downs: u32,
+    pub revives: u32,
 }
 
 /// One group of lines on the stats screen.

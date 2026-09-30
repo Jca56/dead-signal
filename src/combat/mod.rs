@@ -10,7 +10,7 @@ use lntrn_math::Vec3;
 mod dead;
 
 use crate::collide::Surface;
-use crate::fx::Fx;
+use crate::fx::{Fx, Marker};
 use crate::head::{self, View};
 use crate::input::pad::Rumble;
 use crate::items;
@@ -52,11 +52,13 @@ pub struct Arms {
     pub melee: f64,
     /// How their pad should shake for this frame's shots and blows.
     pub rumble: Rumble,
+    /// Their hitmarker, flashing.
+    pub marker: Option<Marker>,
 }
 
 impl Default for Arms {
     fn default() -> Self {
-        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0, rumble: Rumble::default() }
+        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0, rumble: Rumble::default(), marker: None }
     }
 }
 
@@ -188,6 +190,7 @@ impl Combat {
         let arms = &mut self.arms[seat];
         arms.sprint_block -= dt;
         arms.hurt = (arms.hurt - dt * 1.6).max(0.0);
+        arms.marker = arms.marker.and_then(|m| m.faded(dt));
         let spec = arms.hands.spec();
         let acts = arms.hands.update(trigger, dt);
         // Down the sights, the view closes in.
@@ -326,6 +329,9 @@ impl Combat {
                 // Plate turns it, with a spark and a clang.
                 let plated = zombie::plated(&game.world, e, dir, limb);
                 let impact = zombie::Impact { damage: punch(t) * share, head, limb, blow: hit.blow, shove: hit.shove, stumble: hit.stumble && close, takedown: hit.takedown };
+                if let Some(mut z) = game.world.get_mut::<zombie::brain::Zombie>(e) {
+                    z.by = Some(aim.seat);
+                }
                 let killed = zombie::hurt(&mut game.world, e, dir, aim.eye, impact);
                 stats.damage_dealt += zombie::brain::dealt(impact.damage, head, hit.blow);
                 if killed {
@@ -339,7 +345,7 @@ impl Combat {
                     self.drop_something(game, e);
                 }
                 self.fx.burst(point, -dir, if plated { Surface::Metal } else { Surface::Flesh }, if hit.blow { 12 } else { 9 });
-                self.fx.mark(killed, head && !hit.blow);
+                self.arms[aim.seat].marker = Some(Marker::of(killed, head && !hit.blow));
                 heard.confirm(&self.sound, killed);
                 if plated {
                     self.sound.play_at(Sfx::Clank, 0.9, point, aim.eye, aim.right, false);
@@ -371,7 +377,7 @@ impl Combat {
                 Kind::Plate => (Surface::Metal, Sfx::Ding, 1.0),
             };
             self.fx.burst(point, -dir, surface, if hit.blow { 10 } else { 7 });
-            self.fx.mark(beaten, head && !hit.blow);
+            self.arms[aim.seat].marker = Some(Marker::of(beaten, head && !hit.blow));
             heard.confirm(&self.sound, beaten);
             if heard.thud() {
                 self.sound.play_at(sfx, gain, point, aim.eye, aim.right, false);

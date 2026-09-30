@@ -66,8 +66,10 @@ pub struct Ending {
     earned: Earned,
     xp_before: u32,
     menu: SideMenu<After>,
-    /// A holdout's: the round it ended on, and the best there's been.
+    /// A holdout's: the round it ended on, and the best there's been;
+    /// played together, each player's count and points earned, by seat.
     holdout: Option<(u32, u32)>,
+    team: Vec<(Stats, u32)>,
 }
 
 fn ease(t: f64) -> f64 {
@@ -97,14 +99,20 @@ impl Ending {
             }
         };
         let value = loot.iter().map(|s| s.value()).sum();
-        Self { t: 0.0, outcome, stats, loot, value, kept, earned, xp_before, menu, holdout: None }
+        Self { t: 0.0, outcome, stats, loot, value, kept, earned, xp_before, menu, holdout: None, team: Vec::new() }
     }
 
     /// A holdout's end, on `round`: nothing carried, nothing earned but
-    /// how far it got (and the best before it, `best`).
-    pub fn holdout(stats: Stats, round: u32, best: u32) -> Self {
+    /// how far it got (and the best before it, `best`). `players`: each
+    /// one's count and points earned, by seat (the first's shown alone,
+    /// playing alone; each in a column of their own, together).
+    pub fn holdout(mut players: Vec<(Stats, u32)>, round: u32, best: u32) -> Self {
         let menu = SideMenu::new("YOU DIED", &[("PLAY AGAIN", After::Again), ("TITLE", After::Title)]);
-        Self { t: 0.0, outcome: Outcome::Died(1.0), stats, loot: Vec::new(), value: 0, kept: Vec::new(), earned: Earned::default(), xp_before: 0, menu, holdout: Some((round, best)) }
+        let stats = players.first().map(|p| p.0.clone()).unwrap_or_default();
+        if players.len() < 2 {
+            players.clear();
+        }
+        Self { t: 0.0, outcome: Outcome::Died(1.0), stats, loot: Vec::new(), value: 0, kept: Vec::new(), earned: Earned::default(), xp_before: 0, menu, holdout: Some((round, best)), team: players }
     }
 
     pub fn update(&mut self, dt: f64) {
@@ -199,8 +207,13 @@ impl Ending {
         chosen
     }
 
-    /// The run's numbers in two columns across the right of the screen.
+    /// The run's numbers in two columns across the right of the screen
+    /// (played together, a column a player).
     fn numbers(&self, ui: &mut Ui, screen: Rect, shown: f64) {
+        if !self.team.is_empty() {
+            self.team_numbers(ui, screen, shown);
+            return;
+        }
         let s = ui.m.scale;
         let title = TextStyle::new((35.0 * s) as f32).bold().family(style::FONT);
         let line = TextStyle::new((28.0 * s) as f32).family(style::FONT);
@@ -236,6 +249,42 @@ impl Ending {
                     y += line_h + 6.0 * s;
                 }
                 y += 30.0 * s;
+            }
+        }
+    }
+
+    /// A holdout played together: each player's numbers in a column of
+    /// their own, headed in their colour.
+    fn team_numbers(&self, ui: &mut Ui, screen: Rect, shown: f64) {
+        let s = ui.m.scale;
+        let title = TextStyle::new((40.0 * s) as f32).bold().family(style::FONT);
+        let line = TextStyle::new((30.0 * s) as f32).family(style::FONT);
+        let value = TextStyle::new((30.0 * s) as f32).bold().family(style::FONT);
+        let fade = |c: Color| Color::rgba(c.r, c.g, c.b, c.a * shown);
+        let col_w = 440.0 * s;
+        let gap = 70.0 * s;
+        let n = self.team.len() as f64;
+        let left = screen.max.x - n * col_w - (n - 1.0) * gap - 90.0 * s;
+        let top = screen.min.y + screen.height() * 0.16;
+        for (seat, (stats, points)) in self.team.iter().enumerate() {
+            let x = left + seat as f64 * (col_w + gap);
+            let mut y = top;
+            ui.text_at(&format!("PLAYER {}", seat + 1), &title, Vec2::new(x, y), col_w, fade(style::player(seat)));
+            y += f64::from(title.line_height()) + 16.0 * s;
+            let lines = [
+                ("Points", points.to_string()),
+                ("Kills", stats.kills().to_string()),
+                ("Headshots", stats.headshot_kills.to_string()),
+                ("Accuracy", format!("{}%", stats.accuracy())),
+                ("Downs", stats.downs.to_string()),
+                ("Revives", stats.revives.to_string()),
+                ("Damage taken", format!("{:.0}", stats.damage_taken)),
+            ];
+            for (label, v) in lines {
+                ui.text_at(label, &line, Vec2::new(x, y), col_w, fade(style::DIM));
+                let w = ui.measure(&v, &value);
+                ui.text_at(&v, &value, Vec2::new(x + col_w - w, y), col_w, fade(style::BONE));
+                y += f64::from(line.line_height()) + 10.0 * s;
             }
         }
     }

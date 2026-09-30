@@ -18,6 +18,30 @@ use pad::{Control, PadBinds, PadFrame};
 /// using.
 const MOUSED: f64 = 2.0;
 
+/// What a player plays with: the keyboard and mouse, one pad (by its id),
+/// or, playing alone, the lot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Device {
+    Keys,
+    Pad(u32),
+    All,
+}
+
+impl Device {
+    /// Whether the keyboard and mouse are among it.
+    pub fn has_keys(self) -> bool {
+        matches!(self, Device::Keys | Device::All)
+    }
+}
+
+/// What a player's hands are on this frame: whether the keyboard and mouse
+/// are theirs, and what their pad did.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Feed {
+    pub keys: bool,
+    pub pad: PadFrame,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Input {
     /// The keys and mouse, as bound, if they're this player's; whether the

@@ -12,7 +12,7 @@ use lntrn_math::{Mat4, Quat, Vec2, Vec3};
 
 use super::Horde;
 use super::brain::Blow;
-use crate::player::{Body, Player, STEP};
+use crate::player::{Body, Fallen, Player, STEP};
 use crate::render::{Draw, MeshId, Renderer};
 use crate::sound::Sfx;
 use crate::vitals::Affliction;
@@ -97,15 +97,15 @@ fn launch(commands: &mut Commands, horde: &mut Horde) {
         let at = at + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
         commands.spawn(Glob { pos: from, prev: from, vel: throw(from, at), age: 0.0 });
     }
-    for at in std::mem::take(&mut horde.bursting) {
+    for (at, by) in std::mem::take(&mut horde.bursting) {
         commands.spawn(Puddle::new(at, BURST_PUDDLE, BURST_PUDDLE_FOR));
-        horde.bursts.push(at);
+        horde.bursts.push((at, by));
     }
 }
 
 /// The globs fly: into a player (a blow, and poison), or onto whatever
 /// they meet (a puddle, if it's the ground).
-pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, players: Query<(&Player, &Body)>, solid: Res<Solid>, mut horde: ResMut<Horde>) {
+pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, players: Query<(&Player, &Body), Without<Fallen>>, solid: Res<Solid>, mut horde: ResMut<Horde>) {
     launch(&mut commands, &mut horde);
     let chests: Vec<(usize, Vec3)> = players.iter().map(|(p, b)| (p.0, b.pos + Vec3::new(0.0, 1.1, 0.0))).collect();
     for (e, mut g) in &mut globs {
@@ -141,7 +141,7 @@ pub fn fly(mut commands: Commands, mut globs: Query<(Entity, &mut Glob)>, player
 }
 
 /// The puddles dry up; standing in one poisons.
-pub fn fester(mut commands: Commands, mut puddles: Query<(Entity, &mut Puddle)>, players: Query<(&Player, &Body)>, mut horde: ResMut<Horde>) {
+pub fn fester(mut commands: Commands, mut puddles: Query<(Entity, &mut Puddle)>, players: Query<(&Player, &Body), Without<Fallen>>, mut horde: ResMut<Horde>) {
     for (e, mut p) in &mut puddles {
         p.left -= STEP;
         if p.left <= 0.0 {

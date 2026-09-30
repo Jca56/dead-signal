@@ -305,17 +305,23 @@ pub struct Pads {
     frames: Vec<(u32, PadFrame, [bool; 2])>,
     /// The left stick's flick in the menus: whether it's ready.
     armed: bool,
+    /// The pad a button went down on this frame, if one did.
+    pressed_by: Option<u32>,
 }
 
 impl Pads {
     /// The pads there now, and a watch for more.
     pub fn open() -> Self {
-        Self { pads: Gamepads::open(), frames: Vec::new(), armed: true }
+        Self { pads: Gamepads::open(), frames: Vec::new(), armed: true, pressed_by: None }
     }
 
     /// Take in what the pads did since the last frame.
     pub fn poll(&mut self) {
         let events = self.pads.poll();
+        self.pressed_by = events.iter().rev().find_map(|e| match *e {
+            PadEvent::Pressed(id, _) => Some(id),
+            _ => None,
+        });
         let mut next = Vec::new();
         for pad in self.pads.pads() {
             let id = pad.id();
@@ -333,6 +339,40 @@ impl Pads {
         self.frames = next;
     }
 
+    /// The pad a button went down on this frame, if one did.
+    pub fn pressed_by(&self) -> Option<u32> {
+        self.pressed_by
+    }
+
+    /// Every pad there, by id.
+    pub fn ids(&self) -> Vec<u32> {
+        self.frames.iter().map(|f| f.0).collect()
+    }
+
+    /// Pad `id`'s frame (a resting one if it's gone).
+    pub fn frame(&self, id: u32) -> PadFrame {
+        self.frames.iter().find(|f| f.0 == id).map(|f| f.1).unwrap_or_default()
+    }
+
+    /// Whether pad `id` is there.
+    pub fn connected(&self, id: u32) -> bool {
+        self.frames.iter().any(|f| f.0 == id)
+    }
+
+    /// What pad `id` calls itself, in capitals.
+    pub fn name(&self, id: u32) -> String {
+        self.pads.get(id).map_or_else(|| "A PAD".to_string(), |p| p.name().to_uppercase())
+    }
+
+    /// What `device`'s pads did this frame.
+    pub fn feed(&self, device: super::Device) -> PadFrame {
+        match device {
+            super::Device::All => self.all(),
+            super::Device::Pad(id) => self.frame(id),
+            super::Device::Keys => PadFrame::default(),
+        }
+    }
+
     /// Every pad's frame at once: one player, holding whichever they pick
     /// up.
     pub fn all(&self) -> PadFrame {
@@ -341,12 +381,12 @@ impl Pads {
         frames.fold(first, PadFrame::merge)
     }
 
-    /// Shake every pad that can.
-    pub fn rumble(&mut self, r: Rumble) {
+    /// Shake `device`'s pads, those that can.
+    pub fn rumble(&mut self, device: super::Device, r: Rumble) {
         if r.seconds <= 0.0 {
             return;
         }
-        let ids: Vec<u32> = self.pads.pads().iter().filter(|p| p.can_rumble()).map(|p| p.id()).collect();
+        let ids: Vec<u32> = self.pads.pads().iter().filter(|p| p.can_rumble() && (device == super::Device::All || device == super::Device::Pad(p.id()))).map(|p| p.id()).collect();
         for id in ids {
             // (A pad gone mid-shake is let go at the next poll.)
             if let Some(pad) = self.pads.get_mut(id) {
@@ -386,85 +426,4 @@ impl Pads {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn pad() -> PadState {
-        PadState::default()
-    }
-
-    /// A pad at rest but for its sticks and its right trigger.
-    fn pushed(left: [f64; 2], right: [f64; 2], trigger: f64) -> PadState {
-        let mut s = pad();
-        s.left = left;
-        s.right = right;
-        s.right_trigger = trigger;
-        s
-    }
-
-    #[test]
-    fn a_trigger_counts_past_its_pull_and_stays_till_let_go() {
-        let mut pulled = [false; 2];
-        let pull = |v: f64| pushed([0.0; 2], [0.0; 2], v);
-        let rt = Control::RightTrigger;
-        let f = frame(&pull(0.5), &[], &mut pulled, Labels::Xbox);
-        assert!(!f.held(rt), "not far enough");
-        let f = frame(&pull(0.6), &[], &mut pulled, Labels::Xbox);
-        assert!(f.held(rt) && f.went_down(rt));
-        let f = frame(&pull(0.45), &[], &mut pulled, Labels::Xbox);
-        assert!(f.held(rt) && !f.went_down(rt), "eased off a little, still held, not pulled again");
-        let f = frame(&pull(0.3), &[], &mut pulled, Labels::Xbox);
-        assert!(!f.held(rt), "let go");
-    }
-
-    #[test]
-    fn a_tap_between_frames_still_counts_once_taken() {
-        let mut f = frame(&pad(), &[Button::West], &mut [false; 2], Labels::Xbox);
-        let x = Control::Button(Button::West);
-        assert!(!f.held(x) && f.touched, "up again by the frame, but touched");
-        assert!(f.take(x));
-        assert!(!f.take(x), "taken once");
-    }
-
-    #[test]
-    fn a_resting_stick_is_nothing_and_two_pads_make_one() {
-        let still = frame(&pushed([0.1, -0.05], [0.0; 2], 0.0), &[], &mut [false; 2], Labels::Xbox);
-        assert_eq!(still.left, Vec2::ZERO);
-        assert!(!still.touched);
-        let looking = frame(&pushed([0.0; 2], [0.0, 1.0], 0.0), &[Button::South], &mut [false; 2], Labels::PlayStation);
-        let both = still.merge(looking);
-        assert!(both.right.y > 0.99 && both.went_down(Control::Button(Button::South)));
-        assert_eq!(both.labels, Labels::PlayStation, "named as the one touched");
-    }
-
-    #[test]
-    fn a_flick_is_one_arrow_till_the_stick_comes_back() {
-        let (key, armed) = flick(Vec2::new(0.0, 0.9), true);
-        assert_eq!(key, Some(Key::ArrowUp));
-        let (key, armed) = flick(Vec2::new(0.0, 0.9), armed);
-        assert_eq!(key, None, "held up: once");
-        let (_, armed) = flick(Vec2::new(0.0, 0.1), armed);
-        assert_eq!(flick(Vec2::new(0.0, -0.8), armed).0, Some(Key::ArrowDown));
-    }
-
-    #[test]
-    fn every_action_the_pad_has_is_on_its_own_control_but_reload_and_interact() {
-        let b = PadBinds::default();
-        for a in Action::ALL {
-            for o in Action::ALL {
-                let shared = a != o && b.get(a).is_some() && b.get(a) == b.get(o);
-                assert!(!shared || matches!((a, o), (Action::Reload, Action::Interact) | (Action::Interact, Action::Reload)), "{a:?} and {o:?}");
-            }
-            assert!(b.get(a) != Some(b.next_weapon) && b.get(a) != Some(b.pause), "{a:?}");
-        }
-    }
-
-    #[test]
-    fn a_harder_kick_thumps_harder_and_shakes_add_up_to_the_stronger() {
-        let (smg, rifle) = (Rumble::shot(0.8), Rumble::shot(6.0));
-        assert!(rifle.strong > smg.strong * 3.0 && rifle.seconds > smg.seconds);
-        let mut r = Rumble::struck();
-        r.add(Rumble::blow());
-        assert_eq!(r, Rumble { strong: 0.75, weak: 0.55, seconds: 0.22 });
-    }
-}
+mod tests;

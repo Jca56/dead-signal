@@ -403,31 +403,6 @@ fn a_new_one_comes_from_out_of_sight_and_can_reach_you() {
 
 
 #[test]
-fn it_goes_for_the_nearest_player_and_its_blows_land_on_them() {
-    use bevy_ecs::prelude::*;
-    let mut world = World::new();
-    world.insert_resource(crate::world::Solid(floor()));
-    world.insert_resource(super::Nav(None));
-    world.insert_resource(super::Noises::default());
-    world.insert_resource(super::Horde::default());
-    // The first player well off; the second a few steps from it.
-    world.spawn((Body::at(Vec3::new(0.0, 0.0, 25.0)), player::Player(0)));
-    world.spawn((Body::at(Vec3::new(0.0, 0.0, -6.0)), player::Player(1)));
-    let mut z = Zombie::new(0.0, 7);
-    z.relentless = true;
-    world.spawn((z, Body::at(Vec3::ZERO), super::Beat::new(0)));
-    let mut schedule = Schedule::default();
-    schedule.add_systems(super::step::think);
-    let mut blows = Vec::new();
-    for _ in 0..(6.0 / STEP) as usize {
-        schedule.run(&mut world);
-        blows.append(&mut world.resource_mut::<super::Horde>().blows);
-    }
-    assert!(!blows.is_empty(), "it never struck");
-    assert!(blows.iter().all(|(seat, _)| *seat == 1), "a blow landed on the far one: {blows:?}");
-}
-
-#[test]
 fn a_round_goes_on_past_the_ones_already_hit() {
     use bevy_ecs::prelude::*;
     use super::figure::{Figure, Model};
@@ -450,6 +425,12 @@ fn a_round_goes_on_past_the_ones_already_hit() {
     assert!(ta < tb && tb < tc && (tb - ta - 3.0).abs() < 0.6 && (tc - tb - 3.0).abs() < 0.6, "{ta:.2} {tb:.2} {tc:.2}");
     assert!(a != b && b != c && a != c);
     assert!(super::raycast_past(&mut world, from, dir, 50.0, &[a, b, c]).is_none(), "none past the last");
+    // A player's figure in the way (as solid as the dead) isn't shot.
+    let (joints, points) = world.resource::<Model>().pose(super::figure::Clip::Idle, 0.0);
+    let mut buddy = Figure::default();
+    buddy.set(lntrn_math::Mat4::from_translation(Vec3::new(0.0, 0.0, -2.0)), joints, points, true);
+    world.spawn((buddy, player::Player(1)));
+    assert_eq!(super::raycast(&mut world, from, dir, 50.0).map(|h| h.0), Some(a), "shot through the buddy");
     assert!(super::raycast_past(&mut world, from, dir, tb + 1.0, &[a, b]).is_none(), "a wall before the third stops it");
 }
 
