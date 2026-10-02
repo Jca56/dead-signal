@@ -196,7 +196,7 @@ The player walks at 6 m/s and sprints at 9. A Ripper is faster than walking but 
   - Into a wall, it's dazed 2.5 s and takes 2×. It charges again ~7 s later.
   - On half the maps, guarding the military camp or the crash.
 - **Hellhound** (HOLDOUT only, for now):
-  - Comes out of a rift of static that crackles 1.4 s where it'll appear, 7–14 m from a player, never within 5 m of anyone.
+  - Comes out of a rift of static that crackles 1.4 s where it'll appear, 12–22 m from a player and never within 10 m of anyone (nearer only where there's no room for that: 7–14 m, or 3–7 m shut in a small room). A rift opens every 3 s in the first hound round, 0.3 s quicker each one after, down to every 1.5 s.
   - Its bite sets you alight (15 a second for 1.2 s). Fire does nothing to it (the flamethrower says IMMUNE).
   - Dead, it leaves a fire 1.1 m round for 3 s where it fell.
 

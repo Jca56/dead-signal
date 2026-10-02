@@ -17,12 +17,13 @@ use crate::throw::draw::Meshes;
 /// How long a rift crackles before the hound's through it.
 pub const OPENS_IN: f64 = 1.4;
 /// A rift opens this near to this far from the one it's for, and never
-/// nearer than `CLEAR` to anyone; where there's no room for that (a
-/// small room, its door shut), nearer.
-const RING: (f64, f64) = (7.0, 14.0);
-const CLEAR: f64 = 5.0;
-const CRAMPED: (f64, f64) = (3.0, 7.0);
-const CLEAR_CRAMPED: f64 = 2.5;
+/// nearer than that to anyone: well off, so a hound has ground to cover
+/// (and they don't all land at once). Where there's no room for that,
+/// nearer; and nearer again where there's hardly any (a small room, its
+/// door shut). Each: from, to, and how clear of everyone.
+const RINGS: [(f64, f64, f64); 3] = [(12.0, 22.0, 10.0), (7.0, 14.0, 5.0), (3.0, 7.0, 2.5)];
+/// How many places are tried in each ring before the next is.
+const TRIES: usize = 30;
 
 /// A tear in the air at `at`, `t` seconds open; the hound that comes of
 /// it is this tough, bites this hard (a share of a hound's bite), and
@@ -41,8 +42,8 @@ pub struct Rift {
 /// (`others`: every player's feet). By luck `roll` (0–1, twice a try).
 pub fn spot(world: &World, feet: Vec3, others: &[Vec3], mut roll: impl FnMut() -> f64) -> Option<Vec3> {
     let nav = world.resource::<Nav>().0.as_ref()?;
-    (0..80).find_map(|i| {
-        let ((near, far), clear) = if i < 40 { (RING, CLEAR) } else { (CRAMPED, CLEAR_CRAMPED) };
+    (0..TRIES * RINGS.len()).find_map(|i| {
+        let (near, far, clear) = RINGS[i / TRIES];
         let (a, r) = (roll() * std::f64::consts::TAU, near + (far - near) * roll());
         let p = Vec3::new(feet.x + a.cos() * r, feet.y, feet.z + a.sin() * r);
         let floor = nav.height_at(p).filter(|h| (h - feet.y).abs() < 1.5)?;

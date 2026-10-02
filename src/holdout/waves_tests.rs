@@ -50,11 +50,12 @@ fn a_hound_round_tears_them_in_near_the_player_and_they_come() {
     }
     let (events, rifts, most, nearest) = hound_round(&mut world, &mut h, 14.0);
     assert_eq!(events, vec![Event::Began(Wave::Hounds)]);
-    assert!(rifts.len() >= 4 && most <= 4, "{} rifts, {most} up at once", rifts.len());
+    // One every three seconds, and well off: each has ground to cover.
+    assert!((4..=6).contains(&rifts.len()) && most <= 4, "{} rifts, {most} up at once", rifts.len());
     let nav = world.resource::<Nav>().0.as_ref().unwrap();
     for r in &rifts {
         let far = (*r - at).length();
-        assert!((6.5..15.0).contains(&far) && nav.connects(*r, at), "a rift at {r:?}, {far:.1} m off");
+        assert!((11.5..23.0).contains(&far) && nav.connects(*r, at), "a rift at {r:?}, {far:.1} m off");
     }
     assert!(nearest < 2.5, "none got to the player: {nearest:.1} m");
     assert!(h.rounds.gloom > 0.9 && h.rounds.warning().is_none());

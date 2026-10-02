@@ -51,7 +51,7 @@ const HOUNDS_UP: (usize, usize) = (4, 2);
 /// The first hound round's are let off a little: this share as tough as
 /// a hound of their round, and biting this share as hard.
 pub const FIRST_PACK: (f64, f64) = (0.75, 0.85);
-const RIFT_EVERY: (f64, f64, f64) = (1.6, 0.15, 0.8);
+const RIFT_EVERY: (f64, f64, f64) = (3.0, 0.3, 1.5);
 /// How fast the air goes bad as a hound round begins, and clears after,
 /// a second.
 const GLOOM: (f64, f64) = (0.5, 0.3);
