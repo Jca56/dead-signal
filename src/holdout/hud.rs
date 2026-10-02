@@ -3,7 +3,8 @@
 //! new one begins and dim between; under it the points, and what was just
 //! earned rising off them; under them the radio's signal, with the key
 //! that pulls it out; in a breather, what the radio says is coming; and,
-//! top middle, the boosts that are up, each with how long it has left.
+//! top middle, the boosts that are up (and the gunship), each with how
+//! long it has left.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
@@ -26,6 +27,7 @@ const FLARE_FOR: f64 = 2.5;
 const AMBER: Color = Color::rgb(0.98, 0.66, 0.18);
 const DOUBLE: Color = Color::rgb(1.0, 0.82, 0.25);
 const INSTAKILL: Color = Color::rgb(1.0, 0.30, 0.22);
+const GUNSHIP: Color = Color::rgb(0.70, 0.84, 1.0);
 
 /// The round and player `seat`'s points (and the others', smaller), over
 /// `screen`: their own part of the window; and their radio's `signal`,
@@ -113,14 +115,23 @@ pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize, signal: Option<
 /// name, the seconds it has left, and a bar running down under it;
 /// blinking as it runs out.
 fn boosts(ui: &mut Ui, screen: Rect, h: &Holdout) {
-    use super::boosts::{ENDING, LASTS};
+    use super::boosts::ENDING;
     let s = ui.m.scale;
-    let name = TextStyle::new((38.0 * s) as f32).bold().family(style::FONT);
-    let up: Vec<(String, f64, Color)> = h.boosts.up().map(|(n, left, call)| (format!("{n}  {}", left.ceil() as u32), left, if call == Call::Instakill { INSTAKILL } else { DOUBLE })).collect();
-    let (wide, gap) = (330.0 * s, 40.0 * s);
+    let colour = |call| match call {
+        Call::Instakill => INSTAKILL,
+        Call::Gunship => GUNSHIP,
+        _ => DOUBLE,
+    };
+    let up: Vec<(String, f64, f64, Color)> = h.boosts.up().map(|(n, left, of, call)| (format!("{n}  {}", left.ceil() as u32), left, of, colour(call))).collect();
+    // (Each as wide as there's room for, across a narrow pane; its words
+    // no bigger than fit it.)
+    let gap = 40.0 * s;
+    let room = (screen.width() - 80.0 * s - gap * (up.len() as f64 - 1.0).max(0.0)) / (up.len() as f64).max(1.0);
+    let wide = (330.0 * s).min(room);
+    let name = TextStyle::new((38.0 * s * (wide / (330.0 * s)).max(0.55)) as f32).bold().family(style::FONT);
     let all = up.len() as f64 * wide + (up.len() as f64 - 1.0).max(0.0) * gap;
     let top = screen.min.y + 44.0 * s;
-    for (i, (words, left, colour)) in up.into_iter().enumerate() {
+    for (i, (words, left, of, colour)) in up.into_iter().enumerate() {
         let x = screen.center().x - all * 0.5 + i as f64 * (wide + gap);
         let shows = if left < ENDING { 0.4 + 0.6 * (left * 7.0).sin().abs() } else { 1.0 };
         let c = Color::rgba(colour.r, colour.g, colour.b, shows);
@@ -128,7 +139,7 @@ fn boosts(ui: &mut Ui, screen: Rect, h: &Holdout) {
         ui.text_at(&words, &name, Vec2::new(x + (wide - w) * 0.5, top), w + 8.0, c);
         let under = top + f64::from(name.line_height()) + 6.0 * s;
         ui.draw.rect(Rect::from_min_size(Vec2::new(x, under), Vec2::new(wide, 8.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.55));
-        ui.draw.rect(Rect::from_min_size(Vec2::new(x, under), Vec2::new(wide * (left / LASTS).min(1.0), 8.0 * s)), c);
+        ui.draw.rect(Rect::from_min_size(Vec2::new(x, under), Vec2::new(wide * (left / of).min(1.0), 8.0 * s)), c);
     }
 }
 

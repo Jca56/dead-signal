@@ -3,7 +3,8 @@
 //! guns lack of a full carry; a medic drop: something to mend each of them
 //! with); a flare that guttered out with nothing sent, its signal's given
 //! back; a boost called for, it's begun, for everyone; a strafing run's
-//! rounds seen to land, and what they killed counted.
+//! rounds (and the gunship's) seen to land, and what they killed counted;
+//! the gunship called in over the compound.
 
 use lntrn_math::Vec3;
 
@@ -53,14 +54,18 @@ impl Run {
         }
         for event in events {
             match event {
-                // A boost: on, for everyone, and everyone's told. (What
-                // else is called for comes of it in time: for now, its
-                // name's flashed.)
+                // A boost: on, for everyone, and everyone's told.
                 Event::Called { call, by } => {
                     let name = Some((call.entry().name, super::loot::NOTE_FOR));
                     if self.holdout.as_mut().is_some_and(|h| h.boosts.start(call)) {
                         combat.play(Sfx::Boost, 0.9);
                         self.seats.iter_mut().for_each(|s| s.note = name);
+                    } else if let (Call::Gunship, Some(h)) = (call, &self.holdout) {
+                        // The gunship: in over the compound, and everyone's
+                        // told it's coming.
+                        crate::support::gunship::call(&mut game.world, by, h.arena.bounds);
+                        combat.play(Sfx::Static, 0.7);
+                        self.seats.iter_mut().for_each(|s| s.note = Some(("GUNSHIP INBOUND", super::loot::NOTE_FOR * 1.5)));
                     } else if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
                         seat.note = name;
                     }

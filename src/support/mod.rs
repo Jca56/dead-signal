@@ -3,13 +3,16 @@
 //! stop and burns there, red smoke going up from it), and, if there's
 //! open sky over it, a crate that comes down on it under a parachute and
 //! opens; under a roof the flare gutters out and nothing comes. A strafing
-//! run (`strafe.rs`): a strip of ground raked by a plane's guns. What it
+//! run (`strafe.rs`): a strip of ground raked by a plane's guns. The
+//! gunship (`gunship.rs`): a helicopter circling the compound, its gun on
+//! the dead in the open. What it
 //! means to the players (what the crate held, the signal back for a flare
 //! that guttered) is the run's: it's told through [`Support`], as is
 //! what's called for that needs no marking (a boost). What's
 //! seen of it is in `draw.rs`.
 
 pub mod draw;
+pub mod gunship;
 pub mod strafe;
 #[cfg(test)]
 mod tests;
@@ -91,7 +94,8 @@ pub enum Event {
     Guttered { call: Call, by: usize },
     /// A crate's down, at `at`.
     Landed { call: Call, by: usize, at: Vec3 },
-    /// One of a strafing run's rounds landed at `at`, come from `from`.
+    /// One of a strafing run's rounds (or the gunship's) landed at `at`,
+    /// come from `from`.
     Round { from: Vec3, at: Vec3 },
 }
 
@@ -123,7 +127,7 @@ pub fn drop_at(world: &mut World, call: Call, at: Vec3, height: f64) {
 
 /// Everything called down, gone (a new run).
 pub fn clear(world: &mut World) {
-    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Flare>, With<Drop>, With<strafe::Strafe>)>>().iter(world).collect();
+    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Flare>, With<Drop>, With<strafe::Strafe>, With<gunship::Gunship>)>>().iter(world).collect();
     for e in all {
         world.despawn(e);
     }
@@ -136,6 +140,7 @@ pub fn clear(world: &mut World) {
 /// A fixed step of it all.
 pub fn step(world: &mut World) {
     strafe::step(world);
+    gunship::step(world);
     let mut sounds: Vec<(Sfx, Vec3, f32)> = Vec::new();
     let mut events = Vec::new();
     let mut gone = Vec::new();

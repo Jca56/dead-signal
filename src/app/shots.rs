@@ -17,7 +17,8 @@
 //! their left hand. `DROP=1`: a crate coming down on its flare in the
 //! yard, and another down and open, what it held about it. `BOOSTS=1`:
 //! both boosts up. `STRAFE=mark`: a strafing run's strip being placed
-//! ahead; `STRAFE=run`: one coming in along it, its rounds half way.
+//! ahead; `STRAFE=run`: one coming in along it, its rounds half way. `GUNSHIP=1`:
+//! the gunship over the yard, shooting.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -189,6 +190,20 @@ impl DeadSignal {
                 crate::items::set_down(&mut self.game.world, crate::loot::Stack::one(kind), yard(5.5, -4.0) + Vec3::new(a.cos() * 1.3, 0.6, a.sin() * 1.3), a);
             }
         }
+        // (The gunship over the compound, asked for: a little way round
+        // its circle.)
+        if let (Ok(_), Some(bounds)) = (std::env::var("GUNSHIP"), self.run.holdout.as_ref().map(|h| h.arena.bounds)) {
+            crate::support::clear(&mut self.game.world);
+            crate::support::gunship::call(&mut self.game.world, 0, bounds);
+            for mut g in self.game.world.query::<&mut crate::support::gunship::Gunship>().iter_mut(&mut self.game.world) {
+                g.t = crate::support::gunship::ARRIVES + 0.2;
+            }
+            let left = crate::support::gunship::left(&mut self.game.world);
+            if let Some(h) = self.run.holdout.as_mut() {
+                h.boosts.gunship = left;
+            }
+        }
+        let gunship = std::env::var("GUNSHIP").is_ok();
         let strafe = std::env::var("STRAFE").ok();
         for k in 0..90 {
             self.game.tick(time + f64::from(k) / 60.0);
@@ -208,6 +223,9 @@ impl DeadSignal {
                         s.t = WARNS - 1.0;
                     }
                 }
+                self.run.supported(&mut self.game, &mut self.combat);
+            }
+            if gunship {
                 self.run.supported(&mut self.game, &mut self.combat);
             }
             // (Their hands come up, as in a run: the last quarter second

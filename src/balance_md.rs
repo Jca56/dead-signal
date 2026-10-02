@@ -108,6 +108,9 @@ fn balance_md_matches_the_game() {
     use crate::support::strafe::{LONG, RAKES, TO_A_PLAYER, TO_THE_DEAD, WARNS, WIDE};
     assert!(text.contains(&format!("a strip **{LONG} m long and {WIDE} m wide**")) && text.contains(&format!("**{WARNS} s** later the plane's guns rake it end to end in **{RAKES} s**")));
     assert!(text.contains(&format!("takes **{TO_THE_DEAD}** (plate's no help")) && text.contains(&format!("a player in it takes **{TO_A_PLAYER}**")));
+    // Its gunship.
+    use crate::support::gunship::{ARRIVES, EVERY, ROUND, STAYS};
+    assert!(text.contains(&format!("**{ARRIVES} s** after its code's sent")) && text.contains(&format!("for **{STAYS} s** it flies")) && text.contains(&format!("a round every {EVERY} s, **{ROUND}** each")));
     // What it calls down.
     use crate::support::{COMES_IN, FALLS, FROM};
     assert!(text.contains(&format!("let go over it **{COMES_IN} s** later and comes down under a parachute in **{} s**", FROM / FALLS)));

@@ -13,11 +13,14 @@ pub const JUGGERNAUT: f64 = 3.0;
 /// The last of a boost: the HUD blinks it.
 pub const ENDING: f64 = 5.0;
 
-/// How long each has left, seconds.
+/// How long each has left, seconds; and the gunship, over the compound
+/// (it's no boost, but it's shown with them: the run keeps this as the
+/// world has it).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Boosts {
     pub double: f64,
     pub instakill: f64,
+    pub gunship: f64,
 }
 
 impl Boosts {
@@ -49,9 +52,10 @@ impl Boosts {
     }
 
     /// Those that are up, as the HUD shows them: its name, how long it has
-    /// left, and which it is.
-    pub fn up(&self) -> impl Iterator<Item = (&'static str, f64, Call)> {
-        [(Call::DoublePoints, self.double), (Call::Instakill, self.instakill)].into_iter().filter(|(_, left)| *left > 0.0).map(|(call, left)| (call.entry().name, left, call))
+    /// left (and of how long), and which it is.
+    pub fn up(&self) -> impl Iterator<Item = (&'static str, f64, f64, Call)> {
+        let gunship = crate::support::gunship::STAYS;
+        [(Call::DoublePoints, self.double, LASTS), (Call::Instakill, self.instakill, LASTS), (Call::Gunship, self.gunship, gunship)].into_iter().filter(|(_, left, _)| *left > 0.0).map(|(call, left, of)| (call.entry().name, left, of, call))
     }
 }
 
@@ -67,7 +71,7 @@ mod tests {
         assert!(b.start(Call::DoublePoints));
         assert!(b.points() == 2 && !b.instakill());
         b.update(LASTS - 1.0);
-        assert_eq!(b.up().collect::<Vec<_>>(), [("2X POINTS", 1.0, Call::DoublePoints)]);
+        assert_eq!(b.up().collect::<Vec<_>>(), [("2X POINTS", 1.0, LASTS, Call::DoublePoints)]);
         // Called again with a second left: that and thirty more.
         b.start(Call::DoublePoints);
         b.start(Call::Instakill);

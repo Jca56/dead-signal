@@ -16,6 +16,13 @@
             middle: a grey fuselage, a gun under its nose, a dark canopy,
             two engines high on its back, a tailplane with a fin at each
             end
+    Heli    the gunship: a helicopter 12 m long, its nose along +Y, about
+            the middle of its cabin: an olive cabin with a glass nose, its
+            door open on the right (+X) and a gun in it, an engine and
+            rotor mast on its roof, a tail boom with a fin and a small
+            rotor, on skids
+    Rotor   its blades, 11 m across, about their hub (which is 1.75 m over
+            the cabin's middle): turned by the game
 
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/airdrop.py
@@ -211,6 +218,50 @@ def plane(mat):
     s.finish("Plane", mat)
 
 
+HULL = (0.22, 0.26, 0.16)
+HULL_DARK = (0.14, 0.17, 0.10)
+BLADE = (0.07, 0.07, 0.07)
+CABIN = (0.05, 0.05, 0.05)
+
+
+def heli(mat):
+    s = Shape()
+    # The cabin, its floor, its glass nose, and the dark of its open door
+    # on the right.
+    s.box((0, 0.0, 0.0), (2.2, 4.4, 1.9), HULL)
+    s.box((0, 0.0, -0.98), (1.9, 4.0, 0.12), HULL_DARK)
+    s.box((0, 2.75, -0.15), (1.9, 1.3, 1.5), HULL)
+    s.box((0, 3.0, 0.2), (1.7, 1.2, 0.95), GLASS, Matrix.Rotation(math.radians(-22), 4, "X"))
+    s.box((0, 3.5, -0.6), (1.4, 0.8, 0.6), HULL_DARK)
+    s.box((1.09, -0.2, -0.05), (0.06, 2.0, 1.5), CABIN)
+    # The gun in the door: its mount, and its barrels out and down.
+    s.box((1.15, -0.2, -0.45), (0.25, 0.25, 0.5), GUN)
+    s.box((1.55, -0.2, -0.3), (0.9, 0.16, 0.16), GUN, Matrix.Rotation(math.radians(18), 4, "Y"))
+    # On the roof: the engine, its exhaust, the mast.
+    s.box((0, -0.5, 1.2), (1.3, 2.6, 0.6), HULL_DARK)
+    s.box((0, -2.0, 1.2), (0.6, 0.5, 0.4), INTAKE)
+    s.box((0, 0.0, 1.6), (0.25, 0.25, 0.5), BLADE)
+    # The tail: its boom narrowing back, the fin up at its end, the small
+    # rotor on the fin's left, a stub of a tailplane.
+    s.box((0, -3.6, 0.35), (0.9, 3.0, 0.9), HULL)
+    s.box((0, -6.3, 0.5), (0.5, 3.0, 0.5), HULL)
+    s.box((0, -7.9, 1.2), (0.16, 1.1, 2.0), HULL, Matrix.Rotation(math.radians(-18), 4, "X"))
+    s.box((0, -6.0, 0.55), (1.9, 0.6, 0.1), HULL_DARK)
+    for turn in (0.0, math.pi / 2):
+        s.box((-0.2, -8.1, 1.7), (0.06, 0.14, 1.9), BLADE, Matrix.Rotation(turn + 0.4, 4, "X"))
+    # The skids, each on two legs.
+    for side in (-1.0, 1.0):
+        s.box((side * 1.15, 0.2, -1.75), (0.12, 4.6, 0.12), BLADE)
+        for y in (-1.2, 1.5):
+            s.box((side * 1.05, y, -1.35), (0.1, 0.1, 0.85), BLADE, Matrix.Rotation(side * math.radians(-14), 4, "Y"))
+    s.finish("Heli", mat)
+    s = Shape()
+    s.box((0, 0, 0), (0.5, 0.5, 0.2), BLADE)
+    for turn in (0.0, math.pi / 2):
+        s.box((0, 0, 0.05), (11.0, 0.42, 0.06), BLADE, Matrix.Rotation(turn, 4, "Z"))
+    s.finish("Rotor", mat)
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mat = material()
@@ -218,6 +269,7 @@ def main():
     crate(mat)
     chute(mat)
     plane(mat)
+    heli(mat)
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"airdrop: {len(bpy.data.objects)} objects -> {os.path.abspath(OUT)}")
 

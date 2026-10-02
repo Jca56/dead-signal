@@ -1,7 +1,8 @@
 //! Drops in a small built world: a flare thrown into the open brings a
 //! crate down on it; one under a roof gutters out and nothing comes. And
 //! a strafing run: what's in its strip under open sky is hit as its
-//! rounds pass, and nothing else.
+//! rounds pass, and nothing else. And the gunship: in, round its circle
+//! shooting the dead it can see in the open, and off again.
 
 use lntrn_math::Vec3;
 
@@ -141,4 +142,53 @@ fn a_strafing_run_cuts_down_what_s_in_its_strip_in_the_open_as_its_rounds_pass()
     steps(&mut w, 6.0);
     assert_eq!(w.query::<&Strafe>().iter(&w).count(), 0);
     let _ = LONG;
+}
+
+#[test]
+fn the_gunship_comes_in_circles_the_compound_shooting_what_it_sees_in_the_open_and_goes() {
+    use crate::player::{Body, Player};
+    use crate::zombie::brain::Zombie;
+    use gunship::{ARRIVES, Gunship, HIGH, STAYS};
+    let mut w = world();
+    w.insert_resource(crate::world::Clock::default());
+    let bounds = (Vec3::new(-40.0, 0.0, -15.0), Vec3::new(40.0, 0.0, 15.0));
+    let dead = |w: &mut World, at: Vec3| w.spawn((Zombie::new(0.0, 3), Body::at(at))).id();
+    let far = dead(&mut w, Vec3::new(-20.0, 0.0, 5.0));
+    let near = dead(&mut w, Vec3::new(3.0, 0.0, 2.0));
+    let roofed = dead(&mut w, Vec3::new(15.0, 0.0, 0.0));
+    w.spawn((Player(0), Body::at(Vec3::new(1.0, 0.0, 0.0))));
+    gunship::call(&mut w, 0, bounds);
+    let alive = |w: &World, e: Entity| !w.get::<Zombie>(e).unwrap().dead();
+    let ship = |w: &mut World| *w.query::<&Gunship>().single(w).expect("the gunship");
+    // Coming in: from well off, nothing shot yet.
+    assert!((ship(&mut w).place().0 - Vec3::ZERO).length() > 100.0 && !ship(&mut w).on_station());
+    steps(&mut w, ARRIVES - 0.1);
+    assert!(alive(&w, near) && alive(&w, far) && events(&mut w).is_empty());
+    assert_eq!(gunship::left(&mut w), STAYS);
+    // Over the compound: on its circle, at its height, inside the bounds'
+    // long side; and the one nearest the player is the first it's at.
+    steps(&mut w, 0.12);
+    let g = ship(&mut w);
+    let (at, way) = g.place();
+    assert!(g.on_station() && (at.y - HIGH).abs() < 1e-9 && at.x.abs() < 40.0 && way.y == 0.0, "{at:?}");
+    assert!(g.firing() && g.lit.is_some_and(|p| (p - Vec3::new(3.0, 0.0, 2.0)).length() < 0.5));
+    steps(&mut w, 3.0);
+    assert!(!alive(&w, near), "cut down");
+    // Then the next; never the one under the roof. The kills are whoever
+    // called it's, and no player's touched.
+    steps(&mut w, 6.0);
+    assert!(!alive(&w, far) && alive(&w, roofed));
+    assert_eq!(std::mem::take(&mut w.resource_mut::<Support>().kills), [(0, near), (0, far)]);
+    assert!(events(&mut w).iter().filter(|e| matches!(e, Event::Round { .. })).count() > 5);
+    assert_eq!(w.resource::<crate::throw::Booms>().of(0), crate::throw::Felt::default());
+    assert!(!ship(&mut w).firing(), "nothing left it can see");
+    // Called for again: no second one, this one stays as long again.
+    gunship::call(&mut w, 1, bounds);
+    assert_eq!(w.query::<&Gunship>().iter(&w).count(), 1);
+    assert!((gunship::left(&mut w) - (2.0 * STAYS - 9.02)).abs() < 0.1, "{}", gunship::left(&mut w));
+    // Its time up, it flies off, and is gone.
+    steps(&mut w, 2.0 * STAYS - 9.0);
+    assert!(!ship(&mut w).on_station() && gunship::left(&mut w) == 0.0);
+    steps(&mut w, 6.0);
+    assert_eq!(w.query::<&Gunship>().iter(&w).count(), 0);
 }

@@ -135,10 +135,9 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - [x] 5. Ammo drop and medic drop (`src/support/`, `src/run/support.rs`). A crate comes down on the flare under a parachute and opens; what it held lies about it to be taken (the 30 s rule): what everyone's guns lack of a full carry, or a medkit, two bandages and a plate each.
 - [x] 6. Strafing run (`src/support/strafe.rs`). Three seconds' warning (the plane heard coming, the strip pulsing red for everyone), then its guns rake the strip end to end: the dead in it under open sky cut down, a player in it badly hurt, glass broken, dirt flying, tracers down the sky; the plane seen going over. Its kills are whoever called it's, but charge no signal.
 - [x] 7. Boosts as entries (`src/holdout/boosts.rs`): 2X POINTS and INSTAKILL, on for everyone for 30 s (called again, as long again), each shown top middle with its time. INSTAKILL kills all but a Juggernaut (3× damage), and what's killed while it's up charges no signal.
-- [ ] 8. The gunship. A helicopter model, a slow circle over the compound for half a minute, its gun on the dead it can see in the open, its light, its rotor heard.
+- [x] 8. The gunship (`src/support/gunship.rs`). A helicopter in over the compound, a slow circle round it for 45 s, its door gun on the dead it can see in the open (nearest a player first), its searchlight's shaft on whichever it's at, its rotor heard; never a player hurt. Called again, it stays as long again. Its time's shown with the boosts'.
 - [ ] 9. Seen by the other player: the radio in the survivor figure's hand.
 
-**Still to ask** (before the gunship): whether it can hurt players; how long it stays.
 
 ---
 

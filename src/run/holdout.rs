@@ -89,6 +89,8 @@ impl Run {
         let feet: Vec<Vec3> = self.seats.iter().filter(|s| s.standing()).filter_map(|s| game.player(s.n).map(|(body, _)| body.pos)).collect();
         self.supported(game, combat);
         let Some(h) = &mut self.holdout else { return };
+        // (How long the gunship has left, for the HUD.)
+        h.boosts.gunship = crate::support::gunship::left(&mut game.world);
         // (While any hit's a kill, what's killed charges no signal.)
         if h.boosts.instakill() {
             for seat in &mut self.seats {

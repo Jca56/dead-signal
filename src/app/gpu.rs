@@ -160,6 +160,7 @@ impl AppHost for DeadSignal {
             crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
             crate::support::draw::draw(&mut self.game.world, renderer, alpha, time);
             crate::support::draw::runs(&mut self.game.world, renderer, time);
+            crate::support::draw::gunship(&mut self.game.world, renderer, time);
             zombie::rift::draw(&mut self.game.world, renderer, time);
             crate::glass::draw(&self.game.world, renderer, &sights);
         }

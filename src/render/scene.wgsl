@@ -117,14 +117,15 @@ fn glass_fs(in: VertexOut) -> @location(0) vec4<f32> {
     return vec4<f32>(fogged(color, in.world, in.fog_amount), alpha);
 }
 
-// Something soft (a wisp of mist): thinning to nothing at its edge and
-// close up to the eye, lit as if it lay flat.
+// Something soft (a wisp of mist, a shaft of light): thinning to nothing
+// at its edge and close up to the eye, lit as if it lay flat (and alight
+// with whatever it glows of its own).
 @fragment
 fn mist_fs(in: VertexOut) -> @location(0) vec4<f32> {
     let to_eye = g.camera.xyz - in.world;
     let dist = length(to_eye);
     let rim = pow(max(dot(normalize(in.normal), to_eye / max(dist, 1e-4)), 0.0), 1.6);
     let near = smoothstep(1.5, 6.0, dist);
-    let color = in.color.rgb * light_on(in.world, vec3<f32>(0.0, 1.0, 0.0));
+    let color = in.color.rgb * light_on(in.world, vec3<f32>(0.0, 1.0, 0.0)) + in.emissive;
     return vec4<f32>(fogged(color, in.world, in.fog_amount), in.color.a * rim * near);
 }
