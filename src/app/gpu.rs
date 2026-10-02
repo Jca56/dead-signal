@@ -77,7 +77,8 @@ impl AppHost for DeadSignal {
                 Err(e) => log_error!("{name}: {e}"),
             }
         }
-        self.viewmodel = Some(Viewmodel::new(rigs));
+        let radio = assets::load_viewmodel(&mut renderer, "viewmodel_radio").map_err(|e| log_error!("viewmodel_radio: {e}")).ok();
+        self.viewmodel = Some(Viewmodel::new(rigs, radio));
         self.mark = renderer.mark();
         renderer.upload(gpu);
         self.renderer = Some(renderer);
@@ -130,6 +131,7 @@ impl AppHost for DeadSignal {
             }
         }
         let time = self.game.clock().time;
+        let window_aspect = f64::from(cx.size[0]) / f64::from(cx.size[1].max(1));
         if self.screen == Screen::Run {
             // Each pane's own: its player's arms (out of the way looking
             // through a scope), and the arc of a throw they're aiming.
@@ -139,7 +141,7 @@ impl AppHost for DeadSignal {
                 if self.run.ending.is_none()
                     && hands.scoped() < SCOPE_HIDES
                     && let Some(vm) = &self.viewmodel
-                    && let Some(draw) = vm.draw(seat.n, &view, hands, time, seat.lowered())
+                    && let Some(draw) = vm.draw(seat.n, &view, hands, seat.radio_shown().map(|r| (r, crate::render::viewmodel_sees(window_aspect, panes[i].aspect()))), time, seat.lowered())
                 {
                     renderer.draw_viewmodel(i, draw);
                 }

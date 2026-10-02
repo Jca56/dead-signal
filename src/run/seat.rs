@@ -2,7 +2,7 @@
 //! moving, shots and healing; what the dead and the fires did to them;
 //! their health, stamina and count; and their HUD. What's in their hands
 //! is in `hands.rs`, what they carry and find in `loot.rs`, their throws
-//! in `throwing.rs`.
+//! in `throwing.rs`, the radio they pull out in `radio.rs`.
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::{Rect, Vec2, Vec3};
@@ -71,6 +71,8 @@ pub struct Seat {
     /// gun last in hand (what a pad's Y goes back to from the blade).
     pub(super) wheel: f64,
     pub(super) gun: Option<Slot>,
+    /// The handheld radio, where they carry one (a holdout).
+    pub radio: Option<crate::radio::Radio>,
     /// Their controls, this frame (the keys and mouse, a pad), and whether
     /// a sprint's been toggled on (sprint set to toggle, or on a pad).
     pub input: Input,
@@ -147,6 +149,7 @@ impl Seat {
         let n = self.n;
         if self.out {
             // Bled out: nothing to do but watch.
+            self.radio = self.radio.map(|_| Default::default());
             if let Some(mut c) = game.controls_mut(n) {
                 *c = Default::default();
             }
@@ -241,10 +244,14 @@ impl Seat {
         // A throw being aimed puts the gun down. (Down, there's only the
         // gun in hand.)
         let busy = (!down && self.throwing(ui, game, combat, !busy)) || busy;
-        if !busy && self.input.pressed(ui, Action::FireMode) && combat.arms[n].hands.switch_fire() {
+        // The radio out, the hands are its: till they're wanted for
+        // anything else.
+        self.radioing(ui, combat, !busy && !down, firing || striking, dt);
+        if !busy && !self.radio_out() && self.input.pressed(ui, Action::FireMode) && combat.arms[n].hands.switch_fire() {
             combat.play(Sfx::Tick, 0.9);
         }
         self.switch_hands(ui, combat, !busy && !down);
+        let busy = busy || self.radio_out();
         // The sights up while the right button's held; a sprint takes them
         // down.
         let aim = self.input.held(ui, Action::Aim) && !wants_sprint;

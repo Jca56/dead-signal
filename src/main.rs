@@ -34,6 +34,7 @@ mod menu;
 mod perf;
 mod player;
 mod profile;
+mod radio;
 mod render;
 mod run;
 mod screenshot;

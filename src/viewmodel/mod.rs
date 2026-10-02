@@ -4,7 +4,8 @@
 //! landing, settle when crouched, and breathe with their idle animation.
 //! Whatever's in them is its own viewmodel (the arms and that weapon, and
 //! its clips), dropped out of view as it's put away and raised as it's
-//! taken up. All in camera space: x right, y up, -z ahead.
+//! taken up; the radio, pulled out, is one too, in the weapon's place.
+//! All in camera space: x right, y up, -z ahead.
 
 use std::collections::HashMap;
 
@@ -14,6 +15,7 @@ use crate::assets::Rigged;
 use crate::render::SkinnedMeshId;
 use crate::head::{EYE_CROUCH, EYE_STAND, View};
 use crate::player::Body;
+use crate::radio::Shown;
 use crate::render::SkinnedDraw;
 use crate::weapon::{Clip, Hands, Weapon};
 use lntrn_model::Gltf;
@@ -32,6 +34,10 @@ const AIM_STEADY: f64 = 0.8;
 /// Put away, how far the arms drop, metres, and tip forward, radians.
 const STOW_DROP: f64 = 0.32;
 const STOW_TIP: f64 = 0.7;
+/// Where the radio's held, as its model has it (out at the right, well
+/// ahead), and how far it reaches to the side of that.
+const RADIO_AT: Vec3 = Vec3::new(0.225, -0.125, -0.37);
+const RADIO_REACH: f64 = 0.05;
 
 /// How far the arms trail the view: a spring pulled by how fast it turns.
 #[derive(Clone, Copy, Debug, Default)]
@@ -63,15 +69,16 @@ struct Motion {
 }
 
 pub struct Viewmodel {
-    /// Every weapon's viewmodel.
+    /// Every weapon's viewmodel; and the radio's.
     rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>,
+    radio: Option<Rigged<SkinnedMeshId>>,
     /// Each player's arms' motion, by seat.
     motions: Vec<Motion>,
 }
 
 impl Viewmodel {
-    pub fn new(rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>) -> Self {
-        Self { rigs, motions: vec![Motion::default()] }
+    pub fn new(rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>, radio: Option<Rigged<SkinnedMeshId>>) -> Self {
+        Self { rigs, radio, motions: vec![Motion::default()] }
     }
 
     /// Forget the last run's motion: fresh, for each of `players`.
@@ -92,8 +99,18 @@ impl Viewmodel {
     /// Player `seat`'s arms and what's in `hands` as they are drawn this
     /// frame (the clip playing, blended toward the weapon's aimed one as far
     /// as the sights are up; idles loop on the game's clock, `time`); none
-    /// if that weapon's viewmodel didn't load.
-    pub fn draw(&self, seat: usize, view: &View, hands: &Hands, time: f64, lowered: f64) -> Option<SkinnedDraw> {
+    /// if that weapon's viewmodel didn't load. With the `radio` in view
+    /// (and how far their pane sees across and up, as tangents), it's the
+    /// arms and the radio instead.
+    pub fn draw(&self, seat: usize, view: &View, hands: &Hands, radio: Option<(Shown, [f64; 2])>, time: f64, lowered: f64) -> Option<SkinnedDraw> {
+        if let Some((shown, sees)) = radio {
+            let rig = self.radio.as_ref()?;
+            let pose = sample(&rig.gltf, shown.clip, shown.t.unwrap_or(time), shown.t.is_none());
+            let joints = rig.gltf.skins[rig.skin].joint_matrices(&rig.gltf.world_matrices(&pose));
+            let motion = self.motions.get(seat).copied().unwrap_or_default();
+            let model = Mat4::from_translation(Vec3::new(-radio_over(sees), 0.0, 0.0)) * placement(&motion, view, 0.0, shown.stowed, 0.0);
+            return Some(SkinnedDraw { mesh: rig.mesh, model, joints, glow: [0.0; 4] });
+        }
         let rig = self.rigs.get(&hands.weapon)?;
         let gltf = &rig.gltf;
         let (clip, t) = hands.clip();
@@ -140,6 +157,13 @@ fn placement(motion: &Motion, view: &View, lowered: f64, stowed: f64, aim: f64) 
     // Turned about the chest from the hip, about the eye down the sights.
     let pivot = PIVOT * still;
     Mat4::from_translation(offset + pivot) * Mat4::from_quat(turn) * Mat4::from_translation(-pivot)
+}
+
+/// How far the radio's moved over to be in a pane that sees `sees`
+/// (tangents, across and up): a narrow one (side by side) doesn't reach
+/// out to where it's held.
+fn radio_over(sees: [f64; 2]) -> f64 {
+    (RADIO_AT.x + RADIO_REACH - sees[0] * -RADIO_AT.z).max(0.0)
 }
 
 /// `clip` of `gltf` at `t` seconds (a looping clip wraps round), over its
@@ -195,6 +219,19 @@ mod tests {
         let m = placement(&motion, &view, 0.0, 0.0, 0.0);
         let (rear, front) = (m.transform_point(Vec3::new(0.0, 0.0, -0.17)), m.transform_point(Vec3::new(0.0, 0.0, -0.34)));
         assert!(rear.normalize().cross(front.normalize()).length() > 1e-3);
+    }
+
+    #[test]
+    fn the_radio_s_moved_over_into_a_narrow_pane_and_left_where_it_is_in_a_wide_one() {
+        use crate::render::viewmodel_sees;
+        // The whole window, and one pane above another: it's in view.
+        assert_eq!(radio_over(viewmodel_sees(16.0 / 9.0, 16.0 / 9.0)), 0.0);
+        assert_eq!(radio_over(viewmodel_sees(16.0 / 9.0, 32.0 / 9.0)), 0.0);
+        // Side by side: over, till its far side is at the pane's edge.
+        let sees = viewmodel_sees(16.0 / 9.0, 8.0 / 9.0);
+        let over = radio_over(sees);
+        assert!(over > 0.08 && over < 0.13, "{over}");
+        assert!((RADIO_AT.x + RADIO_REACH - over - sees[0] * -RADIO_AT.z).abs() < 1e-9);
     }
 
     #[test]

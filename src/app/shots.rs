@@ -8,7 +8,9 @@
 //! stood in it, and each view drawn by the game's own renderer (the world
 //! and the arms; none of the HUD) to `<dir>/<name>.png`. With
 //! `WILDS=<seed>` it's an extraction run's map by day instead, looked at
-//! from outside the buildings nearest where the run starts.
+//! from outside the buildings nearest where the run starts. With
+//! `RADIO=up` the player has the radio out in every view (`RADIO=key`:
+//! keyed, at their mouth).
 
 use lntrn_app::lntrn_render::{Gpu, Images, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -144,6 +146,7 @@ impl DeadSignal {
         // in the air is drifting.
         self.game.simulating = true;
         let view = target.create_view(&Default::default());
+        let radio = std::env::var("RADIO").ok();
         for k in 0..90 {
             self.game.tick(time + f64::from(k) / 60.0);
             self.game.teleport(0, feet);
@@ -152,6 +155,18 @@ impl DeadSignal {
             let trigger = crate::weapon::Trigger { fire: firing && k == 86, ..Default::default() };
             self.combat.update(1.0 / 60.0);
             self.combat.frame(&mut self.game, 0, trigger, 1.0 / 60.0, &mut crate::stats::Stats::default());
+            // (The radio out, asked for: the gun put away for it, and
+            // keyed near the end, if that's asked.)
+            if let (Some(how), Some(seat)) = (&radio, self.run.seats.first_mut()) {
+                let r = seat.radio.get_or_insert_default();
+                r.pull();
+                if how == "key" && k == 64 {
+                    r.key();
+                }
+                let hands = &mut self.combat.arms[0].hands;
+                hands.stow();
+                r.update(hands.stowed().is_some(), 1.0 / 60.0);
+            }
             self.place_cameras(time, f64::from(SIZE[0]) / f64::from(SIZE[1]));
             let mut graph = RenderGraph::new();
             let backbuffer = graph.import(&view);

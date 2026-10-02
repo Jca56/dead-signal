@@ -154,6 +154,13 @@ pub struct Renderer {
 const VIEWMODEL_FOV: f64 = 55.0;
 const VIEWMODEL_NEAR: f64 = 0.01;
 
+/// How far the arms' camera sees across and up in a pane `aspect` wide,
+/// cut from a window `window_aspect` wide: the tangents of half its view.
+pub fn viewmodel_sees(window_aspect: f64, aspect: f64) -> [f64; 2] {
+    let up = (crate::camera::pane_fov(VIEWMODEL_FOV.to_radians(), window_aspect, aspect) * 0.5).tan();
+    [up * aspect, up]
+}
+
 impl Renderer {
     pub fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Self {
         let device = &gpu.device;

@@ -101,6 +101,11 @@ pub enum Sfx {
     Shutter,
     /// The Amplifier, a weapon put through it.
     Amplify,
+    /// The handheld radio: switched on as it comes up, its talk button
+    /// pressed, and the chirp as it's let go, the message sent.
+    RadioOn,
+    RadioTalk,
+    RadioOver,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -115,7 +120,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 61] = [
+const ALL: [Sfx; 64] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -169,6 +174,9 @@ const ALL: [Sfx; 61] = [
     Sfx::Click,
     Sfx::Shutter,
     Sfx::Amplify,
+    Sfx::RadioOn,
+    Sfx::RadioTalk,
+    Sfx::RadioOver,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

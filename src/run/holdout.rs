@@ -35,6 +35,8 @@ impl Run {
         for seat in &mut self.seats {
             (seat.fit, seat.unburdened) = (Holdout::fit(), true);
             seat.vitals.quicken_mending(crate::holdout::MENDING);
+            // (Everyone has a radio on them.)
+            seat.radio = Some(Default::default());
         }
         game.world.insert_resource(crate::zombie::Stealth(1.0));
         game.world.insert_resource(crate::zombie::Heat::default());
@@ -156,7 +158,8 @@ impl Seat {
             self.shut_bag(game, cx);
         }
         // Down, or picking someone up (whose prompt it is), nothing else.
-        let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some();
+        // (Nor with the radio out: E is its.)
+        let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some() || self.radio_out();
         let eye = if busy { None } else { loot::eye(game, self.n) };
         // Something lying there to take comes first (what the dead left,
         // what someone set down); then what's on the walls.
@@ -166,6 +169,7 @@ impl Seat {
         // pad's X is still a reload there.)
         self.input.set_prompt(match aimed {
             _ if self.reviving.is_some() => Prompt::Hold,
+            _ if self.radio_out() => Prompt::Press,
             Some(crate::holdout::Aimed::Window(_)) => Prompt::Hold,
             Some(_) => Prompt::Press,
             None if lying.is_some() => Prompt::Press,
@@ -205,6 +209,7 @@ impl Seat {
         }
         let prompt = match (self.reviving, lying) {
             (Some((j, _)), _) => Some(("E", format!("REVIVE P{}", j + 1))),
+            _ if self.radio_ready() => Some(("E", "KEY THE RADIO".to_string())),
             (None, Some((_, stack))) => Some(("E", stack.label())),
             (None, None) => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
         };

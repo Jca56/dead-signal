@@ -251,6 +251,22 @@ impl Hands {
         }
     }
 
+    /// Put what's held away to be taken up again after: the hands are
+    /// wanted for something else (the radio). On its way to something
+    /// else already, that's what comes up after. Not mid-blow. Whether
+    /// it's going.
+    pub fn stow(&mut self) -> bool {
+        match self.clip {
+            Clip::Bash | Clip::Bash2 => false,
+            Clip::Holster | Clip::Stowed => true,
+            _ => {
+                self.next = Some(self.held);
+                self.start(Clip::Holster);
+                true
+            }
+        }
+    }
+
     /// Whether putting away is under way (or done), and what's to come up.
     pub fn switching(&self) -> Option<Option<Slot>> {
         matches!(self.clip, Clip::Holster | Clip::Stowed).then_some(self.next).flatten()

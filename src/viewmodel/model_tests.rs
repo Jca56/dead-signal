@@ -1,7 +1,7 @@
 //! The viewmodels from the real files: every weapon's arms rest as
 //! modelled, its clips last as its hands think, and its sights (or scope)
 //! sit on the middle of the view when aimed; the hands hold what they
-//! should.
+//! should. And the radio's: held where the arms think it is.
 
 use lntrn_math::{Mat4, Vec3, Vec4};
 use lntrn_model::Gltf;
@@ -60,6 +60,32 @@ fn every_viewmodel_rests_as_modelled_with_its_clips() {
     assert_eq!(viewmodel(Weapon::Fists).skins[0].joints.len(), 19, "the arms alone");
     assert_eq!(viewmodel(Weapon::Pistol).skins[0].joints.len(), 23, "19 for the arms, 4 for the pistol");
     assert_eq!(viewmodel(Weapon::Shotgun).skins[0].joints.len(), 23, "19 for the arms, 4 for the shotgun");
+}
+
+#[test]
+fn the_radio_rests_as_modelled_and_is_held_out_at_the_right_where_the_arms_think() {
+    let g = Gltf::load(format!("{}/assets/models/viewmodel_radio.glb", env!("CARGO_MANIFEST_DIR"))).expect("the radio");
+    let skin = &g.skins[0];
+    assert_eq!(skin.joints.len(), 20, "19 for the arms, 1 for the radio");
+    for (i, m) in skin.joint_matrices(&g.world_matrices(&g.rest_pose())).iter().enumerate() {
+        assert!(m.approx_eq(&Mat4::IDENTITY, 1e-4), "joint {i} moves the mesh at rest");
+    }
+    assert!((length(&g, "Idle") - 3.0).abs() < 0.05 && (length(&g, "Key") - crate::radio::KEY).abs() < 0.05, "idle {}, key {}", length(&g, "Idle"), length(&g, "Key"));
+    // Where it's held (what it's moved over from, in a narrow pane): out
+    // at the right of the view, in its lower half.
+    let held = |clip: &str, t: f64| {
+        let mut pose = g.rest_pose();
+        g.animations.iter().find(|a| a.name.as_deref() == Some(clip)).expect("the clip").sample(t, &mut pose);
+        let bone = g.nodes.iter().position(|n| n.name.as_deref() == Some("gun")).expect("its bone");
+        g.world_matrices(&pose)[bone].transform_point(Vec3::ZERO)
+    };
+    let at = held("Idle", 0.0);
+    assert!((at - super::RADIO_AT).length() < 0.02, "held at {at:?}");
+    let (x, y) = on_screen(at).expect("in front of the eye");
+    assert!(x > 0.5 && x < 0.9 && y < -0.3 && y > -1.0, "on screen at {x:.2}, {y:.2}");
+    // Keyed, it's brought up and in, towards the mouth.
+    let spoken = held("Key", 0.3);
+    assert!(spoken.x < at.x - 0.04 && spoken.y > at.y + 0.03 && spoken.z > at.z + 0.04, "keyed at {spoken:?}");
 }
 
 #[test]

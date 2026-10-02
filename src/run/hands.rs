@@ -4,7 +4,8 @@
 //! when there's nothing, and the hands kept in step with the bag: a gun's
 //! rounds go back into it (and rounds loaded into it in the bag come into
 //! the hands), a weapon thrown out of its slot is let go of, one picked up
-//! into empty hands is taken up.
+//! into empty hands is taken up. With the radio out (`radio.rs`) what's
+//! held waits, put away, till the radio is.
 
 use lntrn_ui::Ui;
 
@@ -48,7 +49,12 @@ impl Seat {
         // What's held was thrown out of its slot: it's gone from the hands.
         let lost = hands.held.is_some_and(|s| self.bag.slot(s).and_then(|st| st.kind.weapon()) != Some(hands.weapon));
         if lost {
-            self.take_up(combat, self.first_armed());
+            // (The radio out, it waits its turn.)
+            if self.radio_out() {
+                combat.arms[self.n].hands.put_away(self.first_armed());
+            } else {
+                self.take_up(combat, self.first_armed());
+            }
             return;
         }
         // The gun last in hand: what a pad's Y goes back to from the blade.
@@ -59,10 +65,14 @@ impl Seat {
         let swap = self.input.swap();
         if swap == Some(Swap::Blade) && free && self.bag.slot(Slot::Melee).is_some() {
             combat.arms[self.n].hands.put_away(Some(Slot::Melee));
+            self.radio_away(combat);
         }
         // Put away: up with what's next (if it's still there). (Not while
-        // Y's down still: it may yet be the blade that's wanted.)
-        if let Some(next) = combat.arms[self.n].hands.stowed() {
+        // Y's down still: it may yet be the blade that's wanted. Nor with
+        // the radio out: the hands are its, till a weapon's asked for.)
+        if let Some(next) = combat.arms[self.n].hands.stowed()
+            && !self.radio_out()
+        {
             if self.input.swapping() {
                 return;
             }
@@ -95,6 +105,7 @@ impl Seat {
         }
         if free && let Some(slot) = want {
             combat.arms[self.n].hands.put_away(Some(slot));
+            self.radio_away(combat);
         }
     }
 

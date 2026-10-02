@@ -69,8 +69,9 @@ impl Control {
 /// Which action each control is, a pad's way: Call of Duty's layout, kept
 /// as a table so it can be rebound. The left stick walks and the right
 /// looks (`look.rs`); X is both reload and interact, and which it is goes
-/// by whether something's in front of the player to use; View is both the
-/// bag (tapped) and the map (held) ([`super::Input`]).
+/// by whether something's in front of the player to use; View is the bag
+/// (tapped) and, held, the map or the radio, whichever there is
+/// ([`super::Input`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PadBinds {
     actions: [Option<Control>; Action::ALL.len()],
@@ -100,7 +101,8 @@ impl Default for PadBinds {
             Action::Plate => b(Button::Down),
             Action::Throw => b(Button::RightBumper),
             Action::NextThrowable => b(Button::LeftBumper),
-            Action::Inventory | Action::Map => b(Button::Select),
+            // (Held, View's the map; or, where there's none, the radio.)
+            Action::Inventory | Action::Map | Action::Radio => b(Button::Select),
         });
         Self { actions, next_weapon: Control::Button(Button::North), pause: Control::Button(Button::Start) }
     }

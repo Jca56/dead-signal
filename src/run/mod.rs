@@ -2,7 +2,8 @@
 //! movement, shots and healing, their health and stamina, the count of
 //! what happened); what's in hand (`hands.rs`); what's carried and found
 //! (`loot.rs`); going down and being picked up, playing together
-//! (`down.rs`); and what the players share: the dead brought in, the ways
+//! (`down.rs`); the radio they pull out (`radio.rs`); and what the players
+//! share: the dead brought in, the ways
 //! out (`out.rs`) or a holdout's rounds (`holdout.rs`), and the end, when
 //! it comes to that.
 
@@ -11,6 +12,7 @@ mod hands;
 mod holdout;
 mod loot;
 mod out;
+mod radio;
 mod seat;
 mod throwing;
 

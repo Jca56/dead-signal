@@ -343,6 +343,40 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 turn + click + spring
             })
         }
+        Sfx::RadioOn => {
+            // The handset switched on: its knob clicked round, and a
+            // breath of hiss as the squelch opens and shuts.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.3, 0.4, |t, n| {
+                let x = n.next();
+                let click = g.run(x, 2400.0, 0.5).1 * env(t, 0.0004, 0.006) + sine(t, 1300.0) * env(t, 0.0006, 0.012) * 0.5;
+                let open = (t - 0.04).max(0.0);
+                let hiss = f.run(x, 2900.0, 0.8).1 * env(open, 0.01, 0.07) * f32::from(t >= 0.04) * 0.55;
+                click + hiss
+            })
+        }
+        Sfx::RadioTalk => {
+            // The talk button down: its click, and the carrier coming up
+            // under a thin hiss.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.22, 0.38, |t, n| {
+                let x = n.next();
+                let click = g.run(x, 3000.0, 0.4).1 * env(t, 0.0003, 0.005);
+                let hiss = f.run(x, 3400.0, 0.9).1 * env(t, 0.015, 0.09) * 0.4;
+                click + hiss + sine(t, 420.0) * env(t, 0.004, 0.05) * 0.25
+            })
+        }
+        Sfx::RadioOver => {
+            // Let go: the roger beep, two notes up, and the squelch's
+            // tail after it.
+            let mut f = Svf::default();
+            render(0.42, 0.42, |t, n| {
+                let note = |from: f32, hz: f32| if t >= from { sine(t - from, hz) * env(t - from, 0.004, 0.035) * f32::from(t - from < 0.09) } else { 0.0 };
+                let tail = (t - 0.2).max(0.0);
+                let hiss = f.run(n.next(), 3000.0, 0.8).1 * env(tail, 0.004, 0.05) * f32::from(t >= 0.2) * 0.5;
+                note(0.0, 1250.0) + note(0.1, 1660.0) + hiss
+            })
+        }
         Sfx::Static => {
             // A radio opening: a burst of hiss, chirps bleeding through.
             let (mut f, mut g) = (Svf::default(), Svf::default());

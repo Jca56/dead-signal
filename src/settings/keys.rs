@@ -31,6 +31,7 @@ pub enum Action {
     Interact,
     Inventory,
     Map,
+    Radio,
 }
 
 /// A mouse button.
@@ -49,7 +50,7 @@ pub enum Bind {
 }
 
 impl Action {
-    pub const ALL: [Action; 23] = [
+    pub const ALL: [Action; 24] = [
         Action::Forward,
         Action::Back,
         Action::Left,
@@ -73,6 +74,7 @@ impl Action {
         Action::Interact,
         Action::Inventory,
         Action::Map,
+        Action::Radio,
     ];
 
     /// Its name in the file.
@@ -101,6 +103,7 @@ impl Action {
             Action::Interact => "interact",
             Action::Inventory => "inventory",
             Action::Map => "map",
+            Action::Radio => "radio",
         }
     }
 
@@ -130,6 +133,7 @@ impl Action {
             Action::Interact => "INTERACT / SEARCH",
             Action::Inventory => "INVENTORY",
             Action::Map => "MAP",
+            Action::Radio => "RADIO",
         }
     }
 
@@ -160,6 +164,7 @@ impl Action {
             Action::Interact => c('e'),
             Action::Inventory => Bind::Key(Key::Tab),
             Action::Map => c('m'),
+            Action::Radio => c('q'),
         }
     }
 }
