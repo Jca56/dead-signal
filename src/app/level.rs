@@ -14,8 +14,14 @@ use super::DeadSignal;
 use crate::exits::{self, Exits};
 use crate::map::build::{Blueprint, Building, Built};
 use crate::map::scatter::Scenery;
+use bevy_ecs::prelude::{With, Without};
+
+use crate::render::Draw;
 use crate::world::{Blink, Bounds, Ground, Look, Model, OnMap, Placed, Solid};
 use crate::{containers, style, zombie};
+
+/// How far past a holdout's compound shadows are cast (the treeline's).
+const SHADE_PAST: f64 = 22.0;
 
 impl DeadSignal {
     /// Start building a new map, on a seed of its own.
@@ -68,6 +74,7 @@ impl DeadSignal {
         let game = &mut self.game;
         game.clear_map();
         game.hide_title();
+        self.motes.clear();
         renderer.rewind(self.mark);
         for chunk in chunks {
             let mesh = renderer.add_mesh(&chunk.vertices);
@@ -100,10 +107,25 @@ impl DeadSignal {
         let ground = game.ground().clone();
         exits.ring_zones(|centre, radius| renderer.add_mesh(&exits::ring(&ground, centre, radius)));
         game.world.insert_resource(exits);
-        // A holdout's boards, doors and wall buys.
+        // A holdout's boards, doors and wall buys; and its night: what
+        // stands still about the compound casts the moon's shadows, and
+        // keeps the sky off what's under it.
         if let Some(arena) = &arena {
             let items = game.world.get_resource::<crate::items::Meshes>().cloned().unwrap_or_default();
             crate::holdout::props::spawn(&mut game.world, arena, &items, |v| renderer.add_mesh(v));
+            crate::holdout::lamps::spawn(&mut game.world, arena, |v| renderer.add_mesh(v));
+            let (lo, hi) = (arena.bounds.0 - Vec3::new(SHADE_PAST, 8.0, SHADE_PAST), arena.bounds.1 + Vec3::new(SHADE_PAST, 46.0, SHADE_PAST));
+            let casters: Vec<Draw> = game
+                .world
+                .query_filtered::<(&Model, &Placed, &Bounds), (With<OnMap>, Without<crate::holdout::props::Moves>)>()
+                .iter(&game.world)
+                .filter(|(_, _, b)| (b.centre.max(lo).min(hi) - b.centre).length() <= b.radius)
+                .map(|(m, p, _)| Draw { mesh: m.0, model: p.0, emissive: 0.0, fog: 1.0, tint: [1.0; 3] })
+                .collect();
+            renderer.shade_over(Some((lo, hi, style::NIGHT.sun_dir)));
+            renderer.stand(&casters);
+        } else {
+            renderer.shade_over(None);
         }
         self.arena = arena;
         renderer.upload(gpu);

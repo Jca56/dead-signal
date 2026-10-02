@@ -135,6 +135,15 @@ fn pick<const N: usize>(dice: &mut Dice, from: [Rgb; N]) -> Rgb {
 
 /// Build the blocks of `plan`.
 pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
+    // (Left to the damp, paint goes drab and dark: most of its colour
+    // gone, and a good deal of its light.)
+    let worn = |c: Rgb, keep: f32| {
+        if !plan.grim {
+            return c;
+        }
+        let grey = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+        c.map(|v| (v + (grey - v) * 0.6) * keep)
+    };
     let siding = match plan.kind {
         Kind::Store | Kind::Garage => pick(dice, STORE_WALLS),
         Kind::Armory => CONCRETE,
@@ -147,6 +156,7 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         Kind::Cabin => LOGS[0],
         _ => pick(dice, SIDINGS),
     };
+    let siding = worn(siding, 0.8);
     // Outside, a barn's boards run up and down, a cabin's logs along: each
     // stretch of skin cut into strips of two shades.
     let banding: Option<(bool, f64, [Rgb; 2])> = match plan.kind {
@@ -170,6 +180,7 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
             (_, Use::Bath) => [0.70, 0.74, 0.74],
             _ => pick(dice, PAINTS),
         })
+        .map(|c| worn(c, 0.62))
         .collect();
     // (A void is painted as the room it's the top of.)
     let paints: Vec<Rgb> = plan.rooms.iter().enumerate().map(|(i, r)| if r.use_ == Use::Void { under(plan, i).map_or(paints[i], |u| paints[u]) } else { paints[i] }).collect();

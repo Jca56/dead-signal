@@ -1,12 +1,13 @@
 //! What a hit throws up: chips of whatever was struck (dirt, splinters,
 //! concrete, sparks off steel) flying off the surface, tumbling, falling
-//! and shrinking away; and the hitmarker a hit flashes at the crosshair
-//! (each player's own, kept with their arms).
+//! and shrinking away; a shot's flash and a blast's, as light on what's
+//! about them (at night); and the hitmarker a hit flashes at the
+//! crosshair (each player's own, kept with their arms).
 
 use lntrn_math::{Color, Mat4, Quat, Vec3};
 
 use crate::collide::Surface;
-use crate::render::{Draw, MeshId, Renderer, Vertex};
+use crate::render::{Draw, Light, MeshId, Renderer, Vertex};
 
 const GRAVITY: f64 = 14.0;
 const SIZE: f64 = 0.045;
@@ -45,9 +46,18 @@ impl Marker {
     }
 }
 
+/// A flash of light: as bright as it gets, how long it lasts, how long
+/// it has left.
+struct Flash {
+    light: Light,
+    life: f64,
+    left: f64,
+}
+
 #[derive(Default)]
 pub struct Fx {
     chips: Vec<Chip>,
+    flashes: Vec<Flash>,
     mesh: Option<MeshId>,
     /// A little noise source, the same every run.
     seed: u32,
@@ -115,7 +125,22 @@ impl Fx {
         }
     }
 
+    /// A flash at `at`, reaching `radius`, of `color` (linear), gone in
+    /// `life` seconds.
+    pub fn flash(&mut self, at: Vec3, radius: f64, color: [f32; 3], life: f64) {
+        self.flashes.push(Flash { light: Light::open(at, radius, color), life, left: life });
+    }
+
+    /// The flashes as they are now, each fading as it goes.
+    pub fn flashes(&self) -> impl Iterator<Item = Light> + '_ {
+        self.flashes.iter().map(|f| Light { color: f.light.color.map(|c| c * (f.left / f.life) as f32), ..f.light })
+    }
+
     pub fn update(&mut self, dt: f64) {
+        for f in &mut self.flashes {
+            f.left -= dt;
+        }
+        self.flashes.retain(|f| f.left > 0.0);
         for c in &mut self.chips {
             c.vel.y -= GRAVITY * dt;
             c.vel *= (-1.5 * dt).exp();

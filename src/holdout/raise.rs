@@ -6,7 +6,7 @@
 
 use lntrn_math::{Vec2, Vec3};
 
-use super::arena::{Buy, Door, Window};
+use super::arena::{Buy, Door, LampAt, Window};
 use super::layout::{Build, BuyAt, Gap, House, Layout, Line, Prop, Run, ew, ns, world, yaw};
 use crate::map::dig::Dig;
 use crate::collide::Surface;
@@ -15,11 +15,13 @@ use crate::loot::tables::Source;
 use crate::map::Spot;
 use crate::map::building::Building;
 use crate::map::building::furnish;
-use crate::map::building::plan::{self, CEILING, Opening, Plan, Room, STOREY, Stair};
+use crate::map::building::plan::{self, CEILING, Opening, Plan, Room, STOREY, Stair, Use};
 use crate::map::building::shape::{Block, RAISED, Rgb, Stuff};
 use crate::map::scatter::{Piece, Scenery};
 use crate::zombie::nav::Gate;
 
+/// A big room's lamps are no further apart than this.
+const LAMPS_APART: f64 = 8.0;
 /// A window the dead come in by, in a building: how wide, from how high
 /// to how high; a hole in a wall for them, the same.
 const WINDOW: (f64, f64, f64) = (1.2, 0.9, 2.1);
@@ -68,6 +70,7 @@ pub struct Raised {
     pub windows: Vec<Window>,
     pub doors: Vec<Door>,
     pub buys: Vec<Buy>,
+    pub lamps: Vec<LampAt>,
     pub pieces: Vec<Piece>,
     pub containers: Vec<(Source, Spot)>,
     /// Where the ground's dug out: under every building with a cellar.
@@ -87,6 +90,9 @@ pub fn raise(layout: &Layout) -> Raised {
     }
     for b in layout.buys {
         buy(layout, b, &mut out);
+    }
+    for f in layout.floods {
+        out.lamps.push(LampAt { at: world(Vec2::new(f.0, f.1), f.2), room: None, red: false, start: false });
     }
     for p in layout.props {
         prop(layout, p, 0, &mut out);
@@ -118,7 +124,7 @@ fn house(layout: &Layout, h: &House, out: &mut Raised) {
     let walls = (0..storeys).flat_map(|s| plan::walls_of(&rooms, s)).collect();
     let stairs = h.stairs.iter().map(|s| Stair { storey: h.storey(s.0), x: s.1, z0: s.2 }).collect();
     let (w, d) = h.size;
-    let mut plan = Plan { kind: h.kind, w, d, storeys, cellars: h.cellars, rooms, walls, openings: Vec::new(), stairs, flat_roof: h.flat_roof, ridge_along_x: w >= d, ridge: plan::RIDGE, bars: Vec::new() };
+    let mut plan = Plan { kind: h.kind, w, d, storeys, cellars: h.cellars, rooms, walls, openings: Vec::new(), stairs, flat_roof: h.flat_roof, ridge_along_x: w >= d, ridge: plan::RIDGE, bars: Vec::new(), grim: true };
     let wall_of = |plan: &Plan, on: Line, level: i8| plan::wall_at(&plan.walls, h.storey(level), on.along_x, on.at, on.u).unwrap_or_else(|| panic!("{}: no wall on {on:?} (level {level})", h.name));
     for door in h.doors {
         let wall = wall_of(&plan, door.0, door.1);
@@ -189,6 +195,23 @@ fn house(layout: &Layout, h: &House, out: &mut Raised) {
         let half = door.2 * 0.5 + DOOR_LAP;
         let (p, q) = (local(mid - on.along() * half - on.square(DOOR_THICK * 0.5), floor), local(mid + on.along() * half + on.square(DOOR_THICK * 0.5), floor + door_head(door.2)));
         out.doors.push(Door { lo: p.min(q), hi: p.max(q), cost, zones: (a, b_), heap: false, solid: 0..0, gate: Gate::default() });
+    }
+    // A lamp in every room (a big one's are 8 m apart at most), hung from
+    // its ceiling: the one over it, where there's only air above.
+    let start = layout.zone_at(Vec2::new(layout.start.0, layout.start.1), 0);
+    for r in h.rooms.iter().filter(|r| r.5 != Use::Void) {
+        let tall = h.rooms.iter().any(|v| v.5 == Use::Void && v.0 == r.0 + 1 && v.1 < r.3 && v.3 > r.1 && v.2 < r.4 && v.4 > r.2);
+        let floor = floor_of(r.0);
+        let top = floor + if tall { STOREY + CEILING } else { CEILING };
+        let (lo, hi) = (local(Vec2::new(f64::from(r.1), f64::from(r.2)), floor - 0.1), local(Vec2::new(f64::from(r.3), f64::from(r.4)), top + 0.1));
+        let (w, d) = (f64::from(r.3 - r.1), f64::from(r.4 - r.2));
+        let (across, down) = ((w / LAMPS_APART).ceil().max(1.0), (d / LAMPS_APART).ceil().max(1.0));
+        for i in 0..across as u32 {
+            for j in 0..down as u32 {
+                let p = Vec2::new(f64::from(r.1) + w * (f64::from(i) + 0.5) / across, f64::from(r.2) + d * (f64::from(j) + 0.5) / down);
+                out.lamps.push(LampAt { at: local(p, top - 0.06), room: Some((lo.min(hi), lo.max(hi))), red: r.0 < 0, start: Some(r.6) == start });
+            }
+        }
     }
     out.buildings.push(b);
 }

@@ -32,6 +32,9 @@ pub const AIR: Atmosphere = Atmosphere {
     sun: Color::rgb(0.52, 0.50, 0.45),
     ambient_sky: Color::rgb(0.66, 0.70, 0.70),
     ambient_ground: Color::rgb(0.33, 0.31, 0.27),
+    shade: 0.0,
+    indoor: 1.0,
+    stars: 0.0,
 };
 
 /// The air gone bad, a hound round's: the fog thick and close, the colour
@@ -40,23 +43,63 @@ const GLOOM: Atmosphere = Atmosphere {
     fog: Color::rgb(0.30, 0.20, 0.17),
     density: 0.034,
     zenith: Color::rgb(0.15, 0.11, 0.11),
-    sun_dir: AIR.sun_dir,
     sun: Color::rgb(0.40, 0.26, 0.20),
     ambient_sky: Color::rgb(0.52, 0.42, 0.40),
     ambient_ground: Color::rgb(0.30, 0.24, 0.21),
+    ..AIR
 };
 
-/// The air, `gloom` (0–1) of the way gone bad.
-pub fn air(gloom: f64) -> Atmosphere {
+/// A clear night under a high moon (a holdout's): everything a deep blue,
+/// what the moon's on picked out cold, what's under a roof all but black
+/// without a lamp. Shadows are cast.
+pub const NIGHT: Atmosphere = Atmosphere {
+    fog: Color::rgb(0.045, 0.060, 0.100),
+    density: 0.016,
+    zenith: Color::rgb(0.012, 0.018, 0.045),
+    sun_dir: Vec3::new(-0.5, 0.75, 0.55),
+    sun: Color::rgb(0.36, 0.42, 0.58),
+    ambient_sky: Color::rgb(0.22, 0.27, 0.40),
+    ambient_ground: Color::rgb(0.09, 0.10, 0.14),
+    shade: 1.0,
+    indoor: 0.4,
+    stars: 1.0,
+};
+
+/// A night gone bad, a hound round's: the dark red of a fire behind the
+/// fog, the stars all but gone.
+const NIGHT_GLOOM: Atmosphere = Atmosphere {
+    fog: Color::rgb(0.17, 0.06, 0.05),
+    density: 0.030,
+    zenith: Color::rgb(0.05, 0.015, 0.02),
+    sun: Color::rgb(0.44, 0.26, 0.24),
+    ambient_sky: Color::rgb(0.30, 0.19, 0.20),
+    ambient_ground: Color::rgb(0.13, 0.08, 0.08),
+    stars: 0.35,
+    ..NIGHT
+};
+
+/// The air: a day's or a `night`'s, `gloom` (0–1) of the way gone bad; a
+/// night's own light (the moon's, the sky's: not its fog) `bright` times
+/// as bright, as the player's set it.
+pub fn air(night: bool, gloom: f64, bright: f64) -> Atmosphere {
+    let (from, to) = if night { (NIGHT, NIGHT_GLOOM) } else { (AIR, GLOOM) };
     let t = gloom.clamp(0.0, 1.0);
     let mix = |a: Color, b: Color| Color::rgb(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+    // (Brighter as the eye has it: the colours are as they look, not as
+    // light.)
+    let k = if night { bright.max(0.0).powf(1.0 / 2.2) } else { 1.0 };
+    let lit = |a: Color, b: Color| {
+        let c = mix(a, b);
+        Color::rgb((c.r * k).min(1.0), (c.g * k).min(1.0), (c.b * k).min(1.0))
+    };
     Atmosphere {
-        fog: mix(AIR.fog, GLOOM.fog),
-        density: AIR.density + (GLOOM.density - AIR.density) * t,
-        zenith: mix(AIR.zenith, GLOOM.zenith),
-        sun_dir: AIR.sun_dir,
-        sun: mix(AIR.sun, GLOOM.sun),
-        ambient_sky: mix(AIR.ambient_sky, GLOOM.ambient_sky),
-        ambient_ground: mix(AIR.ambient_ground, GLOOM.ambient_ground),
+        fog: mix(from.fog, to.fog),
+        density: from.density + (to.density - from.density) * t,
+        zenith: mix(from.zenith, to.zenith),
+        sun: lit(from.sun, to.sun),
+        ambient_sky: lit(from.ambient_sky, to.ambient_sky),
+        ambient_ground: lit(from.ambient_ground, to.ambient_ground),
+        stars: from.stars + (to.stars - from.stars) * t,
+        ..from
     }
 }

@@ -1,26 +1,12 @@
 // Figures: skinned meshes out in the world (the dead), bent by their bones
-// and drawn like the rest of it, lit by the sky and taken by the fog. Every
+// and drawn like the rest of it, lit as `light.wgsl` has it (set before
+// this) and taken by the fog. Every
 // figure's bones sit in one buffer; each instance says where its own start.
 // A face's colour alpha names the region it's painted in (skin, top,
 // bottoms, accent, under: 0, 0.2 ... 0.8), its RGB the shade of it, and the
-// figure's palette the region's colour; an alpha of 1 is a colour of its own.
+// figure's palette the region's colour; an alpha of 1 is a colour of its
+// own, and of 0.9 a colour of its own that glows (a hound's embers).
 
-struct Globals {
-    view_proj: mat4x4<f32>,
-    camera: vec4<f32>,
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-    cam_forward: vec4<f32>,
-    fog: vec4<f32>,
-    zenith: vec4<f32>,
-    sun_dir: vec4<f32>,
-    sun_color: vec4<f32>,
-    ambient_sky: vec4<f32>,
-    ambient_ground: vec4<f32>,
-    params: vec4<f32>,
-};
-
-@group(0) @binding(0) var<uniform> g: Globals;
 @group(1) @binding(0) var<storage, read> joints: array<mat4x4<f32>>;
 
 struct VertexIn {
@@ -51,6 +37,7 @@ struct VertexOut {
     @location(1) normal: vec3<f32>,
     @location(2) color: vec3<f32>,
     @location(3) fog_amount: f32,
+    @location(4) glow: f32,
 };
 
 @vertex
@@ -66,7 +53,9 @@ fn vs(v: VertexIn) -> VertexOut {
     out.world = world.xyz;
     out.normal = normalize((model * vec4<f32>(v.normal, 0.0)).xyz);
     var palette = array<vec3<f32>, 6>(v.skin.rgb, v.top.rgb, v.bottom.rgb, v.accent.rgb, v.under.rgb, vec3<f32>(1.0));
-    let region = u32(clamp(round(v.color.a * 5.0), 0.0, 5.0));
+    let code = u32(clamp(round(v.color.a * 10.0), 0.0, 10.0));
+    let region = (code + 1u) / 2u;
+    out.glow = f32(code == 9u);
     out.color = v.color.rgb * palette[region] * v.look.yzw;
     out.fog_amount = v.look.x;
     return out;
@@ -75,10 +64,6 @@ fn vs(v: VertexIn) -> VertexOut {
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     let n = normalize(in.normal);
-    let hemi = mix(g.ambient_ground.rgb, g.ambient_sky.rgb, n.y * 0.5 + 0.5);
-    let sun = g.sun_color.rgb * max(dot(n, g.sun_dir.xyz), 0.0);
-    var color = in.color * (hemi + sun);
-    let d = distance(in.world, g.camera.xyz) * g.fog.a;
-    let fog = (1.0 - exp(-d * d)) * in.fog_amount;
-    return vec4<f32>(mix(color, g.fog.rgb, clamp(fog, 0.0, 1.0)), 1.0);
+    let color = in.color * mix(light_on(in.world, n), vec3<f32>(1.3), in.glow);
+    return vec4<f32>(fogged(color, in.world, in.fog_amount), 1.0);
 }

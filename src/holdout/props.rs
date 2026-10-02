@@ -34,6 +34,11 @@ const BOARD_TIP: f64 = 0.07;
 const OUTLINE: (f64, f64) = (1.3, 0.6);
 const LINE: f64 = 0.035;
 
+/// Something that comes and goes (a board, a door): its shadow's cast
+/// afresh every frame.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Moves;
+
 /// One of a window's boards, and where it's nailed.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Board {
@@ -76,7 +81,7 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
             let y = (w.head - w.sill) * (f64::from(k) + 0.5) / f64::from(BOARDS);
             let tip = if k % 2 == 0 { BOARD_TIP } else { -BOARD_TIP * 0.7 };
             let model = frame * Mat4::from_translation(Vec3::new(0.0, y, -BOARD_OUT - f64::from(k % 2) * BOARD_THICK)) * Mat4::from_quat(Quat::from_rotation_z(tip));
-            world.spawn((Board { window: i, k, model }, Placed(model), Model(meshes[k as usize % 2]), Look::default(), OnMap));
+            world.spawn((Board { window: i, k, model }, Moves, Placed(model), Model(meshes[k as usize % 2]), Look::default(), OnMap));
         }
     }
     for (i, d) in arena.doors.iter().enumerate() {
@@ -90,15 +95,20 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
             mesh(&boxes(&[(lo, hi, DOOR, Mat4::IDENTITY), rail(lo.y + 0.3, lo.y + 0.42), rail(hi.y - 0.45, hi.y - 0.33)]))
         };
         let model = Mat4::from_translation(mid);
-        world.spawn((Door { door: i, model }, Placed(model), Model(m), Look::default(), OnMap));
+        world.spawn((Door { door: i, model }, Moves, Placed(model), Model(m), Look::default(), OnMap));
     }
     let (ow, oh) = OUTLINE;
-    let outline = mesh(&boxes(&[
+    let mut outline = boxes(&[
         (Vec3::new(-ow * 0.5, -oh * 0.5, 0.0), Vec3::new(ow * 0.5, -oh * 0.5 + LINE, 0.01), CHALK, Mat4::IDENTITY),
         (Vec3::new(-ow * 0.5, oh * 0.5 - LINE, 0.0), Vec3::new(ow * 0.5, oh * 0.5, 0.01), CHALK, Mat4::IDENTITY),
         (Vec3::new(-ow * 0.5, -oh * 0.5, 0.0), Vec3::new(-ow * 0.5 + LINE, oh * 0.5, 0.01), CHALK, Mat4::IDENTITY),
         (Vec3::new(ow * 0.5 - LINE, -oh * 0.5, 0.0), Vec3::new(ow * 0.5, oh * 0.5, 0.01), CHALK, Mat4::IDENTITY),
-    ]));
+    ]);
+    // (Chalk that shows in the dark: what's for sale is found by it.)
+    for corner in &mut outline {
+        corner.emissive = [corner.color[0] * 0.5, corner.color[1] * 0.5, corner.color[2] * 0.5];
+    }
+    let outline = mesh(&outline);
     let chalk = Look { emissive: 1.0, fog: 0.8, tint: [1.0; 3] };
     for b in &arena.buys {
         let frame = facing(b.at, b.facing);
@@ -163,7 +173,7 @@ fn heap(lo: Vec3, hi: Vec3) -> Vec<Vertex> {
 
 /// Boxes' triangles, each face outwards, from their corners (about their
 /// own middles, then turned and moved), and their colours.
-fn boxes(list: &[(Vec3, Vec3, [f32; 3], Mat4)]) -> Vec<Vertex> {
+pub(super) fn boxes(list: &[(Vec3, Vec3, [f32; 3], Mat4)]) -> Vec<Vertex> {
     let mut out = Vec::new();
     for &(lo, hi, colour, turn) in list {
         let color = colour.map(linear);

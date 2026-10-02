@@ -41,6 +41,7 @@ pub enum Field {
     SideBySide,
     HealthBars,
     DamageNumbers,
+    NightBrightness,
 }
 
 /// What a setting can be.
@@ -63,7 +64,7 @@ pub enum Show {
 }
 
 impl Field {
-    pub const ALL: [Field; 23] = [
+    pub const ALL: [Field; 24] = [
         Field::Sensitivity,
         Field::AdsSensitivity,
         Field::ToggleCrouch,
@@ -87,6 +88,7 @@ impl Field {
         Field::SideBySide,
         Field::HealthBars,
         Field::DamageNumbers,
+        Field::NightBrightness,
     ];
 
     /// Its name in the file.
@@ -115,6 +117,7 @@ impl Field {
             Field::SideBySide => "side_by_side",
             Field::HealthBars => "health_bars",
             Field::DamageNumbers => "damage_numbers",
+            Field::NightBrightness => "night_brightness",
         }
     }
 
@@ -144,6 +147,7 @@ impl Field {
             Field::SideBySide => "SIDE BY SIDE",
             Field::HealthBars => "HEALTH BARS",
             Field::DamageNumbers => "DAMAGE NUMBERS",
+            Field::NightBrightness => "NIGHT BRIGHTNESS",
         }
     }
 
@@ -173,6 +177,7 @@ impl Field {
             Field::SideBySide => "Two players' halves side by side, not one above the other",
             Field::HealthBars => "A bar over one of the dead you've hurt, or have the crosshair on",
             Field::DamageNumbers => "What each of your hits took, thrown up where it struck",
+            Field::NightBrightness => "How much you can make out in the dark, away from the lamps",
         }
     }
 
@@ -186,6 +191,7 @@ impl Field {
             Field::Master | Field::Music | Field::Effects | Field::Zombies => slider(0.0, 1.0, 0.01, Show::Percent),
             Field::HeadBob => slider(0.0, 1.5, 0.05, Show::Percent),
             Field::UiScale => slider(0.75, 1.5, 0.05, Show::Percent),
+            Field::NightBrightness => slider(0.5, 2.5, 0.05, Show::Percent),
             Field::Fullscreen | Field::Vsync | Field::MusicInRuns | Field::Crosshair | Field::ToggleCrouch | Field::ToggleSprint | Field::DevMode | Field::InvertLook | Field::AimAssist | Field::Rumble | Field::SideBySide | Field::HealthBars | Field::DamageNumbers => Range::Toggle,
         }
     }
@@ -252,6 +258,8 @@ pub struct Settings {
     /// The dead's bars over them, and the numbers hits throw up.
     pub health_bars: bool,
     pub damage_numbers: bool,
+    /// Times a night's own light (the moon's and the sky's).
+    pub night_brightness: f64,
 }
 
 impl Default for Settings {
@@ -281,6 +289,7 @@ impl Default for Settings {
             side_by_side: false,
             health_bars: true,
             damage_numbers: true,
+            night_brightness: 1.0,
         }
     }
 }
@@ -313,6 +322,7 @@ impl Settings {
             Field::SideBySide => on(self.side_by_side),
             Field::HealthBars => on(self.health_bars),
             Field::DamageNumbers => on(self.damage_numbers),
+            Field::NightBrightness => self.night_brightness,
         }
     }
 
@@ -344,6 +354,7 @@ impl Settings {
             Field::SideBySide => self.side_by_side = on,
             Field::HealthBars => self.health_bars = on,
             Field::DamageNumbers => self.damage_numbers = on,
+            Field::NightBrightness => self.night_brightness = v,
         }
     }
 

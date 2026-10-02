@@ -133,6 +133,7 @@ impl Run {
             combat.drop_for(game, e);
         }
         for at in std::mem::take(&mut booms.blasts) {
+            combat.fx.flash(at + Vec3::new(0.0, 0.8, 0.0), 20.0, [3.0, 2.0, 1.0], 0.35);
             combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Metal, 50);
             combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Dirt, 40);
         }

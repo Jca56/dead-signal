@@ -99,6 +99,13 @@
 - [ ] Armor in HOLDOUT
   - [x] Helmets and vests on the walls, worn as they're bought, made whole again for half; armor plates to carry and slot in. No weight; and armor stops a hound's bite catching.
   - [ ] Playtest, and what it turns up.
+- [ ] HOLDOUT at night
+  - [x] Lights: the renderer's lit by the nearest two dozen each pane; a lamp's stays in its own room.
+  - [x] The moon's shadows (a map of the whole compound, what moves drawn into its own each frame), and no sky under a roof.
+  - [x] Always night: a moon and stars, lamps on failing power (some flicker, some dead), red ones in the bunker, floods on the walls; fires, hounds, rifts, shots and blasts light what's about them.
+  - [x] Embers and sparks, falling ash, mist on the ground (a blended pass). Darker, drab paint on its walls. NIGHT BRIGHTNESS in Settings.
+  - [x] `app/shots.rs`: the game's own frames drawn off screen to files, to look at lighting away from the window.
+  - [ ] Playtest, and what it turns up.
 - [ ] Waves tuning and difficulty (the counts are still the small map's).
 - [ ] Upgradable guns (the bench goes in the bunker's armory).
 - [ ] Perks

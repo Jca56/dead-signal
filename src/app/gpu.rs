@@ -19,7 +19,9 @@ use crate::survivor;
 use crate::viewmodel::Viewmodel;
 use crate::player::Player;
 use crate::weapon::Weapon;
-use crate::world::{Bounds, Look, Model, Placed};
+use bevy_ecs::prelude::With;
+
+use crate::world::{Bounds, Look, Model, Placed, Solid};
 use crate::zombie::{self, figure::Figure};
 
 /// How far into a scope's view before the gun is no longer drawn.
@@ -36,6 +38,7 @@ impl AppHost for DeadSignal {
             Err(e) => log_error!("title_scene: {e}"),
         }
         self.combat.init(&mut renderer);
+        self.motes.init(&mut renderer);
         zombie::spit::load(&mut renderer, &mut self.game.world);
         crate::throw::draw::load(&mut renderer, &mut self.game.world);
         self.load_things(&mut renderer, gpu, images);
@@ -77,7 +80,30 @@ impl AppHost for DeadSignal {
     fn render<'f>(&'f mut self, cx: &mut RenderCx<'f, '_>) {
         let started = Instant::now();
         let Some(renderer) = self.renderer.as_mut() else { return };
-        let panes: Vec<Pane> = self.cameras.iter().zip(&self.shares).map(|(&camera, &share)| Pane { camera, rect: super::panes::in_pixels(share, cx.size) }).collect();
+        // A holdout's is a night (a hound round's air its own); the eye
+        // under a roof gets less of the sky, and behind something, none of
+        // the moon.
+        let holdout = if self.screen == Screen::Run { self.run.holdout.as_ref() } else { None };
+        let bright = self.game.world.resource::<crate::settings::Settings>().night_brightness;
+        let air = style::air(holdout.is_some(), holdout.map_or(0.0, |h| h.rounds.gloom), bright);
+        let solid = &self.game.world.resource::<Solid>().0;
+        let cover = |eye: lntrn_math::Vec3| {
+            if air.shade <= 0.0 {
+                return (1.0, 1.0);
+            }
+            let roofed = solid.raycast(eye, lntrn_math::Vec3::Y, 60.0).is_some();
+            let shadowed = solid.raycast(eye, air.sun_dir.normalize(), 150.0).is_some();
+            (if roofed { air.indoor } else { 1.0 }, if shadowed { 0.0 } else { 1.0 })
+        };
+        let panes: Vec<Pane> = self
+            .cameras
+            .iter()
+            .zip(&self.shares)
+            .map(|(&camera, &share)| {
+                let (sky, sun) = cover(camera.position);
+                Pane { camera, rect: super::panes::in_pixels(share, cx.size), sky, sun }
+            })
+            .collect();
         // What each pane sees: what's out of its view or lost in the fog is
         // left out of it.
         let sights: Vec<Frustum> = panes.iter().map(|p| p.camera.frustum(p.aspect(), FAR)).collect();
@@ -125,9 +151,19 @@ impl AppHost for DeadSignal {
                 renderer.draw_figure(FigureDraw { parts: f.parts.clone(), model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3], palette, hidden });
             }
         }
-        // (A hound round's air is its own.)
-        let gloom = if self.screen == Screen::Run { self.run.holdout.as_ref().map_or(0.0, |h| h.rounds.gloom) } else { 0.0 };
-        renderer.render(cx, &panes, &style::air(gloom), time);
+        // A night's lights; and what comes and goes casts its shadow as
+        // it stands now.
+        if air.shade > 0.0 {
+            crate::glow::gather(&mut self.game.world, &self.combat.fx, renderer, time);
+            if let Some(h) = holdout {
+                let dt = if self.game.simulating { self.game.clock().dt } else { 0.0 };
+                self.motes.frame(&mut self.game.world, renderer, &self.cameras, h.arena.bounds, time, dt);
+            }
+            for (model, placed) in self.game.world.query_filtered::<(&Model, &Placed), With<crate::holdout::props::Moves>>().iter(&self.game.world) {
+                renderer.cast(Draw { mesh: model.0, model: placed.0, emissive: 0.0, fog: 1.0, tint: [1.0; 3] });
+            }
+        }
+        renderer.render(cx, &panes, &air, time);
         self.perf.done(Phase::Render, started);
     }
 }

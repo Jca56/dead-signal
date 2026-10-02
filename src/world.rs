@@ -160,7 +160,7 @@ impl Game {
         world.insert_resource(zombie::Horde::default());
         let mut frame = Schedule::default();
         let mut fixed = Schedule::default();
-        frame.add_systems(blink);
+        frame.add_systems((blink, crate::holdout::lamps::flicker));
         player::install(&mut fixed);
         head::install(&mut frame);
         targets::install(&mut frame);

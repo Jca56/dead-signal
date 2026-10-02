@@ -73,7 +73,17 @@ pub(super) struct Skinned {
 /// A pane's arms this frame (if any), how they're seen (their projection),
 /// and its camera's basis (right, up, forward), which turns their normals
 /// to the world's for the light.
-pub(super) type PaneArms = (Option<SkinnedDraw>, Mat4, (Vec3, Vec3, Vec3));
+pub(super) type PaneArms = (Option<SkinnedDraw>, Mat4, (Vec3, Vec3, Vec3), Lit);
+
+/// How a pane's arms are lit: how much of the sky's light reaches them,
+/// how much of the sun's (or the moon's), and what's alight about them
+/// (linear RGB).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Lit {
+    pub sky: f32,
+    pub sun: f32,
+    pub glow: [f32; 3],
+}
 
 impl Skinned {
     pub(super) fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Self {
@@ -120,8 +130,9 @@ impl Skinned {
     /// Set this frame's arms up, a pane's at a time: their bones, where
     /// they sit, how they're seen and lit.
     pub(super) fn prepare(&mut self, gpu: &Gpu, panes: &[PaneArms], air: &Atmosphere) {
+        let scaled = |c: [f32; 4], k: f32, more: [f32; 3], share: f32| [c[0] * k + more[0] * share, c[1] * k + more[1] * share, c[2] * k + more[2] * share, c[3]];
         self.frame.clear();
-        for (i, (draw, proj, (right, up, forward))) in panes.iter().enumerate() {
+        for (i, (draw, proj, (right, up, forward), lit)) in panes.iter().enumerate() {
             let range = draw.as_ref().and_then(|d| self.meshes.get(d.mesh.0).copied());
             self.frame.push(range);
             let (Some(d), Some(_)) = (draw, range) else { continue };
@@ -139,9 +150,11 @@ impl Skinned {
                 model: d.model.to_gpu(),
                 to_world: [vec4(*right, 0.0), vec4(*up, 0.0), vec4(-*forward, 0.0)],
                 sun_dir: vec4(air.sun_dir.normalize(), 0.0),
-                sun_color: color4(air.sun, 1.0),
-                ambient_sky: color4(air.ambient_sky, 1.0),
-                ambient_ground: color4(air.ambient_ground, 1.0),
+                // (Under a roof, less of the sky; in a shadow, none of the
+                // sun; and whatever's alight near by.)
+                sun_color: scaled(color4(air.sun, 1.0), lit.sun, [0.0; 3], 0.0),
+                ambient_sky: scaled(color4(air.ambient_sky, 1.0), lit.sky, lit.glow, 1.0),
+                ambient_ground: scaled(color4(air.ambient_ground, 1.0), lit.sky, lit.glow, 0.6),
                 joints,
             };
             gpu.queue.write_buffer(&self.uniforms[i].0, 0, bytes_of(&u));

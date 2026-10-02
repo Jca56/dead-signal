@@ -198,6 +198,8 @@ pub struct Plan {
     /// Walls of bars (a cell's front), by their place in `walls`: seen
     /// and shot through, never walked through but at their doorways.
     pub bars: Vec<usize>,
+    /// Long left to the damp and the dirt: its paint gone drab and dark.
+    pub grim: bool,
 }
 
 /// A cut to make across a region: along x (at z) or along z (at x), and
@@ -334,7 +336,7 @@ pub(super) fn spots_along(plan: &Plan, w: usize, width: f64, every: f64) -> Vec<
 
 /// A house `w` by `d`, of one storey or two.
 pub fn house(dice: &mut Dice, w: i32, d: i32, two: bool) -> Plan {
-    let mut plan = Plan { kind: Kind::House, w, d, storeys: 1, cellars: 0, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE, bars: Vec::new() };
+    let mut plan = Plan { kind: Kind::House, w, d, storeys: 1, cellars: 0, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE, bars: Vec::new(), grim: false };
     let two = two && d >= 8 && w >= HALL + 2 * MIN_ROOM;
     let mut cuts = Vec::new();
     let mut rects = Vec::new();
@@ -416,7 +418,7 @@ pub fn house(dice: &mut Dice, w: i32, d: i32, two: bool) -> Plan {
 
 /// A store `w` by `d`: the shop floor at the front, a back room.
 pub fn store(dice: &mut Dice, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind: Kind::Store, w, d, storeys: 1, cellars: 0, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: true, ridge_along_x: true, ridge: RIDGE, bars: Vec::new() };
+    let mut plan = Plan { kind: Kind::Store, w, d, storeys: 1, cellars: 0, rooms: Vec::new(), walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: true, ridge_along_x: true, ridge: RIDGE, bars: Vec::new(), grim: false };
     let back = 4.min(d - MIN_ROOM - 5).max(MIN_ROOM);
     plan.rooms.push(Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d - back, use_: Use::Shop });
     plan.rooms.push(Room { storey: 0, x0: 0, z0: d - back, x1: w, z1: d, use_: Use::Back });
@@ -426,7 +428,7 @@ pub fn store(dice: &mut Dice, w: i32, d: i32) -> Plan {
 
 /// A house boarded up all round, nothing inside worth drawing.
 pub fn shell(dice: &mut Dice, w: i32, d: i32) -> Plan {
-    let mut plan = Plan { kind: Kind::Shell, w, d, storeys: 1, cellars: 0, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_: Use::Hall }], walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE, bars: Vec::new() };
+    let mut plan = Plan { kind: Kind::Shell, w, d, storeys: 1, cellars: 0, rooms: vec![Room { storey: 0, x0: 0, z0: 0, x1: w, z1: d, use_: Use::Hall }], walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: false, ridge_along_x: w >= d, ridge: RIDGE, bars: Vec::new(), grim: false };
     plan.walls = walls_of(&plan.rooms, 0);
     for i in 0..plan.walls.len() {
         let spots = spots_along(&plan, i, 1.2, 3.0);

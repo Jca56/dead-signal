@@ -185,6 +185,9 @@ pub enum Prop {
     On(i8, &'static Prop),
 }
 
+/// A flood out on a wall or a post: where (a grid point), and how high.
+pub struct FloodAt(pub f64, pub f64, pub f64);
+
 pub struct Layout {
     pub zones: &'static [&'static str],
     /// Where the player starts, facing a bearing.
@@ -195,6 +198,7 @@ pub struct Layout {
     pub runs: &'static [Run],
     pub yards: &'static [Yard],
     pub buys: &'static [BuyAt],
+    pub floods: &'static [FloodAt],
     pub props: &'static [Prop],
 }
 

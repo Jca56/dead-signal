@@ -27,6 +27,8 @@ mod options;
 mod panes;
 mod party;
 mod playing;
+#[cfg(test)]
+mod shots;
 mod slots;
 
 use crate::assets::Prop;
@@ -112,6 +114,8 @@ pub struct DeadSignal {
     renderer: Option<Renderer>,
     /// The arms, once loaded.
     viewmodel: Option<Viewmodel>,
+    /// What drifts in a night's air.
+    motes: crate::motes::Motes,
     combat: Combat,
     run: Run,
     /// Every kind of thing's picture, for the inventory.
@@ -209,6 +213,7 @@ impl DeadSignal {
             game,
             renderer: None,
             viewmodel: None,
+            motes: crate::motes::Motes::default(),
             combat,
             run: Run::default(),
             icons: Icons::default(),

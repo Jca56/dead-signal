@@ -1,31 +1,7 @@
-// The world: flat-shaded low poly lit by an overcast sky, fading into
-// fog with distance. The sky is drawn first, full screen, in the same fog
-// colour at the horizon, so far geometry melts into it.
-
-struct Globals {
-    view_proj: mat4x4<f32>,
-    // xyz: camera position.
-    camera: vec4<f32>,
-    // The camera's basis for the sky's rays: right and up scaled by the
-    // half-extents of the view at distance 1, and forward.
-    cam_right: vec4<f32>,
-    cam_up: vec4<f32>,
-    cam_forward: vec4<f32>,
-    // rgb: fog and horizon colour; a: fog density (per metre).
-    fog: vec4<f32>,
-    // rgb: the sky straight up.
-    zenith: vec4<f32>,
-    // xyz: towards the sun; w: unused.
-    sun_dir: vec4<f32>,
-    sun_color: vec4<f32>,
-    // Hemisphere ambient: light from above and from below.
-    ambient_sky: vec4<f32>,
-    ambient_ground: vec4<f32>,
-    // x: seconds since start.
-    params: vec4<f32>,
-};
-
-@group(0) @binding(0) var<uniform> g: Globals;
+// The world: flat-shaded low poly lit as `light.wgsl` has it (set before
+// this), fading into fog with distance. The sky is drawn first, full
+// screen, in the same fog colour at the horizon, so far geometry melts
+// into it; at night, with its stars and its moon.
 
 // ---- sky ------------------------------------------------------------------------
 
@@ -44,13 +20,33 @@ fn sky_vs(@builtin(vertex_index) i: u32) -> SkyOut {
     return out;
 }
 
+// A number from a cell of the sky, 0–1.
+fn hash3(p: vec3<f32>) -> f32 {
+    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973)) + dot(fract(p * 0.17), vec3<f32>(7.31, 3.17, 5.71));
+    return fract((q.x + q.y) * q.z * 43.7);
+}
+
 @fragment
 fn sky_fs(in: SkyOut) -> @location(0) vec4<f32> {
     let dir = normalize(g.cam_forward.xyz + g.cam_right.xyz * in.ndc.x + g.cam_up.xyz * in.ndc.y);
     // Fog colour at and below the horizon, darkening towards the top.
     let up = clamp(dir.y, 0.0, 1.0);
     let t = pow(up, 0.55);
-    return vec4<f32>(mix(g.fog.rgb, g.zenith.rgb, t), 1.0);
+    var color = mix(g.fog.rgb, g.zenith.rgb, t);
+    if g.shade.z > 0.0 {
+        // A night's: stars (a few cells of the sky lit, the more the
+        // higher), and the moon, a disc with a glow about it.
+        let at = dir * 260.0;
+        let cell = floor(at);
+        let point = 1.0 - smoothstep(0.12, 0.42, length(fract(at) - 0.5));
+        let star = step(0.992, hash3(cell)) * (0.3 + 0.7 * hash3(cell + 31.0)) * point;
+        color += vec3<f32>(0.75, 0.8, 1.0) * (star * t * g.shade.z);
+        let near = dot(dir, g.sun_dir.xyz);
+        let disc = smoothstep(0.9990, 0.9993, near);
+        let glow = pow(max(near, 0.0), 180.0) * 0.22 + pow(max(near, 0.0), 14.0) * 0.05;
+        color += vec3<f32>(0.80, 0.86, 1.0) * ((disc * 0.9 + glow) * g.shade.z);
+    }
+    return vec4<f32>(color, 1.0);
 }
 
 // ---- world ----------------------------------------------------------------------
@@ -89,7 +85,7 @@ fn world_vs(v: VertexIn) -> VertexOut {
     out.world = world.xyz;
     // Uniform scale only, so the model matrix turns normals true.
     out.normal = normalize((model * vec4<f32>(v.normal, 0.0)).xyz);
-    out.color = vec4<f32>(v.color.rgb * v.tint.rgb, v.color.a);
+    out.color = vec4<f32>(v.color.rgb * v.tint.rgb, v.color.a * v.tint.a);
     out.emissive = v.emissive * v.look.x;
     out.fog_amount = v.look.y;
     return out;
@@ -98,13 +94,18 @@ fn world_vs(v: VertexIn) -> VertexOut {
 @fragment
 fn world_fs(in: VertexOut) -> @location(0) vec4<f32> {
     let n = normalize(in.normal);
-    let hemi = mix(g.ambient_ground.rgb, g.ambient_sky.rgb, n.y * 0.5 + 0.5);
-    let sun = g.sun_color.rgb * max(dot(n, g.sun_dir.xyz), 0.0);
-    var color = in.color.rgb * (hemi + sun) + in.emissive;
-    let dist = distance(in.world, g.camera.xyz);
-    // Squared exponential: clear close by, thick far off.
-    let d = dist * g.fog.a;
-    let fog = (1.0 - exp(-d * d)) * in.fog_amount;
-    color = mix(color, g.fog.rgb, clamp(fog, 0.0, 1.0));
-    return vec4<f32>(color, 1.0);
+    let color = in.color.rgb * light_on(in.world, n) + in.emissive;
+    return vec4<f32>(fogged(color, in.world, in.fog_amount), 1.0);
+}
+
+// Something soft (a wisp of mist): thinning to nothing at its edge and
+// close up to the eye, lit as if it lay flat.
+@fragment
+fn mist_fs(in: VertexOut) -> @location(0) vec4<f32> {
+    let to_eye = g.camera.xyz - in.world;
+    let dist = length(to_eye);
+    let rim = pow(max(dot(normalize(in.normal), to_eye / max(dist, 1e-4)), 0.0), 1.6);
+    let near = smoothstep(1.5, 6.0, dist);
+    let color = in.color.rgb * light_on(in.world, vec3<f32>(0.0, 1.0, 0.0));
+    return vec4<f32>(fogged(color, in.world, in.fog_amount), in.color.a * rim * near);
 }

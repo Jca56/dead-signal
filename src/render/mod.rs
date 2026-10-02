@@ -6,23 +6,32 @@
 //! viewmodel (the arms) goes between: see `skinned.rs`. The window may be
 //! cut into panes, a camera each (a player each, playing together): every
 //! pane its own view of the world, its own things drawn (what it sees) and
-//! its own arms.
+//! its own arms. A frame's lights (`lights.rs`) light each pane, the
+//! nearest few; the moon's shadows and the roofs' are maps of their own
+//! (`shade.rs`).
 
+mod air;
 mod figures;
+mod lights;
+mod shade;
 mod skinned;
 
+pub use air::{Atmosphere, Pane};
 pub use figures::{FigureDraw, FigureMeshId, PALETTE};
+pub use lights::Light;
 pub use skinned::{MAX_JOINTS, SkinnedDraw, SkinnedMeshId, SkinnedVertex};
 
 use lntrn_app::wgpu;
 use lntrn_app::wgpu::util::DeviceExt;
 use lntrn_app::{RenderCx, lntrn_render::Gpu};
 use lntrn_core::bytes::{Pod, bytes_of, slice_as_bytes};
-use lntrn_math::{Color, Mat4, Vec3};
+use lntrn_math::{Mat4, Vec3};
 
-use crate::camera::{Camera, pane_fov};
+use crate::camera::pane_fov;
 
+use air::{Globals, color4, vec4};
 use figures::Figures;
+use shade::Shade;
 use skinned::Skinned;
 
 const SAMPLES: u32 = 4;
@@ -80,6 +89,10 @@ struct MeshRange {
     count: u32,
 }
 
+/// Runs of one mesh's instances in a pane: the pane, the mesh, the first
+/// of them, how many.
+type Runs = Vec<(usize, MeshRange, u32, u32)>;
+
 /// What a frame asks to be drawn.
 #[derive(Clone, Copy, Debug)]
 pub struct Draw {
@@ -97,56 +110,6 @@ impl Draw {
     }
 }
 
-/// The world's light and air.
-#[derive(Clone, Copy, Debug)]
-pub struct Atmosphere {
-    /// The fog, which is also the sky at the horizon (sRGB).
-    pub fog: Color,
-    /// Fog per metre; about 1/density is where it gets thick.
-    pub density: f64,
-    /// The sky straight up (sRGB).
-    pub zenith: Color,
-    /// Towards the sun.
-    pub sun_dir: Vec3,
-    pub sun: Color,
-    pub ambient_sky: Color,
-    pub ambient_ground: Color,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct Globals {
-    view_proj: [[f32; 4]; 4],
-    camera: [f32; 4],
-    cam_right: [f32; 4],
-    cam_up: [f32; 4],
-    cam_forward: [f32; 4],
-    fog: [f32; 4],
-    zenith: [f32; 4],
-    sun_dir: [f32; 4],
-    sun_color: [f32; 4],
-    ambient_sky: [f32; 4],
-    ambient_ground: [f32; 4],
-    params: [f32; 4],
-}
-// SAFETY: plain `f32`s.
-unsafe impl Pod for Globals {}
-
-/// A part of the window, and the camera whose view fills it.
-#[derive(Clone, Copy, Debug)]
-pub struct Pane {
-    pub camera: Camera,
-    /// Where in the window, pixels: left, top, width, height.
-    pub rect: [u32; 4],
-}
-
-impl Pane {
-    /// How wide it is for its height.
-    pub fn aspect(&self) -> f64 {
-        f64::from(self.rect[2]) / f64::from(self.rect[3].max(1))
-    }
-}
-
 /// The multisampled colour and depth the scene is drawn into.
 struct Targets {
     size: [u32; 2],
@@ -158,6 +121,9 @@ pub struct Renderer {
     format: wgpu::TextureFormat,
     sky: wgpu::RenderPipeline,
     world: wgpu::RenderPipeline,
+    /// What's soft and seen through (mist), drawn over the rest.
+    soft: wgpu::RenderPipeline,
+    mist: Vec<(Option<usize>, MeshId, Instance)>,
     /// Each pane's globals, and the layout to make more with.
     layout: wgpu::BindGroupLayout,
     globals: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
@@ -175,6 +141,9 @@ pub struct Renderer {
     /// Each pane's arms this frame.
     viewmodels: Vec<Option<SkinnedDraw>>,
     figures: Figures,
+    /// This frame's lights, and the shadow maps.
+    lights: Vec<Light>,
+    shade: Shade,
 }
 
 /// The viewmodel's vertical field of view: fixed, so the arms keep their
@@ -182,22 +151,15 @@ pub struct Renderer {
 const VIEWMODEL_FOV: f64 = 55.0;
 const VIEWMODEL_NEAR: f64 = 0.01;
 
-fn color4(c: Color, a: f64) -> [f32; 4] {
-    let l = c.to_linear();
-    [l.r as f32, l.g as f32, l.b as f32, a as f32]
-}
-
-fn vec4(v: Vec3, w: f64) -> [f32; 4] {
-    [v.x as f32, v.y as f32, v.z as f32, w as f32]
-}
-
 impl Renderer {
     pub fn new(gpu: &Gpu, format: wgpu::TextureFormat) -> Self {
         let device = &gpu.device;
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("scene"), source: wgpu::ShaderSource::Wgsl(include_str!("scene.wgsl").into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("scene"), source: wgpu::ShaderSource::Wgsl(concat!(include_str!("light.wgsl"), include_str!("scene.wgsl")).into()) });
+        // A pane's globals, and with them the shadow maps.
+        let [still, moving, roof, sampler] = Shade::layout_entries();
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("globals"),
-            entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }],
+            entries: &[wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None }, still, moving, roof, sampler],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("scene"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
         let multisample = wgpu::MultisampleState { count: SAMPLES, mask: !0, alpha_to_coverage_enabled: false };
@@ -217,38 +179,46 @@ impl Renderer {
 
         let vertex_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x3];
         let instance_attrs = wgpu::vertex_attr_array![4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4];
-        let world = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("world"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("world_vs"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex_attrs }),
-                    Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance_attrs }),
-                ],
-            },
-            fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("world_fs"), compilation_options: Default::default(), targets: &target }),
-            // Blender's faces wind counter-clockwise seen from outside.
-            primitive: wgpu::PrimitiveState { cull_mode: Some(wgpu::Face::Back), ..Default::default() },
-            // Reverse-Z: nearer is greater.
-            depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH_FORMAT, depth_write_enabled: Some(true), depth_compare: Some(wgpu::CompareFunction::Greater), stencil: Default::default(), bias: Default::default() }),
-            multisample,
-            multiview_mask: None,
-            cache: None,
-        });
+        // The world's things, solid; and what's soft over them (blended
+        // in, leaving the depth as it was).
+        let pipeline = |label, fragment, blend, solid: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("world_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[
+                        Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &vertex_attrs }),
+                        Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &instance_attrs }),
+                    ],
+                },
+                fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some(fragment), compilation_options: Default::default(), targets: &[Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })] }),
+                // Blender's faces wind counter-clockwise seen from outside.
+                primitive: wgpu::PrimitiveState { cull_mode: Some(wgpu::Face::Back), ..Default::default() },
+                // Reverse-Z: nearer is greater.
+                depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH_FORMAT, depth_write_enabled: Some(solid), depth_compare: Some(wgpu::CompareFunction::Greater), stencil: Default::default(), bias: Default::default() }),
+                multisample,
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let world = pipeline("world", "world_fs", None, true);
+        let soft = pipeline("soft", "mist_fs", Some(wgpu::BlendState::ALPHA_BLENDING), false);
         let instance_cap = 64;
         let instances = Self::instance_buffer(gpu, instance_cap);
         let skinned = Skinned::new(gpu, format);
-        let figures = Figures::new(gpu, format, &layout);
-        Self { format, sky, world, layout, globals: Vec::new(), staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodels: Vec::new(), figures }
+        let shade = Shade::new(gpu);
+        let figures = Figures::new(gpu, format, &layout, &shade);
+        Self { format, sky, world, soft, mist: Vec::new(), layout, globals: Vec::new(), staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodels: Vec::new(), figures, lights: Vec::new(), shade }
     }
 
     /// A pane's globals: the buffer, and its bind group.
     fn pane_globals(&self, gpu: &Gpu) -> (wgpu::Buffer, wgpu::BindGroup) {
         let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("globals"), size: std::mem::size_of::<Globals>() as u64, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("globals"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() }] });
+        let [still, moving, roof, sampler] = self.shade.bindings();
+        let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("globals"), layout: &self.layout, entries: &[wgpu::BindGroupEntry { binding: 0, resource: buffer.as_entire_binding() }, still, moving, roof, sampler] });
         (buffer, bind)
     }
 
@@ -276,6 +246,31 @@ impl Renderer {
     pub fn rewind(&mut self, mark: Mark) {
         self.staged.truncate(mark.vertices);
         self.meshes.truncate(mark.meshes);
+        self.shade.stand(Vec::new());
+    }
+
+    /// A light, this frame.
+    pub fn light(&mut self, light: Light) {
+        self.lights.push(light);
+    }
+
+    /// From now on everything from `lo` to `hi` is shadowed by the light
+    /// off along `toward` (the moon), and by what's over it; or (none)
+    /// nothing is.
+    pub fn shade_over(&mut self, volume: Option<(Vec3, Vec3, Vec3)>) {
+        self.shade.over(volume);
+    }
+
+    /// What stands still and casts shadows, from now on (drawn into the
+    /// maps once).
+    pub fn stand(&mut self, casters: &[Draw]) {
+        self.shade.stand(casters.iter().map(|d| (d.mesh, d.instance())).collect());
+    }
+
+    /// Something that moves and casts a shadow, this frame (the figures
+    /// all do).
+    pub fn cast(&mut self, d: Draw) {
+        self.shade.frame.push((d.mesh, d.instance()));
     }
 
     /// Keep a skinned mesh (the arms) for the viewmodel pass.
@@ -319,6 +314,38 @@ impl Renderer {
         self.frame.push((Some(pane), d.mesh, d.instance()));
     }
 
+    /// Queue something soft for this frame (a wisp of mist): seen through,
+    /// `alpha` at its thickest, thinning to nothing at its edge.
+    pub fn draw_soft(&mut self, d: Draw, alpha: f32) {
+        let mut instance = d.instance();
+        instance.tint[3] = alpha;
+        self.mist.push((None, d.mesh, instance));
+    }
+
+    /// `things` an instance each in each pane that shows them, gathered
+    /// by pane and then by mesh: the instances in order, and each mesh's
+    /// run of them in each pane (the pane, the mesh, the first of its
+    /// instances counting on from `first`, how many).
+    fn gathered(&self, things: Vec<(Option<usize>, MeshId, Instance)>, panes: usize, first: usize) -> (Vec<Instance>, Runs) {
+        let mut all: Vec<(usize, MeshId, Instance)> = Vec::with_capacity(things.len());
+        for (pane, mesh, instance) in things {
+            match pane {
+                Some(p) => all.push((p, mesh, instance)),
+                None => all.extend((0..panes).map(|p| (p, mesh, instance))),
+            }
+        }
+        all.sort_by_key(|(pane, m, _)| (*pane, m.0));
+        let mut runs: Runs = Vec::new();
+        for (i, (pane, mesh, _)) in all.iter().enumerate() {
+            let range = self.meshes[mesh.0];
+            match runs.last_mut() {
+                Some((p, r, _, n)) if *p == *pane && r.first == range.first => *n += 1,
+                _ => runs.push((*pane, range, (first + i) as u32, 1)),
+            }
+        }
+        (all.into_iter().map(|(_, _, i)| i).collect(), runs)
+    }
+
     /// Draw the queued things into the window, before the UI: each pane
     /// from its camera, into its part of the window.
     pub fn render<'f>(&'f mut self, cx: &mut RenderCx<'f, '_>, panes: &[Pane], air: &Atmosphere, time: f64) {
@@ -340,64 +367,43 @@ impl Renderer {
             self.globals.push(made);
         }
         let mut arms = Vec::with_capacity(panes.len());
+        let maps = self.shade.over.map(|over| (over, self.shade.texel));
         for (i, pane) in panes.iter().enumerate() {
-            let camera = &pane.camera;
-            let aspect = pane.aspect();
-            let (right, up, forward) = camera.basis();
-            let half_h = (camera.fov_y * 0.5).tan();
-            let globals = Globals {
-                view_proj: (camera.projection(aspect) * camera.view()).to_gpu(),
-                camera: vec4(camera.position, 1.0),
-                cam_right: vec4(right * (half_h * aspect), 0.0),
-                cam_up: vec4(up * half_h, 0.0),
-                cam_forward: vec4(forward, 0.0),
-                fog: color4(air.fog, air.density),
-                zenith: color4(air.zenith, 1.0),
-                sun_dir: vec4(air.sun_dir.normalize(), 0.0),
-                sun_color: color4(air.sun, 1.0),
-                ambient_sky: color4(air.ambient_sky, 1.0),
-                ambient_ground: color4(air.ambient_ground, 1.0),
-                params: [time as f32, 0.0, 0.0, 0.0],
-            };
+            let globals = Globals::of(pane, air, time, &self.lights, maps);
             gpu.queue.write_buffer(&self.globals[i].0, 0, bytes_of(&globals));
-            // The arms keep their shape, cropped as the pane is.
+            // The arms keep their shape, cropped as the pane is; lit by
+            // what's about the eye.
+            let aspect = pane.aspect();
             let fov = pane_fov(VIEWMODEL_FOV.to_radians(), window_aspect, aspect);
             let proj = Mat4::perspective_infinite_reverse_z(fov, aspect, VIEWMODEL_NEAR);
-            arms.push((self.viewmodels.get_mut(i).and_then(Option::take), proj, (right, up, forward)));
+            let lit = skinned::Lit { sky: pane.sky as f32, sun: pane.sun as f32, glow: lights::glow(&self.lights, pane.camera.position) };
+            arms.push((self.viewmodels.get_mut(i).and_then(Option::take), proj, pane.camera.basis(), lit));
         }
+        self.lights.clear();
         self.viewmodels.clear();
 
-        // Instances grouped by pane (what every pane sees, in each), then by
-        // mesh: each mesh one draw call a pane.
-        let mut frame: Vec<(usize, MeshId, Instance)> = Vec::with_capacity(self.frame.len());
-        for (pane, mesh, instance) in self.frame.drain(..) {
-            match pane {
-                Some(p) => frame.push((p, mesh, instance)),
-                None => frame.extend((0..panes.len()).map(|p| (p, mesh, instance))),
-            }
-        }
-        frame.sort_by_key(|(pane, m, _)| (*pane, m.0));
-        let instances: Vec<Instance> = frame.iter().map(|(_, _, i)| *i).collect();
+        // The solid things, then the soft, in one buffer.
+        let (solid, soft) = (std::mem::take(&mut self.frame), std::mem::take(&mut self.mist));
+        let (mut instances, runs) = self.gathered(solid, panes.len(), 0);
+        let (soft, soft_runs) = self.gathered(soft, panes.len(), instances.len());
+        instances.extend(soft);
         if instances.len() > self.instance_cap {
             self.instance_cap = instances.len().next_power_of_two();
             self.instances = Self::instance_buffer(gpu, self.instance_cap);
         }
         gpu.queue.write_buffer(&self.instances, 0, slice_as_bytes(&instances));
-        let mut runs: Vec<(usize, MeshRange, u32, u32)> = Vec::new();
-        for (i, (pane, mesh, _)) in frame.iter().enumerate() {
-            let range = self.meshes[mesh.0];
-            match runs.last_mut() {
-                Some((p, r, _, n)) if *p == *pane && r.first == range.first => *n += 1,
-                _ => runs.push((*pane, range, i as u32, 1)),
-            }
-        }
         self.skinned.prepare(gpu, &arms, air);
         self.figures.prepare(gpu, panes.len());
+        let again = self.shade.prepare(gpu, &self.meshes);
 
         let this: &'f Renderer = self;
         let backbuffer = cx.backbuffer;
         cx.graph.add_node("world", &[], &[backbuffer], move |_, enc, views| {
             let targets = this.targets.as_ref().expect("targets made above");
+            // The shadow maps first: the world's read them.
+            if let Some(vertices) = &this.vertices {
+                this.shade.draw(enc, vertices, again, |pass| this.figures.draw_shadow(pass));
+            }
             let into = |pass: &mut wgpu::RenderPass, [x, y, w, h]: [u32; 4]| {
                 pass.set_viewport(x as f32, y as f32, w as f32, h as f32, 0.0, 1.0);
                 pass.set_scissor_rect(x, y, w, h);
@@ -431,6 +437,14 @@ impl Renderer {
                     }
                 }
                 this.figures.draw_into(&mut pass, i);
+                if let Some(vertices) = this.vertices.as_ref().filter(|_| soft_runs.iter().any(|r| r.0 == i)) {
+                    pass.set_pipeline(&this.soft);
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, this.instances.slice(..));
+                    for (_, range, first, count) in soft_runs.iter().filter(|r| r.0 == i) {
+                        pass.draw(range.first..range.first + range.count, *first..*first + *count);
+                    }
+                }
             }
             drop(pass);
             // The viewmodels, over the world with depth of their own, and

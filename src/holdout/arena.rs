@@ -90,15 +90,29 @@ pub struct Buy {
     pub zone: usize,
 }
 
+/// A lamp: where it hangs, the room it lights (its corners; none: a flood
+/// out on a wall), whether it's a bunker's (red), and whether it's in the
+/// zone a run starts in.
+#[derive(Clone, Copy, Debug)]
+pub struct LampAt {
+    pub at: Vec3,
+    pub room: Option<(Vec3, Vec3)>,
+    pub red: bool,
+    pub start: bool,
+}
+
 pub struct Arena {
     /// How far the walking grid need reach.
     pub reach: f64,
+    /// The compound's corners, on the ground.
+    pub bounds: (Vec3, Vec3),
     pub zones: Vec<&'static str>,
     /// The zone the player starts in.
     pub start: usize,
     pub windows: Vec<Window>,
     pub doors: Vec<Door>,
     pub buys: Vec<Buy>,
+    pub lamps: Vec<LampAt>,
 }
 
 /// The arena, as a map (its hill, its buildings and walls, what stands
@@ -136,6 +150,7 @@ pub(super) fn of(plan: &Layout) -> (Map, Arena) {
         digs: raised.digs,
     };
     let reach = [x0, z0, x1, z1].iter().map(|v| f64::from(v.abs())).fold(0.0, f64::max) + BEYOND;
-    let arena = Arena { reach, zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys };
+    let on = |x: i32, z: i32| Vec3::new(f64::from(x) + OFFSET, 0.0, f64::from(z) + OFFSET);
+    let arena = Arena { reach, bounds: (on(x0, z0), on(x1, z1)), zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys, lamps: raised.lamps };
     (map, arena)
 }

@@ -75,7 +75,7 @@ const HIGH_WINDOW: (f64, f64, f64) = (1.2, 1.8, 2.5);
 
 /// A plan of `kind`, `w` by `d`, of `storeys`, a flat roof, with `rooms`.
 fn empty(kind: Kind, w: i32, d: i32, storeys: u8, rooms: Vec<Room>) -> Plan {
-    Plan { kind, w, d, storeys, cellars: 0, rooms, walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: true, ridge_along_x: true, ridge: plan::RIDGE, bars: Vec::new() }
+    Plan { kind, w, d, storeys, cellars: 0, rooms, walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: true, ridge_along_x: true, ridge: plan::RIDGE, bars: Vec::new(), grim: false }
 }
 
 fn room(x0: i32, z0: i32, x1: i32, z1: i32, use_: Use) -> Room {

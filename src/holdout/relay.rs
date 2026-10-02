@@ -38,7 +38,7 @@ mod core;
 mod wings;
 
 use super::arena::Wares;
-use super::layout::{BuyAt, Build, Face, Gap, Layout, Prop, Run, Yard, ew, ns};
+use super::layout::{BuyAt, Build, Face, FloodAt, Gap, Layout, Prop, Run, Yard, ew, ns};
 use crate::loot::Kind as Item;
 use crate::loot::tables::Source;
 use crate::map::building::furnish::Furn;
@@ -137,6 +137,20 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(19, 9.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(-24, 0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(32, 15.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
+    ],
+    // Floods: over the transmitter's doors on the yard, either side of the
+    // gate, on the motor pool and the station house where they face the
+    // yard, on the barracks' wall, and one each out in the lots.
+    floods: &[
+        FloodAt(3.5, -10.6, 3.0),
+        FloodAt(-6.5, -10.6, 3.0),
+        FloodAt(-5.0, 18.4, 3.2),
+        FloodAt(5.0, 18.4, 3.2),
+        FloodAt(-23.6, 5.5, 3.6),
+        FloodAt(23.6, 9.0, 3.4),
+        FloodAt(19.5, -5.6, 3.0),
+        FloodAt(-37.0, -3.4, 3.4),
+        FloodAt(45.0, -1.4, 3.4),
     ],
     props: &[
         Prop::Tower(0.0, 4.0),

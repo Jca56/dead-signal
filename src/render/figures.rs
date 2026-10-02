@@ -13,6 +13,7 @@ use lntrn_app::wgpu::util::DeviceExt;
 use lntrn_core::bytes::{Pod, slice_as_bytes};
 use lntrn_math::Mat4;
 
+use super::shade::Shade;
 use super::skinned::SkinnedVertex;
 use super::{DEPTH_FORMAT, SAMPLES};
 
@@ -54,6 +55,10 @@ unsafe impl Pod for Instance {}
 
 pub(super) struct Figures {
     pipeline: wgpu::RenderPipeline,
+    /// Their depth alone, into a shadow map.
+    shadow: wgpu::RenderPipeline,
+    /// The pane past the last: the shadow map's, where every figure is.
+    shadow_pane: usize,
     layout: wgpu::BindGroupLayout,
     staged: Vec<SkinnedVertex>,
     vertices: Option<wgpu::Buffer>,
@@ -68,9 +73,9 @@ pub(super) struct Figures {
 }
 
 impl Figures {
-    pub(super) fn new(gpu: &Gpu, format: wgpu::TextureFormat, globals: &wgpu::BindGroupLayout) -> Self {
+    pub(super) fn new(gpu: &Gpu, format: wgpu::TextureFormat, globals: &wgpu::BindGroupLayout, shade: &Shade) -> Self {
         let device = &gpu.device;
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("figures"), source: wgpu::ShaderSource::Wgsl(include_str!("figures.wgsl").into()) });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("figures"), source: wgpu::ShaderSource::Wgsl(concat!(include_str!("light.wgsl"), include_str!("figures.wgsl")).into()) });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("figure joints"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -113,7 +118,33 @@ impl Figures {
             multiview_mask: None,
             cache: None,
         });
-        Self { pipeline, layout, staged: Vec::new(), vertices: None, meshes: Vec::new(), frame: Vec::new(), joints: None, bind: None, instances: None, runs: Vec::new() }
+        // The same bones, from a light's eye: where they stand in the
+        // vertex and the instance, as above.
+        let shadow_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("figure shadows"), bind_group_layouts: &[Some(&shade.layout), Some(&layout)], immediate_size: 0 });
+        let shadow_vertex = wgpu::vertex_attr_array![0 => Float32x3];
+        let at = |shader_location, offset, format| wgpu::VertexAttribute { format, offset, shader_location };
+        let shadow_bones = [shadow_vertex[0], at(3, 40, wgpu::VertexFormat::Uint32x4), at(4, 56, wgpu::VertexFormat::Float32x4)];
+        let shadow_instance = [at(5, 0, wgpu::VertexFormat::Float32x4), at(6, 16, wgpu::VertexFormat::Float32x4), at(7, 32, wgpu::VertexFormat::Float32x4), at(8, 48, wgpu::VertexFormat::Float32x4), at(15, 160, wgpu::VertexFormat::Uint32)];
+        let shadow = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("figure shadows"),
+            layout: Some(&shadow_layout),
+            vertex: wgpu::VertexState {
+                module: &shade.module,
+                entry_point: Some("figure_vs"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<SkinnedVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &shadow_bones }),
+                    Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Instance>() as u64, step_mode: wgpu::VertexStepMode::Instance, attributes: &shadow_instance }),
+                ],
+            },
+            fragment: None,
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(Shade::depth()),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        Self { pipeline, shadow, shadow_pane: 0, layout, staged: Vec::new(), vertices: None, meshes: Vec::new(), frame: Vec::new(), joints: None, bind: None, instances: None, runs: Vec::new() }
     }
 
     pub(super) fn add_mesh(&mut self, vertices: &[SkinnedVertex]) -> FigureMeshId {
@@ -138,6 +169,7 @@ impl Figures {
     /// pane and then by mesh.
     pub(super) fn prepare(&mut self, gpu: &Gpu, panes: usize) {
         self.runs.clear();
+        self.shadow_pane = panes;
         let frame = std::mem::take(&mut self.frame);
         // Every part of every figure, an instance each in each pane that
         // shows it, gathered by mesh.
@@ -148,7 +180,8 @@ impl Figures {
             joints.extend(d.joints.iter().map(Mat4::to_gpu));
             let (model, look) = (d.model.to_gpu(), [d.fog, d.tint[0], d.tint[1], d.tint[2]]);
             let palette = d.palette.map(|[r, g, b]| [r, g, b, 1.0]);
-            for pane in (0..panes).filter(|p| d.hidden & (1 << p) == 0) {
+            // (Every figure's in the shadow map: a player's own too.)
+            for pane in (0..panes).filter(|p| d.hidden & (1 << p) == 0).chain([panes]) {
                 for part in d.parts.iter().filter(|p| self.meshes.get(p.0).is_some()) {
                     parts.push((pane, part.0, Instance { model, look, palette, first }));
                 }
@@ -196,6 +229,22 @@ impl Figures {
         if let (Some((jb, _)), Some((ib, _))) = (&self.joints, &self.instances) {
             gpu.queue.write_buffer(jb, 0, slice_as_bytes(&joints));
             gpu.queue.write_buffer(ib, 0, slice_as_bytes(&instances));
+        }
+    }
+
+    /// Draw every figure's depth into a shadow map's open pass (whose
+    /// group 0 is bound to the light's eye).
+    pub(super) fn draw_shadow(&self, pass: &mut wgpu::RenderPass) {
+        let (Some(vertices), Some(bind), Some((instances, _))) = (&self.vertices, &self.bind, &self.instances) else { return };
+        if !self.runs.iter().any(|r| r.0 == self.shadow_pane) {
+            return;
+        }
+        pass.set_pipeline(&self.shadow);
+        pass.set_bind_group(1, bind, &[]);
+        pass.set_vertex_buffer(0, vertices.slice(..));
+        pass.set_vertex_buffer(1, instances.slice(..));
+        for &(_, (first, count), inst, n) in self.runs.iter().filter(|r| r.0 == self.shadow_pane) {
+            pass.draw(first..first + count, inst..inst + n);
         }
     }
 

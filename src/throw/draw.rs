@@ -13,7 +13,7 @@ use lntrn_math::{Mat4, Quat, Vec3};
 use super::flame::Puff;
 use super::{Burning, Fire, Thrown};
 use crate::player::Body;
-use crate::render::{Draw, MeshId, Renderer};
+use crate::render::{Draw, MeshId, Renderer, Vertex};
 use crate::zombie::brain::Zombie;
 use crate::zombie::figure::Figure;
 use crate::zombie::kind::Kind;
@@ -33,7 +33,14 @@ pub struct Meshes {
 pub fn load(renderer: &mut Renderer, world: &mut World) {
     match crate::assets::load(renderer, "effects") {
         Ok(props) => {
-            let find = |n: &str| props.iter().find(|p| p.name == n).and_then(|p| p.mesh);
+            // (Every one of them is a light of its own: its colours are
+            // what it glows, whatever's on it.)
+            let mut find = |n: &str| {
+                props.iter().find(|p| p.name == n).map(|p| {
+                    let glowing: Vec<Vertex> = p.vertices.iter().map(|v| Vertex { emissive: [v.color[0], v.color[1], v.color[2]], ..*v }).collect();
+                    renderer.add_mesh(&glowing)
+                })
+            };
             match (find("Flame"), find("Dot"), find("Ring"), find("Flash")) {
                 (Some(flame), Some(dot), Some(ring), Some(flash)) => {
                     world.insert_resource(Meshes { flame, dot, ring, flash });

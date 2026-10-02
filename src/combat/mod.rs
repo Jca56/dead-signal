@@ -29,6 +29,9 @@ use crate::world::{Game, Solid};
 use crate::zombie::figure::Zone;
 use crate::zombie::{self, Horde, spit};
 
+/// A shot's flash, as light: how far it reaches, its colour (linear), how
+/// long it lasts.
+const FLASH: (f64, [f32; 3], f64) = (10.0, [1.7, 1.3, 0.75], 0.07);
 /// How long after a shot the player can't sprint, seconds.
 const SPRINT_BLOCK: f64 = 0.3;
 
@@ -225,6 +228,7 @@ impl Combat {
                     }
                     stats.shots += 1;
                     self.sound.play(shot.sound, 0.9);
+                    self.fx.flash(aim.eye + aim.dir * 0.9 - aim.up * 0.12, FLASH.0, FLASH.1, FLASH.2);
                     zombie::noise(&mut game.world, aim.eye, shot.heard);
                     self.arms[seat].sprint_block = SPRINT_BLOCK;
                     self.arms[seat].rumble.add(Rumble::shot(shot.kick));

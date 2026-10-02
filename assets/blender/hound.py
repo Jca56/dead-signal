@@ -39,8 +39,9 @@ MODELS = os.path.join(HERE, "..", "models")
 FPS = 30
 
 # Colours of its own: what glows through the cracks, and its eyes.
-EMBER = (1.0, 0.33, 0.04)
-EMBER_HOT = (1.0, 0.62, 0.12)
+# (An alpha of 0.9: a colour of its own that glows, as the game draws it.)
+EMBER = (1.0, 0.33, 0.04, 0.9)
+EMBER_HOT = (1.0, 0.62, 0.12, 0.9)
 MEAT = (0.34, 0.09, 0.07)
 
 # The skeleton at rest: (head, tail, parent). Right side is +X.

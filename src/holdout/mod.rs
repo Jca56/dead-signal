@@ -8,6 +8,7 @@
 pub mod arena;
 pub mod hud;
 mod land;
+pub mod lamps;
 mod layout;
 pub mod props;
 mod raise;
