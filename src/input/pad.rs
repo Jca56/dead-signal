@@ -65,7 +65,8 @@ impl Control {
 /// Which action each control is, a pad's way: Call of Duty's layout, kept
 /// as a table so it can be rebound. The left stick walks and the right
 /// looks (`look.rs`); X is both reload and interact, and which it is goes
-/// by whether something's in front of the player to use ([`super::Input`]).
+/// by whether something's in front of the player to use; View is both the
+/// bag (tapped) and the map (held) ([`super::Input`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PadBinds {
     actions: [Option<Control>; Action::ALL.len()],
@@ -94,8 +95,7 @@ impl Default for PadBinds {
             Action::Plate => b(Button::Down),
             Action::Throw => b(Button::RightBumper),
             Action::NextThrowable => b(Button::LeftBumper),
-            Action::Inventory => None,
-            Action::Map => b(Button::Select),
+            Action::Inventory | Action::Map => b(Button::Select),
         });
         Self { actions, next_weapon: Control::Button(Button::North), pause: Control::Button(Button::Start) }
     }
@@ -241,6 +241,12 @@ fn frame(state: &PadState, down: &[Button], pulled: &mut [bool; 2], labels: Labe
 #[cfg(test)]
 pub(super) fn frame_with(down: &[Button]) -> PadFrame {
     frame(&PadState::default(), down, &mut [false; 2], Labels::Xbox)
+}
+
+/// A frame with `held` held down (and not just gone down).
+#[cfg(test)]
+pub(super) fn frame_holding(held: &[Button]) -> PadFrame {
+    PadFrame { held: held.iter().fold(0, |bits, &b| bits | Control::Button(b).bit()), touched: true, ..PadFrame::default() }
 }
 
 /// The left stick in a menu: the arrow key a flick up or down is (once a

@@ -20,8 +20,15 @@ pub const WIDTH: f64 = 3.5;
 const HEIGHT: f64 = 1.7;
 const SPACE: f64 = 18.0;
 /// The band across a box's top its key and name are written in, a share
-/// of a cell.
+/// of a cell (and, however small the cell, logical pixels at least).
 const LABEL: f64 = 0.42;
+const LABEL_LEAST: f64 = 30.0;
+
+/// The column's height: its cells, and the space between its boxes,
+/// pixels.
+pub fn height(s: f64) -> (f64, f64) {
+    (HEIGHT * Slot::ALL.len() as f64, SPACE * s * (Slot::ALL.len() - 1) as f64)
+}
 
 /// Every slot's box, down from `at`.
 pub fn layout(at: Vec2, cell: f64, s: f64) -> Vec<(Which, Rect)> {
@@ -38,9 +45,9 @@ pub fn layout(at: Vec2, cell: f64, s: f64) -> Vec<(Which, Rect)> {
 /// Where `stack` is drawn in the box `r`: its top-left corner, and the
 /// cell size it's drawn at (as big as fits under the label, no bigger
 /// than a grid's, in the middle).
-pub fn tile(r: Rect, stack: Stack, cell: f64) -> (Vec2, f64) {
+pub fn tile(r: Rect, stack: Stack, cell: f64, s: f64) -> (Vec2, f64) {
     let (w, h) = stack.kind.def().size;
-    let room = Rect::new(Vec2::new(r.min.x, r.min.y + LABEL * cell), r.max).shrink(cell * 0.08);
+    let room = Rect::new(Vec2::new(r.min.x, r.min.y + (LABEL * cell).max(LABEL_LEAST * s)), r.max).shrink(cell * 0.08);
     let size = (room.width() / f64::from(w)).min(room.height() / f64::from(h)).min(cell);
     let drawn = Vec2::new(f64::from(w), f64::from(h)) * size;
     (room.center() - drawn * 0.5, size)
@@ -57,7 +64,7 @@ pub fn draw(ui: &mut Ui, icons: &Icons, slot: Slot, key: &str, stack: Option<Sta
     ui.text_at(key, &label, at, kw + 4.0, style::SIGNAL);
     ui.text_at(slot.name(), &label, at + Vec2::new(kw + 12.0 * s, 0.0), r.width(), style::DIM);
     if let Some(stack) = stack {
-        let (at, size) = tile(r, stack, cell);
+        let (at, size) = tile(r, stack, cell, s);
         super::draw::tile(ui, icons, Item { stack, x: 0, y: 0, turned: false }, at, size, 1.0);
     }
 }

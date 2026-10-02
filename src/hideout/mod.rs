@@ -128,7 +128,7 @@ impl Hideout {
         match self.tab {
             Tab::Stash => {
                 let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: None, fit: profile.perks.fit() };
-                if let Some(why) = self.grids.frame(ui, &mut shelves, icons).said {
+                if let Some(why) = self.grids.frame(ui, &mut shelves, icons, crate::bag_ui::Hands::MOUSE).said {
                     self.note = Some((why.to_string(), ui.now() + 2.5));
                 }
             }

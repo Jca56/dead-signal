@@ -93,8 +93,8 @@ impl Run {
         self.seats.first_mut().map(|s| std::mem::take(&mut s.bag)).unwrap_or_default()
     }
 
-    /// Whether the pointer should be locked for looking about (no one's
-    /// inventory up).
+    /// Whether the pointer should be locked for looking about (whoever
+    /// has the mouse hasn't their inventory up).
     pub fn wants_lock(&self) -> bool {
         self.seats.iter().all(Seat::wants_lock)
     }
@@ -149,7 +149,7 @@ impl Run {
         let keys = game.world.get_resource::<Settings>().map_or_else(Default::default, |s| s.keys);
         for seat in &mut self.seats {
             let feed = feeds.get(seat.n).copied().unwrap_or_default();
-            seat.input.update(ui, feed.keys.then_some(keys), locked, feed.pad);
+            seat.input.update(ui, feed.keys.then_some(keys), locked, feed.pad, dt);
         }
         combat.update(dt);
         for seat in &mut self.seats {

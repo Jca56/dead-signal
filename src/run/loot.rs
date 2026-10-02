@@ -1,14 +1,14 @@
 //! Finding things: what's looked at (something lying about, a container),
 //! taking it with E, holding E to search a container (a rummage the dead
 //! nearby can hear; the cage needs its key), and the inventory screen, Tab
-//! for the bag alone, or opened on what was searched.
+//! (a pad's View) for the bag alone, or opened on what was searched.
 
 use bevy_ecs::entity::Entity;
 use lntrn_math::Vec3;
 use lntrn_ui::{AreaCx, ShellRequest, Ui};
 
 use super::seat::{Open, Seat};
-use crate::bag_ui::{Icons, Shelves};
+use crate::bag_ui::{Hands, Icons, Shelves};
 use crate::combat::Combat;
 use crate::containers::{self, Container};
 use crate::items;
@@ -30,6 +30,9 @@ pub(super) const NOTE_FOR: f64 = 1.4;
 /// Things thrown down land this near the feet, and no nearer.
 const DROP_FAR: f64 = 1.1;
 const DROP_NEAR: f64 = 0.5;
+/// The bag put up by a pad, the mouse moved this far (counts) in a frame
+/// takes it over.
+const STIRRED: f64 = 4.0;
 
 /// What's looked at that E does something with.
 #[derive(Clone, Copy, Debug, Default)]
@@ -110,7 +113,7 @@ impl Seat {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn looting(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, icons: &Icons, dt: f64, aimed: Aimed) {
         if let Some(open) = self.open {
-            self.inventory(ui, cx, game, open, icons);
+            self.inventory(ui, cx, game, open, icons, dt);
             return;
         }
         if self.input.pressed(ui, Action::Inventory) {
@@ -208,10 +211,16 @@ impl Seat {
         }
     }
 
+    /// The inventory screen up. The pointer's let go for it if the mouse
+    /// is theirs and what they're playing with (on a pad, not till the
+    /// mouse stirs).
     fn open_bag(&mut self, cx: &mut AreaCx<()>, container: Option<Entity>) {
         self.open = Some(Open { container });
         self.search = None;
-        cx.request(ShellRequest::LockPointer(false));
+        self.bag_ui.opened(self.input.on_pad || !self.input.has_keys());
+        if self.input.has_keys() && !self.input.on_pad {
+            cx.request(ShellRequest::LockPointer(false));
+        }
     }
 
     /// Put the inventory screen away (whatever is held goes back). Whether
@@ -219,7 +228,9 @@ impl Seat {
     pub fn shut_bag(&mut self, game: &mut Game, cx: &mut AreaCx<()>) -> bool {
         let Some(open) = self.open.take() else { return false };
         self.close_bag(game, open);
-        cx.request(ShellRequest::LockPointer(true));
+        if self.input.has_keys() {
+            cx.request(ShellRequest::LockPointer(true));
+        }
         true
     }
 
@@ -236,11 +247,12 @@ impl Seat {
         }
     }
 
-    /// A frame of the inventory screen: shut by Tab or E, or by walking off
-    /// from what's searched; things dragged out land at the player's feet.
-    fn inventory(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, open: Open, icons: &Icons) {
+    /// A frame of the inventory screen: shut by Tab or E (a pad's View, or
+    /// its B with nothing held), or by walking off from what's searched;
+    /// things dragged out land at the player's feet.
+    fn inventory(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, open: Open, icons: &Icons, dt: f64) {
         // (Only a key closes it: a mouse button is for the things in it.)
-        let closing = [Action::Inventory, Action::Interact].into_iter().any(|a| self.input.key_pressed(ui, a));
+        let closing = [Action::Inventory, Action::Interact].into_iter().any(|a| self.input.key_pressed(ui, a)) || self.input.pad_pressed(Action::Inventory);
         let feet = game.player(self.n).map(|(b, _)| b.pos);
         let too_far = open.container.is_some_and(|e| {
             let middle = game.world.get::<Container>(e).map(Container::middle);
@@ -255,9 +267,15 @@ impl Seat {
             Some((n, g)) => (n, Some(g)),
             None => ("", None),
         };
+        // (Put up by a pad, the pointer's kept till the mouse stirs.)
+        let mine = self.input.has_keys();
+        if mine && ui.state.pointer_locked && (ui.state.pressed || ui.state.locked_motion.length() > STIRRED) {
+            cx.request(ShellRequest::LockPointer(false));
+        }
+        let hands = Hands { mouse: mine, pad: Some(self.input.steer(dt)) };
         let moved = {
             let mut shelves = Shelves { bag: &mut self.bag, loot: grid.as_mut().map(|g| (name, g)), sell: None, fit: self.fit };
-            self.bag_ui.frame(ui, &mut shelves, icons)
+            self.bag_ui.frame(ui, &mut shelves, icons, hands)
         };
         if let (Some(e), Some(g)) = (open.container, grid)
             && let Some(mut c) = game.world.get_mut::<Container>(e)
@@ -279,6 +297,9 @@ impl Seat {
                 let spot = pos + Vec3::new(a.cos() * r, 0.8, a.sin() * r);
                 items::set_down(&mut game.world, stack, spot, self.dice.unit() * std::f64::consts::TAU);
             }
+        }
+        if moved.closed {
+            self.shut_bag(game, cx);
         }
     }
 }

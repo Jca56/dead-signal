@@ -1,21 +1,30 @@
 //! Drawing the inventory screen: every grid and slot with what's in it,
 //! what's held under the pointer and where it would land, a thing's tile,
-//! and the tooltip over what's pointed at.
+//! and the tooltip over what's pointed at. Worked by a pad: its cursor,
+//! and what its buttons do, along the foot.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
-use super::{BagUi, Icons, Landing, Shelves, TITLE, Which, cell_under, corner_cell, footprint, landing, slots, worn};
+use super::{BagUi, Icons, Landing, Mode, Shelves, TITLE, Which, cell_under, corner_cell, footprint, landing, slots, worn};
+use crate::input::pad::Labels;
+use crate::input::steer;
 use crate::loot::Stack;
 use crate::loot::bag::Slot;
 use crate::loot::grid::Item;
 use crate::style;
 
+/// A pad's cursor, and its buttons' names in the hints.
+const CURSOR: Color = Color::rgb(1.0, 0.82, 0.25);
+
 impl BagUi {
-    pub(super) fn draw(&self, ui: &mut Ui, shelves: &mut Shelves, icons: &Icons, places: &[(Which, Rect)], cell: f64) {
+    /// The screen, pointed at at `p`: by the mouse, or (`pad`: whose names
+    /// its buttons go by) a pad's cursor.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn draw(&self, ui: &mut Ui, shelves: &mut Shelves, icons: &Icons, places: &[(Which, Rect)], cell: f64, p: Vec2, pad: Option<Labels>) {
         let s = ui.m.scale;
-        let screen = ui.clip();
+        let screen = self.screen(ui);
         ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, 0.45));
         let title = TextStyle::new((TITLE * s) as f32).bold().family(style::FONT);
         let loot_name = shelves.loot.as_ref().map(|(name, _)| *name);
@@ -70,49 +79,91 @@ impl BagUi {
             let style = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
             let text = format!("VALUE  ${}", shelves.bag.value());
             let w = ui.measure(&text, &style);
-            let pockets_top = places.iter().find(|(w, _)| *w == Which::Pockets).map_or(pack.max.y, |(_, r)| r.min.y);
-            ui.text_at(&text, &style, Vec2::new(pack.max.x - w, pockets_top), w + 10.0, style::BONE);
+            // (Level with the pockets' top, at the pack's right; the pockets
+            // beside the pack, under them.)
+            let pockets = places.iter().find(|(w, _)| *w == Which::Pockets).map_or(pack, |(_, r)| *r);
+            let at = if pack.height() > 0.0 && pockets.min.x >= pack.max.x { Vec2::new(pockets.min.x, pockets.max.y + 12.0 * s) } else { Vec2::new(pack.max.x - w, pockets.min.y.max(pack.max.y)) };
+            ui.text_at(&text, &style, at, w + 10.0, style::BONE);
         }
-        let p = ui.state.pointer;
+        let under = places.iter().find(|(_, r)| r.contains(p)).copied();
         match self.held {
             Some(h) => {
                 // Where it would land, green (fresh, or onto a stack with
                 // room) or red, then the thing itself.
-                if let Some(&(Which::Slot(slot), r)) = places.iter().find(|(_, r)| r.contains(p)) {
-                    let ok = slots::takes(h.item.stack, slot, shelves.bag.slot(slot));
-                    ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
-                } else if let Some(&(Which::Worn(wear), r)) = places.iter().find(|(_, r)| r.contains(p)) {
-                    let ok = worn::takes(h.item.stack, wear);
-                    ui.draw.rect(r, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
-                } else if let Some(&(which, r)) = places.iter().find(|(_, r)| r.contains(p))
-                    && let Some(g) = shelves.grid(which)
-                {
-                    let (x, y) = corner_cell(r, p - h.grab, cell);
-                    let fits = which != Which::Belt || h.item.stack.kind.is_ammo();
-                    let (spot, ok) = match landing(g, h.item, (x, y), cell_under(r, p, cell)) {
-                        _ if !fits => (footprint(r, x, y, h.item.shape(), cell), false),
-                        Landing::Put(x, y) => (footprint(r, x, y, h.item.shape(), cell), true),
-                        Landing::Merge(i, _) | Landing::Load(i, _) => (footprint(r, i32::from(g.items[i].x), i32::from(g.items[i].y), g.items[i].shape(), cell), true),
-                        Landing::Blocked => (footprint(r, x, y, h.item.shape(), cell), false),
-                    };
+                let spot = under.and_then(|(which, r)| match which {
+                    Which::Slot(slot) => Some((r, slots::takes(h.item.stack, slot, shelves.bag.slot(slot)))),
+                    Which::Worn(wear) => Some((r, worn::takes(h.item.stack, wear))),
+                    _ => {
+                        let g = shelves.grid(which)?;
+                        let (x, y) = corner_cell(r, p - h.grab, cell);
+                        let fits = which != Which::Belt || h.item.stack.kind.is_ammo();
+                        Some(match landing(g, h.item, (x, y), cell_under(r, p, cell)) {
+                            _ if !fits => (footprint(r, x, y, h.item.shape(), cell), false),
+                            Landing::Put(x, y) => (footprint(r, x, y, h.item.shape(), cell), true),
+                            Landing::Merge(i, _) | Landing::Load(i, _) => (footprint(r, i32::from(g.items[i].x), i32::from(g.items[i].y), g.items[i].shape(), cell), true),
+                            Landing::Blocked => (footprint(r, x, y, h.item.shape(), cell), false),
+                        })
+                    }
+                });
+                if let Some((spot, ok)) = spot {
                     ui.draw.rect(spot, if ok { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.9, 0.2, 0.15, 0.3) });
+                    if pad.is_some() {
+                        ui.draw.stroke_rect(spot, 4.0 * s, 0.0, CURSOR);
+                    }
                 }
                 tile(ui, icons, h.item, p - h.grab, cell, 0.85);
             }
             None => {
-                let hovered = places.iter().find(|(_, r)| r.contains(p)).and_then(|&(which, r)| match which {
-                    Which::Slot(slot) => shelves.bag.slot(slot),
-                    Which::Worn(wear) => shelves.bag.worn(wear),
+                // What's pointed at: the thing, and all of it (a pad's
+                // cursor goes round it, or the empty cell or box).
+                let hovered = under.and_then(|(which, r)| match which {
+                    Which::Slot(slot) => shelves.bag.slot(slot).map(|stack| (stack, r)),
+                    Which::Worn(wear) => shelves.bag.worn(wear).map(|stack| (stack, r)),
                     _ => {
                         let (cx, cy) = cell_under(r, p, cell);
-                        shelves.grid(which).and_then(|g| g.at(cx as u8, cy as u8).map(|i| g.items[i].stack))
+                        let g = shelves.grid(which)?;
+                        let item = g.items[g.at(cx as u8, cy as u8)?];
+                        Some((item.stack, footprint(r, i32::from(item.x), i32::from(item.y), item.shape(), cell)))
                     }
                 });
-                if let Some(stack) = hovered {
-                    tooltip(ui, stack, p);
+                if pad.is_some()
+                    && let Some(at) = hovered.map(|(_, r)| r).or_else(|| self.cursor.and_then(|c| c.rect(places, cell)))
+                {
+                    ui.draw.stroke_rect(at, 4.0 * s, 0.0, CURSOR);
+                }
+                if let Some((stack, r)) = hovered {
+                    // (Beside the thing, by a pad; under the pointer.)
+                    tooltip(ui, stack, if pad.is_some() { r.max - Vec2::splat(12.0 * s) } else { p }, screen);
                 }
             }
         }
+        if let Some(labels) = pad {
+            let name = |c| labels.name(c);
+            let drop = (self.mode == Mode::Run).then_some((name(steer::ACROSS), "DROP"));
+            let list: Vec<(&str, &str)> = match self.held {
+                Some(_) => [Some((name(steer::PICK), "PUT DOWN")), Some((name(steer::TURN), "TURN")), drop, Some((name(steer::BACK), "PUT BACK"))].into_iter().flatten().collect(),
+                None => vec![(name(steer::PICK), "PICK UP"), (name(steer::ACROSS), "EQUIP / MOVE"), (name(steer::BACK), "CLOSE")],
+            };
+            hints(ui, screen, &list);
+        }
+    }
+}
+
+/// A pad's buttons and what each does, along the foot of `screen`.
+fn hints(ui: &mut Ui, screen: Rect, list: &[(&str, &str)]) {
+    let s = ui.m.scale;
+    let style = TextStyle::new((24.0 * s) as f32).bold().family(style::FONT);
+    let (space, between, pad) = (10.0 * s, 36.0 * s, 18.0 * s);
+    let widths: Vec<(f64, f64)> = list.iter().map(|(button, word)| (ui.measure(button, &style), ui.measure(word, &style))).collect();
+    let whole = widths.iter().map(|(b, w)| b + space + w).sum::<f64>() + between * list.len().saturating_sub(1) as f64;
+    let high = f64::from(style.line_height());
+    let mut at = Vec2::new(screen.center().x - whole * 0.5, screen.max.y - 20.0 * s - high);
+    ui.draw.rect(Rect::from_min_size(at - Vec2::new(pad, 8.0 * s), Vec2::new(whole + pad * 2.0, high + 16.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.7));
+    for ((button, word), (bw, ww)) in list.iter().zip(widths) {
+        ui.text_at(button, &style, at, bw + 4.0, CURSOR);
+        at.x += bw + space;
+        ui.text_at(word, &style, at, ww + 4.0, style::BONE);
+        at.x += ww + between;
     }
 }
 
@@ -144,8 +195,8 @@ pub(super) fn tile(ui: &mut Ui, icons: &Icons, item: Item, at: Vec2, cell: f64, 
 }
 
 /// Name, rarity and worth (and for a weapon, its slot and rounds), beside
-/// the pointer.
-pub(super) fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2) {
+/// the pointer, kept on `screen`.
+fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2, screen: Rect) {
     let s = ui.m.scale;
     let def = stack.kind.def();
     let name = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
@@ -175,7 +226,6 @@ pub(super) fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2) {
     let pad = 14.0 * s;
     let w = lines.iter().map(|(t, st, _)| ui.measure(t, st)).fold(0.0, f64::max) + pad * 2.0;
     let h: f64 = lines.iter().map(|(_, st, _)| f64::from(st.line_height()) + 4.0 * s).sum::<f64>() + pad * 2.0;
-    let screen = ui.clip();
     let mut at = p + Vec2::new(24.0 * s, 24.0 * s);
     at.x = at.x.min(screen.max.x - w - 10.0 * s);
     at.y = at.y.min(screen.max.y - h - 10.0 * s);

@@ -21,6 +21,12 @@ pub const WIDTH: f64 = 2.6;
 const HEIGHT: f64 = 1.5;
 const SPACE: f64 = 12.0;
 
+/// The column's height: its cells, and the space between its boxes,
+/// pixels.
+pub fn height(s: f64) -> (f64, f64) {
+    (HEIGHT * Wear::ALL.len() as f64, SPACE * s * (Wear::ALL.len() - 1) as f64)
+}
+
 /// Every box, down from `at`.
 pub fn layout(at: Vec2, cell: f64, s: f64) -> Vec<(Which, Rect)> {
     Wear::ALL
@@ -41,7 +47,7 @@ pub fn draw(ui: &mut Ui, icons: &Icons, wear: Wear, stack: Option<Stack>, r: Rec
     let label = TextStyle::new((20.0 * s) as f32).bold().family(style::FONT);
     ui.text_at(wear.name(), &label, r.min + Vec2::new(10.0 * s, 6.0 * s), r.width(), style::DIM);
     if let Some(stack) = stack {
-        let (at, size) = slots::tile(r, stack, cell);
+        let (at, size) = slots::tile(r, stack, cell, s);
         super::draw::tile(ui, icons, Item { stack, x: 0, y: 0, turned: false }, at, size, 1.0);
     }
 }

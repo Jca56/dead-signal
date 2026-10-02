@@ -61,12 +61,15 @@ fn a_flick_is_one_arrow_till_the_stick_comes_back() {
 }
 
 #[test]
-fn every_action_the_pad_has_is_on_its_own_control_but_reload_and_interact() {
+fn every_action_the_pad_has_is_on_its_own_control_but_the_two_pairs_told_apart() {
     let b = PadBinds::default();
+    // (X reloads or interacts, by what's in front of them; View is the bag
+    // tapped and the map held.)
+    let pairs = [(Action::Reload, Action::Interact), (Action::Inventory, Action::Map)];
     for a in Action::ALL {
         for o in Action::ALL {
             let shared = a != o && b.get(a).is_some() && b.get(a) == b.get(o);
-            assert!(!shared || matches!((a, o), (Action::Reload, Action::Interact) | (Action::Interact, Action::Reload)), "{a:?} and {o:?}");
+            assert!(!shared || pairs.contains(&(a, o)) || pairs.contains(&(o, a)), "{a:?} and {o:?}");
         }
         assert!(b.get(a) != Some(b.next_weapon) && b.get(a) != Some(b.pause), "{a:?}");
     }

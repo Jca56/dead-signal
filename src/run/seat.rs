@@ -121,10 +121,15 @@ impl Seat {
         self.reviving.is_some_and(|(_, p)| p > 0.0)
     }
 
+    /// Whether their inventory's up.
+    pub fn rummaging(&self) -> bool {
+        self.open.is_some()
+    }
+
     /// Whether the pointer should be locked for looking about (not with
-    /// the inventory up).
+    /// the inventory up, if the mouse is theirs).
     pub fn wants_lock(&self) -> bool {
-        self.open.is_none()
+        self.open.is_none() || !self.input.has_keys()
     }
 
     /// The dev's: whole again, the bleeding and poison gone.
@@ -147,6 +152,8 @@ impl Seat {
         }
         let open = self.open.is_some();
         let down = self.down.is_some();
+        // (The bag up, their pad's the bag's.)
+        self.input.set_rummaging(open);
         let settings = game.world.get_resource::<Settings>().cloned().unwrap_or_default();
         self.bag_ui.slot_keys = settings.keys.slot_names();
         // What's worn weighs on the sprint, the breath and the feet; the

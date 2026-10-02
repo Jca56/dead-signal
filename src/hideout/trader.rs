@@ -134,7 +134,7 @@ pub fn page(ui: &mut Ui, profile: &mut Profile, sell: &mut Grid, grids: &mut Bag
     // The bag, what's to be sold and the stash, and the sale.
     let mut shelves = Shelves { bag: &mut profile.loadout, loot: Some(("STASH", &mut profile.stash)), sell: Some(sell), fit: profile.perks.fit() };
     let sell_at = grids.rect_of(ui, &shelves, Which::Sell);
-    grids.frame(ui, &mut shelves, icons);
+    grids.frame(ui, &mut shelves, icons, crate::bag_ui::Hands::MOUSE);
     if let Some(r) = sell_at {
         let paid: u32 = sell.items.iter().map(|i| sell_price(i.stack)).sum();
         let label = format!("SELL FOR  {}", dollars(paid));

@@ -100,8 +100,8 @@ impl Run {
     }
 
     /// The rest of a holdout's frame, for each player: what's in front of
-    /// them used, their HUD over their pane (`panes`, by seat), their bag
-    /// (playing alone: its screen would cover the others' panes).
+    /// them used, their HUD over their pane (`panes`, by seat), and their
+    /// bag (playing together, over their own pane).
     #[allow(clippy::too_many_arguments)]
     pub(super) fn holdout_frame(&mut self, ui: &mut Ui, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, icons: &Icons, dt: f64, panes: &[Rect]) {
         let Some(h) = &mut self.holdout else { return };
@@ -124,10 +124,14 @@ impl Run {
 
 impl Seat {
     /// A holdout's frame for this player: what's in front of them used (E
-    /// to buy or open, held to nail boards back), the HUD, the bag (if
-    /// they're playing `alone`).
+    /// to buy or open, held to nail boards back), the HUD, the bag (over
+    /// their `pane`, unless they're playing `alone`).
     #[allow(clippy::too_many_arguments)]
     fn hold_out(&mut self, ui: &mut Ui, pane: Rect, cx: &mut AreaCx<()>, game: &mut Game, combat: &mut Combat, icons: &Icons, dt: f64, h: &mut Holdout, alone: bool) {
+        // (Down, the bag's put away.)
+        if !self.standing() {
+            self.shut_bag(game, cx);
+        }
         // Down, or picking someone up (whose prompt it is), nothing else.
         let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some();
         let aimed = if busy { None } else { loot::eye(game, self.n).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir)) };
@@ -159,7 +163,8 @@ impl Seat {
         if let Some(d) = self.down {
             crate::mates::down(ui, pane, d.left, super::down::BLEED_OUT, d.revive);
         }
-        if alone {
+        if self.standing() {
+            self.bag_ui.pane = (!alone).then_some(pane);
             self.looting(ui, cx, game, combat, icons, dt, loot::Aimed::Nothing);
         }
     }
@@ -173,6 +178,18 @@ mod tests {
     use crate::throw::{Burning, Felt};
     use crate::vitals::{Affliction, Vitals};
     use crate::zombie::brain::Blow;
+
+    #[test]
+    fn a_bag_up_on_a_pad_leaves_the_pointer_with_whoever_has_the_mouse() {
+        let mut h = lntrn_ui::testing::Harness::new(800.0, 600.0);
+        h.frame(|ui| {
+            let mut seat = Seat::default();
+            seat.open = Some(super::super::seat::Open { container: None });
+            assert!(seat.rummaging() && seat.wants_lock(), "no mouse of theirs to let go of");
+            seat.input.update(ui, Some(Default::default()), true, Default::default(), 0.016);
+            assert!(!seat.wants_lock(), "the mouse theirs, it's free for the bag");
+        });
+    }
 
     #[test]
     fn armored_a_hounds_bite_does_not_catch_and_in_a_holdout_armor_weighs_nothing() {

@@ -138,16 +138,19 @@ impl DeadSignal {
         self.installed = true;
     }
 
-    /// M opens and shuts the map, over the run (not with the bag up).
+    /// M (a pad's View, held) opens and shuts the map, over the run (not
+    /// with the bag up).
     pub(super) fn map_screen(&mut self, ui: &mut Ui, active: bool) {
         // The bag up puts the map away; a holdout has none.
-        if !self.run.wants_lock() || self.run.holdout.is_some() {
+        let bag_up = self.run.seats.first().is_some_and(|s| s.rummaging());
+        if bag_up || self.run.holdout.is_some() {
             self.map_open = false;
-            return;
-        }
-        let asked = self.run.seats.first_mut().is_some_and(|s| s.input.pressed(ui, crate::settings::keys::Action::Map));
-        if active && asked {
+        } else if active && self.run.seats.first_mut().is_some_and(|s| s.input.pressed(ui, crate::settings::keys::Action::Map)) {
             self.map_open = !self.map_open;
+        }
+        // (Up, a tap of View puts it away too, not the bag up.)
+        if let Some(seat) = self.run.seats.first_mut() {
+            seat.input.set_mapped(self.map_open);
         }
         if !self.map_open {
             return;
