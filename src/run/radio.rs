@@ -4,7 +4,8 @@
 //! away, to come back after), and while its dial's being worked the feet
 //! stand still and the keys that walk (a pad's d-pad) punch its code in;
 //! a whole code's called in there and then, if there's the signal for it
-//! (what they kill charges it), and the feet are free again. What was
+//! (what they kill charges it; and the points, where it costs those too),
+//! and the feet are free again. What was
 //! called for seen to (a strike placed, a flare thrown, a boost begun),
 //! the radio goes away by itself. A drop called for, its flare comes up in the left
 //! hand: the trigger held aims its throw, let go throws it. A strike
@@ -116,16 +117,25 @@ impl Seat {
             }
         }
         let arrow = self.input.dial(ui);
+        // (The dev's: it all costs no points.)
+        let free_of_charge = game.world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.free);
         let Some(radio) = &mut self.radio else { return };
         radio.signal.charge(&self.stats);
         if let Some((arrow, dialed)) = arrow.and_then(|a| radio.press(a).map(|d| (a, d))) {
             // A whole code: called in there and then, if there's the
-            // signal for it; refused, if not.
-            let refused = matches!(dialed, Dialed::Called(call) if !radio.signal.spend(call.entry().cost));
-            if refused {
+            // signal for it (and the points, if it costs those too);
+            // refused, if not.
+            let price = |call: Call| if free_of_charge { 0 } else { call.entry().points };
+            let refused = match dialed {
+                Dialed::Called(call) if self.points.is_some_and(|p| p < price(call)) => Some("NOT ENOUGH POINTS"),
+                Dialed::Called(call) if !radio.signal.spend(call.entry().cost) => Some("NOT ENOUGH SIGNAL"),
+                _ => None,
+            };
+            if let Some(why) = refused {
                 radio.refuse();
-                self.note = Some(("NOT ENOUGH SIGNAL", super::loot::NOTE_FOR));
+                self.note = Some((why, super::loot::NOTE_FOR));
             } else if let Dialed::Called(call) = dialed {
+                self.points = self.points.map(|p| p - price(call));
                 if call.dropped() {
                     // A drop: its flare in hand at once.
                     radio.give_flare(call);
@@ -146,7 +156,7 @@ impl Seat {
                 Arrow::Down => Sfx::DialDown,
                 Arrow::Left => Sfx::DialLeft,
             };
-            combat.play(if refused || dialed == Dialed::Wrong { Sfx::DialWrong } else { tone }, 0.7);
+            combat.play(if refused.is_some() || dialed == Dialed::Wrong { Sfx::DialWrong } else { tone }, 0.7);
         }
         // Wanted or in hand, the hands are its: what's held goes away.
         let hands = &mut combat.arms[self.n].hands;
@@ -184,8 +194,8 @@ impl Seat {
     }
 
     /// The radio's card, beside it over their `pane` of the `window`,
-    /// while it's out.
-    pub fn radio_card(&self, ui: &mut Ui, pane: Rect, window: Rect) {
+    /// while it's out: what they've not the `points` for shown so.
+    pub fn radio_card(&self, ui: &mut Ui, pane: Rect, window: Rect, points: Option<u32>) {
         let Some(radio) = self.radio.filter(|r| r.card() > 0.0) else { return };
         let on_pad = self.input.on_pad || !self.input.has_keys();
         // What dials: the keys that walk, written together if each is a
@@ -196,7 +206,7 @@ impl Seat {
             false if keys.iter().all(|k| k.chars().count() == 1) => keys.concat(),
             false => keys.join(" "),
         };
-        card::draw(ui, pane, window, &radio, &card::Hints { dial, away: self.input.name(Action::Radio), throw: self.input.name(Action::Fire) });
+        card::draw(ui, pane, window, &radio, points, &card::Hints { dial, away: self.input.name(Action::Radio), throw: self.input.name(Action::Fire) });
     }
 }
 

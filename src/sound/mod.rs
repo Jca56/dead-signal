@@ -124,6 +124,9 @@ pub enum Sfx {
     /// A precision strike: its shell heard coming down, and landing.
     Whistle,
     Impact,
+    /// A mystery drop: its guns flicking past, and the one it is.
+    Mystery,
+    Prize,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -138,7 +141,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 76] = [
+const ALL: [Sfx; 78] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -207,6 +210,8 @@ const ALL: [Sfx; 76] = [
     Sfx::Brrt,
     Sfx::Whistle,
     Sfx::Impact,
+    Sfx::Mystery,
+    Sfx::Prize,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

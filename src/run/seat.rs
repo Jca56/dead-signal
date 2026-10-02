@@ -71,8 +71,11 @@ pub struct Seat {
     /// gun last in hand (what a pad's Y goes back to from the blade).
     pub(super) wheel: f64,
     pub(super) gun: Option<Slot>,
-    /// The handheld radio, where they carry one (a holdout).
+    /// The handheld radio, where they carry one (a holdout); and the
+    /// points they've to spend with it (a holdout's wallet's, lent them
+    /// for the frame).
     pub radio: Option<crate::radio::Radio>,
+    pub points: Option<u32>,
     /// Their controls, this frame (the keys and mouse, a pad), and whether
     /// a sprint's been toggled on (sprint set to toggle, or on a pad).
     pub input: Input,

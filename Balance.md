@@ -254,14 +254,26 @@ Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's
 |---|---|---|
 | AMMO DROP | ↓ ↓ ↑ → | 2 bars |
 | MEDIC DROP | ↓ ↑ → ← | 2 bars |
+| MYSTERY DROP | ↑ → ↓ ↓ ↓ | 2 bars + 950 points |
 | 2X POINTS | ← → ← → | 3 bars |
 | INSTAKILL | → ↑ ↓ ↓ ← | 4 bars |
 | PRECISION STRIKE | → → ↑ | 2 bars |
 | STRAFING RUN | ↑ → → | 3 bars |
 | GUNSHIP | ↑ ← → ↓ ↑ | 5 bars |
 
-- A **drop** (ammo, medic) is marked with a flare: it comes up lit in the left hand, the radio still up in the right; the trigger held aims its throw, let go throws it. Once it's come to rest a crate is let go over it **2.5 s** later and comes down under a parachute in **6 s**. Under a roof the flare gutters out, nothing comes, and the signal it cost is given back.
+- A **drop** (ammo, medic, mystery) is marked with a flare: it comes up lit in the left hand, the radio still up in the right; the trigger held aims its throw, let go throws it. Once it's come to rest a crate is let go over it **2.5 s** later and comes down under a parachute in **6 s**. Under a roof the flare gutters out, nothing comes, and what it cost is given back.
 - An **ammo drop** holds what every player's guns lack of a full carry (what a hound round's worth tops them up to), a stack a kind. A **medic drop** holds, for each player, **1 medkit, 2 bandages and 1 armor plate**. It's all spilled about the crate to be taken, by anyone, and lies there the 30 seconds everything does.
+- A **mystery drop** costs points as well as signal (a code there aren't the points for is refused, as one there isn't the signal for is), and its smoke is violet. It holds one gun, luck's choice (the table below), never one whoever called for it carries, in the pack or in hand; **1 in 6** has been through the Amplifier once already. The crate down, the guns it could be flick past over it for **2.5 s**, then the one it is turns there (an amplified one in amber) to be taken, by anyone who looks at it and presses, till the crate goes: **28.5 s** in all. Taken, it's in hand, loaded, with a full carry of its rounds; what it takes the place of goes to the pack (the ground, if there's no room).
+
+| In a mystery drop | Chance |
+|---|---|
+| HUNTING RIFLE | 23% |
+| SHOTGUN | 23% |
+| SMG | 23% |
+| ASSAULT RIFLE | 15% |
+| FLAMETHROWER | 8% |
+| LMG | 8% |
+
 - A **strafing run** is marked on the ground: its code sent, a strip **30 m long and 5 m wide** is outlined in red where the player looks, running straight away from them; the trigger sends it there (not under a roof). **3 s** later the plane's guns rake it end to end in **1 s**. Everything in it under open sky as the rounds pass takes **900** (plate's no help: all of the horde dies of it, a Juggernaut is badly hurt); a player in it takes **70** (armor first). Under a roof, nothing's touched. The kills are whoever called it's (their points), but charge no signal.
 - A **precision strike** is marked on the ground too: a red circle with a cross in it, **5 m** in radius, where the player looks; the trigger sends it there (not under a roof). **2 s** later one heavy shell comes straight down on it: no fire, a blow. Everything in the circle under open sky takes from **1200** at its middle to **500** at its edge (plate's no help) and is flung outward; a player in it takes **80** to **30** (armor first). The kills are whoever called it's (their points), but charge no signal.
 - The **gunship** needs no marking: **4 s** after its code's sent a helicopter's in over the compound, and for **45 s** it flies a slow circle round it, its door gun on the dead out in the open that it can see (those nearest a player first; a round every 0.08 s, **60** each), its searchlight on whichever it's at. What's under a roof is safe from it; players always are. Called for again while it's up, it stays as long again. Its kills are whoever called it's (their points), but charge no signal.

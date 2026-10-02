@@ -6,7 +6,8 @@
 //! run (`strafe.rs`): a strip of ground raked by a plane's guns. The
 //! gunship (`gunship.rs`): a helicopter circling the compound, its gun on
 //! the dead in the open. A precision strike (`strike.rs`): one heavy
-//! shell down on a marked spot. What it
+//! shell down on a marked spot. A mystery drop's crate has a gun in it
+//! (`mystery.rs`), shown over it to be taken. What it
 //! means to the players (what the crate held, the signal back for a flare
 //! that guttered) is the run's: it's told through [`Support`], as is
 //! what's called for that needs no marking (a boost). What's
@@ -14,6 +15,7 @@
 
 pub mod draw;
 pub mod gunship;
+pub mod mystery;
 pub mod strafe;
 pub mod strike;
 #[cfg(test)]
@@ -140,7 +142,8 @@ pub struct Flare {
 pub struct Drop {
     pub call: Call,
     pub by: usize,
-    /// Where it lands; how high over that it is, and was a step ago.
+    /// Where it lands; how high over that it is, and was a step ago;
+    /// and how long it's been coming down.
     pub at: Vec3,
     pub height: f64,
     pub prev: f64,
@@ -165,6 +168,8 @@ pub enum Event {
     Round { from: Vec3, at: Vec3 },
     /// A precision strike's shell landed at `at`.
     Impact { at: Vec3 },
+    /// A mystery drop's gun is the one it is: `gun`, for player `by`.
+    Won { by: usize, gun: crate::loot::Stack },
 }
 
 /// What's come of what was called down since the run last asked.
@@ -195,7 +200,7 @@ pub fn drop_at(world: &mut World, call: Call, at: Vec3, height: f64) {
 
 /// Everything called down, gone (a new run).
 pub fn clear(world: &mut World) {
-    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Flare>, With<Drop>, With<strafe::Strafe>, With<gunship::Gunship>, With<strike::Strike>)>>().iter(world).collect();
+    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Flare>, With<Drop>, With<strafe::Strafe>, With<gunship::Gunship>, With<strike::Strike>, With<mystery::Prize>)>>().iter(world).collect();
     for e in all {
         world.despawn(e);
     }
@@ -210,6 +215,7 @@ pub fn step(world: &mut World) {
     strafe::step(world);
     strike::step(world);
     gunship::step(world);
+    mystery::step(world);
     let mut sounds: Vec<(Sfx, Vec3, f32)> = Vec::new();
     let mut events = Vec::new();
     let mut gone = Vec::new();
@@ -273,11 +279,11 @@ pub fn step(world: &mut World) {
         }
     }
     for mut d in world.query::<&mut Drop>().iter_mut(world) {
-        d.age += STEP;
         d.prev = d.height;
         match &mut d.down {
             Some(t) => *t += STEP,
             None => {
+                d.age += STEP;
                 d.height = (d.height - FALLS * STEP).max(0.0);
                 if d.height <= 0.0 {
                     d.down = Some(0.0);

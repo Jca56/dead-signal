@@ -1,7 +1,8 @@
 //! What the radio called down, from the run's side: a crate landed, what
 //! it holds is spilled about it to be taken (an ammo drop: what everyone's
 //! guns lack of a full carry; a medic drop: something to mend each of them
-//! with); a flare that guttered out with nothing sent, its signal's given
+//! with; a mystery drop: a gun, luck's choice, shown over it to be taken);
+//! a flare that guttered out with nothing sent, what it cost is given
 //! back; a boost called for, it's begun, for everyone; a strafing run's
 //! rounds (and the gunship's) seen to land, and what they killed counted;
 //! the gunship called in over the compound.
@@ -70,13 +71,19 @@ impl Run {
                         seat.note = name;
                     }
                 }
-                // Nothing could come: the signal it cost, back.
+                // Nothing could come: the signal it cost, back (and the
+                // points, if it cost those too).
                 Event::Guttered { call, by } => {
                     let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) else { continue };
+                    let entry = call.entry();
                     if let Some(radio) = &mut seat.radio {
-                        radio.signal.refund(call.entry().cost);
+                        radio.signal.refund(entry.cost);
                     }
-                    seat.note = Some(("NO OPEN SKY  ·  SIGNAL BACK", super::loot::NOTE_FOR * 1.5));
+                    if let Some(wallet) = self.holdout.as_mut().and_then(|h| h.wallets.get_mut(by)) {
+                        wallet.points += entry.points;
+                    }
+                    let back = if entry.points > 0 { "NO OPEN SKY  ·  SIGNAL AND POINTS BACK" } else { "NO OPEN SKY  ·  SIGNAL BACK" };
+                    seat.note = Some((back, super::loot::NOTE_FOR * 1.5));
                     combat.play(Sfx::DialWrong, 0.6);
                 }
                 // A strafing run's round landed: its streak down the sky,
@@ -101,9 +108,24 @@ impl Run {
                     combat.fx.flash(at + Vec3::new(0.0, 1.5, 0.0), 26.0, [3.2, 3.0, 2.7], 0.22);
                     crate::glass::blast(&mut game.world, &mut combat.fx, at + Vec3::new(0.0, 1.0, 0.0), RADIUS + 3.0);
                 }
+                // A mystery drop's gun is the one it is: whoever called
+                // for it is told which.
+                Event::Won { by, gun } => {
+                    if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
+                        seat.note = Some((gun.name(), super::loot::NOTE_FOR * 1.5));
+                    }
+                }
                 // Down: the dust it raises, and what it held, about it.
-                Event::Landed { call, at, .. } => {
+                Event::Landed { call, at, by } => {
                     combat.fx.burst(at + Vec3::new(0.0, 0.15, 0.0), Vec3::Y, Surface::Dirt, 40);
+                    // A mystery drop: a gun, by luck (never one whoever
+                    // called for it carries), over the crate.
+                    if call == Call::MysteryDrop {
+                        let bag = self.seats.iter().find(|s| s.n == by).map(|s| &s.bag);
+                        let gun = crate::holdout::mystery::roll(&mut self.dice, bag);
+                        crate::support::mystery::set(&mut game.world, gun, at, by);
+                        continue;
+                    }
                     combat.play(Sfx::Pickup, 0.8);
                     let turn = self.dice.unit() * std::f64::consts::TAU;
                     for (i, stack) in self.held_by(call).into_iter().enumerate() {
@@ -172,13 +194,54 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_boost_called_for_is_on_for_everyone_and_instakill_s_kills_charge_no_signal() {
-        let (mut run, mut game, mut combat) = run(2);
+    /// A holdout for `run`'s two, in a bare yard.
+    fn hold_out(run: &mut Run, game: &mut Game) {
         let arena = crate::holdout::arena::Arena { reach: 20.0, bounds: (Vec3::splat(-20.0), Vec3::splat(20.0)), zones: vec!["YARD"], start: 0, spawn: Vec3::ZERO, windows: Vec::new(), doors: Vec::new(), buys: Vec::new(), lamps: Vec::new(), signs: Vec::new() };
         let mut holdout = Holdout::new(arena, 1, 2);
         holdout.begin(&mut game.world);
         run.holdout = Some(holdout);
+    }
+
+    #[test]
+    fn a_mystery_drop_down_is_a_gun_its_caller_doesn_t_carry_and_guttered_its_points_come_back() {
+        use crate::support::mystery::{OVER, Prize};
+        let (mut run, mut game, mut combat) = run(2);
+        hold_out(&mut run, &mut game);
+        // Whoever called for it carries an SMG, and a shotgun put away.
+        *run.seats[1].bag.slot_mut(Slot::Primary) = Some(Stack::gun(Kind::Smg, 30));
+        run.seats[1].bag.add(Stack::gun(Kind::Shotgun, 5));
+        for k in 0..40 {
+            game.world.resource_mut::<Support>().events.push(Event::Landed { call: Call::MysteryDrop, by: 1, at: Vec3::new(3.0 + f64::from(k), 0.0, 3.0) });
+        }
+        run.supported(&mut game, &mut combat);
+        let guns: Vec<Prize> = game.world.query::<&Prize>().iter(&game.world).copied().collect();
+        assert_eq!(guns.len(), 40);
+        assert!(guns.iter().all(|p| p.by == 1 && p.at.y == OVER && p.age == 0.0 && !matches!(p.gun.kind, Kind::Smg | Kind::Shotgun | Kind::Pistol)), "{guns:?}");
+        assert!(guns.iter().any(|p| p.gun.kind != guns[0].gun.kind), "luck's choice: not all alike");
+        assert_eq!(game.world.query::<&crate::items::Pickup>().iter(&game.world).count(), 0, "nothing spilled about it");
+        // It's the gun it is: whoever called for it is told which.
+        let mut big = Stack::one(Kind::Lmg);
+        game.world.resource_mut::<Support>().events.push(Event::Won { by: 1, gun: big });
+        run.supported(&mut game, &mut combat);
+        assert_eq!(run.seats.iter().map(|s| s.note.map(|(n, _)| n)).collect::<Vec<_>>(), [None, Some("LMG")]);
+        big.tier = 1;
+        game.world.resource_mut::<Support>().events.push(Event::Won { by: 0, gun: big });
+        run.supported(&mut game, &mut combat);
+        assert_eq!(run.seats[0].note.map(|(n, _)| n), Some(crate::weapon::amp::name(crate::weapon::Weapon::Lmg, 1)));
+        // One whose flare guttered: its signal back, and its points.
+        let points = |run: &Run| run.holdout.as_ref().map(|h| h.wallets.iter().map(|w| (w.points, w.earned)).collect::<Vec<_>>());
+        let had = points(&run).unwrap();
+        game.world.resource_mut::<Support>().events.push(Event::Guttered { call: Call::MysteryDrop, by: 1 });
+        run.supported(&mut game, &mut combat);
+        assert_eq!(points(&run), Some(vec![had[0], (had[1].0 + Call::MysteryDrop.entry().points, had[1].1)]), "back, not earned");
+        assert_eq!(run.seats[1].radio.map(|r| r.signal.bars()), Some(2.0));
+        assert_eq!(run.seats[1].note.map(|(n, _)| n), Some("NO OPEN SKY  ·  SIGNAL AND POINTS BACK"));
+    }
+
+    #[test]
+    fn a_boost_called_for_is_on_for_everyone_and_instakill_s_kills_charge_no_signal() {
+        let (mut run, mut game, mut combat) = run(2);
+        hold_out(&mut run, &mut game);
         crate::support::called(&mut game.world, Call::Instakill, 1);
         crate::support::called(&mut game.world, Call::StrafingRun, 0);
         run.holdout_step(&mut game, &mut combat, 0.016);

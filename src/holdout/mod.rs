@@ -4,7 +4,8 @@
 //! points buy guns and kits off the walls and open the doors to more of
 //! the arena. Boards torn off the windows can be nailed back, for a few
 //! points more. The radio's boosts (`boosts.rs`) double what's earned, or
-//! make any hit a kill, for a while. It lasts as long as the player does.
+//! make any hit a kill, for a while; its mystery drop (`mystery.rs`) is a
+//! gun, luck's choice. It lasts as long as the player does.
 
 pub mod arena;
 pub mod boosts;
@@ -17,6 +18,7 @@ mod land;
 pub mod lamps;
 mod layout;
 mod machine;
+pub mod mystery;
 pub mod props;
 mod raise;
 mod relay;

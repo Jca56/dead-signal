@@ -189,14 +189,16 @@ impl Seat {
         // Something lying there to take comes first (what the dead left,
         // what someone set down); then what's on the walls.
         let lying = eye.and_then(|(eye, dir)| crate::items::in_view(&mut game.world, eye, dir));
-        let aimed = eye.filter(|_| lying.is_none()).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir));
+        // (Then a mystery drop's gun, turning over its crate.)
+        let prize = eye.filter(|_| lying.is_none()).and_then(|(eye, dir)| crate::support::mystery::in_view(&mut game.world, eye, dir));
+        let aimed = eye.filter(|_| lying.is_none() && prize.is_none()).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir));
         // (Boards are nailed, and someone picked up, by holding: a tap of a
         // pad's X is still a reload there.)
         self.input.set_prompt(match aimed {
             _ if self.reviving.is_some() => Prompt::Hold,
             Some(crate::holdout::Aimed::Window(_)) => Prompt::Hold,
             Some(_) => Prompt::Press,
-            None if lying.is_some() => Prompt::Press,
+            None if lying.is_some() || prize.is_some() => Prompt::Press,
             None => Prompt::None,
         });
         if let Some(a) = aimed
@@ -220,21 +222,31 @@ impl Seat {
             if took.is_some() {
                 self.take_up(combat, took);
             }
-            // (What it put out of their hands, with no room in the pack.)
-            let feet = game.player(self.n).map(|(b, _)| b.pos);
-            for (_, stack) in h.spilled.extract_if(.., |(seat, _)| *seat == self.n).collect::<Vec<_>>() {
-                if let Some(at) = feet {
-                    crate::items::set_down(&mut game.world, stack, at + Vec3::new(0.0, 0.8, 0.0), self.dice.unit() * std::f64::consts::TAU);
-                }
+        }
+        // A mystery drop's gun, taken: in hand, the crate left empty.
+        if let Some((e, gun)) = prize
+            && self.input.pressed(ui, Action::Interact)
+        {
+            game.world.despawn(e);
+            let took = h.take(self.n, &mut self.bag, gun);
+            combat.play(Sfx::SlideRack, 0.9);
+            self.take_up(combat, took);
+        }
+        // (What that put out of their hands, with no room in the pack.)
+        let feet = game.player(self.n).map(|(b, _)| b.pos);
+        for (_, stack) in h.spilled.extract_if(.., |(seat, _)| *seat == self.n).collect::<Vec<_>>() {
+            if let Some(at) = feet {
+                crate::items::set_down(&mut game.world, stack, at + Vec3::new(0.0, 0.8, 0.0), self.dice.unit() * std::f64::consts::TAU);
             }
         }
         if let Some(sfx) = h.hold(&mut game.world, self.n, aimed, self.input.held(ui, Action::Interact), dt) {
             combat.play(sfx, 0.8);
         }
-        let prompt = match (self.reviving, lying) {
-            (Some((j, _)), _) => Some(("E", format!("REVIVE P{}", j + 1))),
-            (None, Some((_, stack))) => Some(("E", stack.label())),
-            (None, None) => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
+        let prompt = match (self.reviving, lying, prize) {
+            (Some((j, _)), ..) => Some(("E", format!("REVIVE P{}", j + 1))),
+            (None, Some((_, stack)), _) => Some(("E", stack.label())),
+            (None, None, Some((_, gun))) => Some(("E", format!("TAKE {}", gun.name()))),
+            (None, None, None) => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
         };
         let picking_up = self.reviving.map(|(_, p)| p).filter(|&p| p > 0.0);
         self.hud(ui, pane, combat, game, prompt, h.nail_progress(self.n).or(picking_up));
@@ -243,7 +255,7 @@ impl Seat {
             crate::mates::down(ui, pane, d.left, super::down::BLEED_OUT, d.revive);
         }
         let window = ui.clip();
-        self.radio_card(ui, pane, window);
+        self.radio_card(ui, pane, window, h.wallet(self.n).map(|w| w.points));
         if self.standing() {
             self.bag_ui.pane = (!alone).then_some(pane);
             self.looting(ui, cx, game, combat, icons, dt, lying.map_or(loot::Aimed::Nothing, |(e, stack)| loot::Aimed::Pickup(e, stack)));

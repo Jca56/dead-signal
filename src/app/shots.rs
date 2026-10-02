@@ -22,7 +22,10 @@
 //! player stood ahead, the radio out, as the first sees them.
 //! `STRIKE=mark`: a precision strike's circle being placed ahead;
 //! `STRIKE=fall|hit`: one called in there, its shell coming down, or just
-//! landed.
+//! landed. `MYSTERY=fall|shuffle|won|jackpot`: a mystery drop's crate a
+//! few metres ahead: coming down, its guns flicking past, the one it is
+//! over it, or that one amplified. `POINTS=<n>`: the points the radio's
+//! card takes them to have.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -194,6 +197,22 @@ impl DeadSignal {
                 crate::items::set_down(&mut self.game.world, crate::loot::Stack::one(kind), yard(9.5, -12.0) + Vec3::new(a.cos() * 1.3, 0.6, a.sin() * 1.3), a);
             }
         }
+        // (A mystery drop a few metres ahead, asked for.)
+        if let Ok(how) = std::env::var("MYSTERY") {
+            use crate::radio::codes::Call;
+            use crate::support::mystery;
+            crate::support::clear(&mut self.game.world);
+            let at = Vec3::new(feet.x - yaw.sin() * 3.4, feet.y, feet.z - yaw.cos() * 3.4);
+            crate::support::drop_at(&mut self.game.world, Call::MysteryDrop, at, if how == "fall" { 9.0 } else { 0.0 });
+            if how != "fall" {
+                let mut gun = crate::loot::Stack::one(crate::loot::Kind::Lmg);
+                gun.tier = u8::from(how == "jackpot");
+                mystery::set(&mut self.game.world, gun, at, 0);
+                for mut p in self.game.world.query::<&mut mystery::Prize>().iter_mut(&mut self.game.world) {
+                    p.age = if how == "shuffle" { 0.0 } else { mystery::SHUFFLES };
+                }
+            }
+        }
         // (The gunship over the compound, asked for: a little way round
         // its circle.)
         if let (Ok(_), Some(bounds)) = (std::env::var("GUNSHIP"), self.run.holdout.as_ref().map(|h| h.arena.bounds)) {
@@ -318,7 +337,7 @@ impl DeadSignal {
                 if let Some(h) = holdout {
                     crate::holdout::hud::draw(ui, window, h, 0, seat.signal_shown().as_ref().map(|(s, key)| (s, key.as_str())));
                 }
-                seat.radio_card(ui, window, window);
+                seat.radio_card(ui, window, window, std::env::var("POINTS").ok().and_then(|p| p.parse().ok()));
             });
             over.pass.draw(gpu, &mut encoder, &view, SIZE, &over.ui.draw, &mut over.atlas, over.ui.text.atlas_mut(), images, None);
         }

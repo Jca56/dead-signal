@@ -161,7 +161,13 @@ impl Run {
         }
         combat.update(dt);
         for seat in &mut self.seats {
+            // (Their points lent them for it: the radio may spend some.)
+            let mut wallet = self.holdout.as_mut().and_then(|h| h.wallets.get_mut(seat.n));
+            seat.points = wallet.as_ref().map(|w| w.points);
             seat.act(ui, cx, game, combat, locked, dt);
+            if let (Some(w), Some(left)) = (&mut wallet, seat.points) {
+                w.points = left;
+            }
         }
 
         // Blows from the dead, the bile stood in, and what the fires and

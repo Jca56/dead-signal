@@ -2,7 +2,8 @@
 //! its talk button pressed and let go, the tones of its dial and the buzz
 //! of a wrong arrow; a plane going over, high up, and a crate coming to
 //! ground; a boost coming on; a strafing run's plane, and its guns; a
-//! precision strike's shell coming down, and landing.
+//! precision strike's shell coming down, and landing; a mystery drop's
+//! guns flicking past, and the one it is.
 
 use super::{Svf, env, pulse, render, sine};
 use crate::sound::{RATE, Sfx};
@@ -159,6 +160,31 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
                 let thud = f.run(x, 220.0, 0.6).0 * env(t, 0.002, 0.16) * 1.4;
                 let rain = g.run(x, 1400.0, 0.9).1 * env((t - 0.18).max(0.0), 0.12, 0.42) * f32::from(t >= 0.18) * 0.3;
                 crack + boom + thud + rain
+            })
+        }
+        Sfx::Mystery => {
+            // A mystery drop's guns flicking past: a music box's run, a
+            // note for each as it goes by, climbing (two up, one back),
+            // slower and slower.
+            use crate::support::mystery::{FLICKS, SHUFFLES, flick_at};
+            const SCALE: [f32; 5] = [1.0, 1.125, 1.25, 1.5, 1.6667];
+            let notes: Vec<(f32, f32)> = (0..FLICKS)
+                .map(|k| {
+                    let step = (k / 2 + 2 * (k % 2)) as usize;
+                    (flick_at(k) as f32, 392.0 * SCALE[step % 5] * (1 << (step / 5)) as f32)
+                })
+                .collect();
+            render(SHUFFLES as f32 + 0.35, 0.45, move |t, _| {
+                let rung = notes.iter().filter(|&&(at, _)| t >= at && t - at < 0.9);
+                rung.map(|&(at, hz)| (sine(t - at, hz) + sine(t - at, hz * 2.0) * 0.35) * env(t - at, 0.002, 0.11)).sum()
+            })
+        }
+        Sfx::Prize => {
+            // It's the gun it is: a bell struck, a fifth over it and the
+            // octave, ringing on.
+            render(1.2, 0.5, |t, _| {
+                let bell = |from: f32, hz: f32| if t >= from { (sine(t - from, hz) + sine(t - from, hz * 2.76) * 0.25) * env(t - from, 0.003, 0.3) } else { 0.0 };
+                bell(0.0, 1046.5) + bell(0.07, 1568.0) * 0.8 + bell(0.14, 2093.0) * 0.6
             })
         }
         _ => Vec::new(),

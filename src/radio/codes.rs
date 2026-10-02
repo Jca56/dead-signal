@@ -1,7 +1,7 @@
 //! What the radio can call for, and the code of arrows each is punched in
 //! with: always the same, so they're learnt by the hands. No code begins
 //! another, so the last arrow of one is all it takes. Each costs bars of
-//! signal (`signal.rs`).
+//! signal (`signal.rs`); a mystery drop, points as well.
 
 /// One press of the dial.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -17,6 +17,7 @@ pub enum Arrow {
 pub enum Call {
     AmmoDrop,
     MedicDrop,
+    MysteryDrop,
     DoublePoints,
     Instakill,
     PrecisionStrike,
@@ -25,26 +26,28 @@ pub enum Call {
 }
 
 /// A line of the radio's card: what's called for, its name, its code,
-/// and what it costs, in bars of signal.
+/// and what it costs, in bars of signal (and in points, if it does).
 #[derive(Clone, Copy, Debug)]
 pub struct Entry {
     pub call: Call,
     pub name: &'static str,
     pub code: &'static [Arrow],
     pub cost: u32,
+    pub points: u32,
 }
 
 use Arrow::{Down as D, Left as L, Right as R, Up as U};
 
 /// Everything on the card, in its order.
-pub const ENTRIES: [Entry; 7] = [
-    Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 2 },
-    Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 2 },
-    Entry { call: Call::DoublePoints, name: "2X POINTS", code: &[L, R, L, R], cost: 3 },
-    Entry { call: Call::Instakill, name: "INSTAKILL", code: &[R, U, D, D, L], cost: 4 },
-    Entry { call: Call::PrecisionStrike, name: "PRECISION STRIKE", code: &[R, R, U], cost: 2 },
-    Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 3 },
-    Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U], cost: 5 },
+pub const ENTRIES: [Entry; 8] = [
+    Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 2, points: 0 },
+    Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 2, points: 0 },
+    Entry { call: Call::MysteryDrop, name: "MYSTERY DROP", code: &[U, R, D, D, D], cost: 2, points: 950 },
+    Entry { call: Call::DoublePoints, name: "2X POINTS", code: &[L, R, L, R], cost: 3, points: 0 },
+    Entry { call: Call::Instakill, name: "INSTAKILL", code: &[R, U, D, D, L], cost: 4, points: 0 },
+    Entry { call: Call::PrecisionStrike, name: "PRECISION STRIKE", code: &[R, R, U], cost: 2, points: 0 },
+    Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 3, points: 0 },
+    Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U], cost: 5, points: 0 },
 ];
 
 /// The longest code there is.
@@ -54,7 +57,7 @@ impl Call {
     /// Whether it's a drop: where it's to land is marked with a flare,
     /// thrown.
     pub fn dropped(self) -> bool {
-        matches!(self, Call::AmmoDrop | Call::MedicDrop)
+        matches!(self, Call::AmmoDrop | Call::MedicDrop | Call::MysteryDrop)
     }
 
     /// Whether it's a strike: where it's to land is marked on the ground.
@@ -165,6 +168,8 @@ mod tests {
         assert_eq!([R, L].map(|a| d.press(a)), [Dialed::On; 2]);
         assert_eq!(d.press(R), Dialed::Called(Call::DoublePoints));
         assert_eq!(Call::DoublePoints.entry().name, "2X POINTS");
+        // Only a mystery drop costs points too: up, right, down, down, down.
+        assert_eq!(ENTRIES.iter().filter(|e| e.points > 0).map(|e| (e.call, e.points, e.code)).collect::<Vec<_>>(), [(Call::MysteryDrop, 950, &[U, R, D, D, D][..])]);
         // Every code can be punched in from nothing.
         for e in &ENTRIES {
             d.clear();

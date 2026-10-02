@@ -114,6 +114,8 @@ impl DeadSignal {
                     self.icons.0.insert(kind, (images.add(gpu, &picture), images.add(gpu, &turned)));
                 }
                 self.game.world.insert_resource(meshes);
+                // (And the guns a mystery drop could hold, alight.)
+                crate::support::draw::prize::load(renderer, &mut self.game.world, &props, &crate::holdout::mystery::ODDS.map(|(kind, _)| kind));
                 log_info!("icons: drawn in {:.0} ms", started.elapsed().as_secs_f64() * 1000.0);
             }
             Err(e) => log_error!("items: {e}"),

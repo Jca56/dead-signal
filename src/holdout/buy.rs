@@ -221,20 +221,26 @@ impl Holdout {
         if !ammo_only && let Some(slot) = Slot::of(kind) {
             let mut weapon = Stack::one(kind);
             weapon.loaded = kind.weapon().map_or(0, |w| w.spec().mag);
-            // What it takes the place of is kept: in the pack, or (no room
-            // there) set down at their feet.
-            if let Some(old) = bag.slot_mut(slot).replace(weapon) {
-                let left = bag.add(old);
-                if left.count > 0 {
-                    self.spilled.push((seat, left));
-                }
-            }
+            self.arm(seat, bag, weapon);
             took = Some(slot);
         } else if !ammo_only && bag.add(Stack::one(kind)).count > 0 {
             return (None, Some("NO ROOM"), None);
         }
         self.wallets[seat].points -= cost;
         (Some(if ammo_only || took.is_none() { Sfx::Pickup } else { Sfx::SlideRack }), None, took)
+    }
+
+    /// `weapon` into its slot in `bag`. What it takes the place of is
+    /// kept: in the pack, or (no room there) to be set down at `seat`'s
+    /// feet.
+    pub(super) fn arm(&mut self, seat: usize, bag: &mut Bag, weapon: Stack) {
+        let Some(slot) = Slot::of(weapon.kind) else { return };
+        if let Some(old) = bag.slot_mut(slot).replace(weapon) {
+            let left = bag.add(old);
+            if left.count > 0 {
+                self.spilled.push((seat, left));
+            }
+        }
     }
 
     /// A piece of armor off the wall: put on, whole (what was worn there,

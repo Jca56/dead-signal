@@ -3,7 +3,8 @@
 //! a strafing run: what's in its strip under open sky is hit as its
 //! rounds pass, and nothing else. And the gunship: in, round its circle
 //! shooting the dead it can see in the open, and off again. And a
-//! precision strike: one blow on its circle, hardest at the middle.
+//! precision strike: one blow on its circle, hardest at the middle. And
+//! a mystery drop's gun: flicking past, then there to take, then gone.
 
 use lntrn_math::Vec3;
 
@@ -51,9 +52,12 @@ fn a_flare_in_the_open_comes_to_rest_and_a_crate_comes_down_on_it() {
     let landed = events(&mut w);
     assert_eq!(landed.len(), 1);
     assert!(matches!(landed[0], Event::Landed { call: Call::AmmoDrop, by: 1, at } if (at - f.pos).length() < 0.1), "{landed:?}");
-    assert!(w.query::<&Drop>().single(&w).is_ok_and(|d| d.down.is_some() && d.height == 0.0));
-    // The flare burns out, and in time the empty crate's gone too.
+    let down = *w.query::<&Drop>().single(&w).expect("the crate");
+    assert!(down.down.is_some() && down.height == 0.0);
+    // The flare burns out, and in time the empty crate's gone too. (Down,
+    // it turns no more.)
     steps(&mut w, BURNS_ON + 1.0);
+    assert_eq!(w.query::<&Drop>().single(&w).map(|d| d.age).ok(), Some(down.age));
     assert_eq!(w.query::<&Flare>().iter(&w).count(), 0);
     steps(&mut w, STANDS);
     assert_eq!(w.query::<&Drop>().iter(&w).count(), 0);
@@ -238,4 +242,59 @@ fn a_precision_strike_lands_one_blow_on_its_circle_hardest_at_the_middle() {
     // Once, and then it's gone.
     steps(&mut w, SETTLES + 0.2);
     assert!(events(&mut w).is_empty() && w.query::<&Strike>().iter(&w).count() == 0);
+}
+
+#[test]
+fn a_mystery_drop_s_gun_flicks_past_then_is_there_to_take_till_the_crate_s_about_gone() {
+    use crate::loot::{Kind, Stack};
+    use crate::sound::Sfx;
+    use mystery::{FLICKS, LASTS, OVER, Prize, SHUFFLES, flick_at, in_view};
+    let mut w = world();
+    let gun = Stack::gun(Kind::Lmg, 100);
+    mystery::set(&mut w, gun, Vec3::ZERO, 1);
+    let (eye, at) = (Vec3::new(0.0, 1.6, 2.0), Vec3::new(0.0, OVER, 0.0));
+    let look = (at - eye).normalize();
+    // The others flick past first, each longer than the last: nothing to
+    // take yet.
+    assert!(flick_at(0) == 0.0 && (flick_at(FLICKS) - SHUFFLES).abs() < 1e-9);
+    assert!((1..FLICKS).all(|k| flick_at(k + 1) - flick_at(k) > flick_at(k) - flick_at(k - 1)));
+    steps(&mut w, 1.0);
+    let p = *w.query::<&Prize>().single(&w).expect("the gun");
+    assert!(!p.settled() && p.shows() && p.at == at && p.flick() > FLICKS / 2 && p.flick() < FLICKS, "{p:?}");
+    assert!(in_view(&mut w, eye, look).is_none() && events(&mut w).is_empty());
+    // Then it's the one it is: whoever called for it is told, once, and
+    // it's theirs (or anyone's) who looks at it from near.
+    steps(&mut w, SHUFFLES - 1.0 + 0.1);
+    assert_eq!(events(&mut w), [Event::Won { by: 1, gun }]);
+    let heard: Vec<Sfx> = w.resource::<Horde>().sounds.iter().map(|s| s.0).collect();
+    assert_eq!(heard, [Sfx::Mystery, Sfx::Prize], "plain: no Amplifier heard");
+    assert_eq!(in_view(&mut w, eye, look).map(|(_, g)| g), Some(gun));
+    assert!(in_view(&mut w, eye, Vec3::new(0.0, 0.0, 1.0)).is_none(), "looking away");
+    assert!(in_view(&mut w, eye + Vec3::new(0.0, 0.0, 3.0), look).is_none(), "too far off");
+    // (Not through a wall.)
+    w.resource_mut::<Solid>().0.add(&box_tris(Vec3::new(-2.0, 0.0, 0.9), Vec3::new(2.0, 3.0, 1.1)));
+    assert!(in_view(&mut w, eye, look).is_none());
+    // In its last seconds it blinks; then it's gone, a little before its
+    // crate would be, and nothing more's said of it.
+    steps(&mut w, LASTS - SHUFFLES - 3.0);
+    let mut seen = (0, 0);
+    for _ in 0..90 {
+        step(&mut w);
+        let shows = w.query::<&Prize>().single(&w).is_ok_and(|p| p.shows());
+        if shows { seen.0 += 1 } else { seen.1 += 1 }
+    }
+    assert!(seen.0 > 0 && seen.1 > 0, "{seen:?}");
+    steps(&mut w, 2.0);
+    assert_eq!(w.query::<&Prize>().iter(&w).count(), 0);
+    assert!(LASTS < STANDS && events(&mut w).is_empty());
+    // An amplified one: the Amplifier's heard as it settles. And a new
+    // run clears it away.
+    w.resource_mut::<Horde>().sounds.clear();
+    let mut big = gun;
+    big.tier = 1;
+    mystery::set(&mut w, big, Vec3::ZERO, 0);
+    steps(&mut w, SHUFFLES + 0.1);
+    assert_eq!(w.resource::<Horde>().sounds.iter().map(|s| s.0).collect::<Vec<_>>(), [Sfx::Mystery, Sfx::Prize, Sfx::Amplify]);
+    clear(&mut w);
+    assert_eq!(w.query::<&Prize>().iter(&w).count(), 0);
 }

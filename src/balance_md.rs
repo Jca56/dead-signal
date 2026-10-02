@@ -96,11 +96,26 @@ fn balance_md_matches_the_game() {
         let code: Vec<&str> = e.code.iter().map(|a| match a { Arrow::Up => "↑", Arrow::Right => "→", Arrow::Down => "↓", Arrow::Left => "←" }).collect();
         assert_eq!(row["Code"], code.join(" "), "{} code", e.name);
         assert_eq!(num(&row["Cost"]), f64::from(e.cost), "{} cost", e.name);
+        assert_eq!(row["Cost"].contains("points"), e.points > 0, "{} points", e.name);
+        assert!(e.points == 0 || row["Cost"].ends_with(&format!("+ {} points", e.points)), "{} points", e.name);
     }
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Balance.md")).expect("Balance.md");
     use crate::radio::signal;
     assert!(text.contains(&format!("a meter of **{} bars**", signal::BARS)));
     assert_eq!((signal::KILL * 10, signal::KEEN * 20), (signal::BAR, signal::BAR * 3), "a tenth of a bar a kill, half again to the head");
+    // Its mystery drop.
+    use crate::holdout::mystery::{JACKPOT, ODDS};
+    use crate::support::mystery::{LASTS as GUN_LASTS, SHUFFLES};
+    let held = table("| In a mystery drop | Chance |");
+    assert_eq!(held.len(), ODDS.len());
+    let all: u32 = ODDS.iter().map(|(_, odds)| odds).sum();
+    for (kind, odds) in ODDS {
+        let name = kind.def().name;
+        let row = held.iter().find(|r| r["In a mystery drop"] == name).unwrap_or_else(|| panic!("no row for {name}"));
+        assert_eq!(num(&row["Chance"]), (f64::from(odds) / f64::from(all) * 100.0).round(), "{name} chance");
+    }
+    assert!(text.contains(&format!("**1 in {JACKPOT}** has been through the Amplifier")));
+    assert!(text.contains(&format!("flick past over it for **{SHUFFLES} s**")) && text.contains(&format!("till the crate goes: **{GUN_LASTS} s** in all")));
     // Its boosts.
     use crate::holdout::boosts::{JUGGERNAUT, LASTS};
     assert!(text.contains(&format!("for everyone the moment they're sent, for **{LASTS} s**")) && text.contains(&format!("which takes **{JUGGERNAUT}×** the damage")));

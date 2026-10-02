@@ -4,11 +4,15 @@
 //! down, its lid off, the parachute fallen in a heap beside it; a strip
 //! of ground marked for a strafing run, outlined in red (while it's being
 //! placed, in that player's pane; once it's called in, for everyone to
-//! keep out of), and the plane that comes over it; a precision strike's
-//! circle with its cross, its shell coming down, and the ring and the
-//! dust of it landing; the gunship, its
-//! rotor turning, its gun flashing in its door, its searchlight's shaft
-//! down on what it's at. And what they light of a night.
+//! keep out of); a precision strike's circle with its cross, its shell
+//! coming down, and the ring and the dust of it landing. And what they
+//! light of a night. What flies is in `draw/air.rs`; a mystery drop's
+//! marks and its gun, in `draw/prize.rs`.
+
+mod air;
+pub mod prize;
+
+pub use air::{gunship, runs};
 
 use bevy_ecs::prelude::*;
 use lntrn_core::log_error;
@@ -18,6 +22,7 @@ use super::gunship::Gunship;
 use super::strafe::{LONG, Strafe, Strip, WIDE};
 use super::strike::{self, Spot, Strike};
 use super::{Drop, Flare, SETTLES, STANDS};
+use crate::radio::codes::Call;
 use crate::render::{Draw, Light, MeshId, Renderer, Vertex};
 use crate::world::Solid;
 
@@ -59,20 +64,13 @@ const ROUND: usize = 30;
 const DUST: (usize, [f32; 3], f32) = (12, [0.42, 0.36, 0.28], 0.5);
 const PORT: [f32; 3] = [1.0, 0.1, 0.1];
 const STARBOARD: [f32; 3] = [0.1, 1.0, 0.2];
-/// The gunship: its searchlight's colour, how wide its shaft is and how
-/// thick, how far its spot lights the ground; how fast its rotor turns,
-/// how far it leans in to its circle, and where its rotor's hub and its
-/// gun's muzzle are on it.
+/// The gunship's searchlight: its colour, and how far its spot lights the
+/// ground.
 const SEARCHLIGHT: [f32; 3] = [0.75, 0.83, 1.0];
-const SHAFT: (f64, f32) = (3.4, 0.2);
+const SPOT: f64 = 10.0;
 /// How much of its own colour what flies shows whatever the light (it's
 /// seen against the night).
 const SEEN: f32 = 0.6;
-const SPOT: f64 = 10.0;
-const SPINS: f64 = 31.0;
-const LEANS: f64 = 0.16;
-const HUB: Vec3 = Vec3::new(0.0, 1.85, 0.0);
-const MUZZLE: Vec3 = Vec3::new(2.0, -0.45, 0.2);
 
 /// What they look like (`airdrop.glb`), a ball for the smoke, a flare's
 /// red flame, and glowing blocks: a strip's outline (red; grey where it
@@ -99,6 +97,8 @@ pub struct Meshes {
     display: MeshId,
     /// A precision strike's shell, white-hot.
     shell: MeshId,
+    /// A mystery drop's question mark, alight.
+    query: MeshId,
 }
 
 /// Load what they look like, for `world`'s runs.
@@ -122,6 +122,7 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
                     let mut block = |glow: [f32; 3]| renderer.add_mesh(&crate::motes::speck([1.0; 3], glow, glow));
                     let (marked, refused, port, starboard, display) = (block(MARKED), block(REFUSED), block(PORT), block(STARBOARD), block(AMBER));
                     let shell = block(HOT);
+                    let query = renderer.add_mesh(&prize::question());
                     // A fire's flame, made a flare's: red, its heart
                     // white-hot.
                     let Some(flame) = crate::assets::load(renderer, "effects").ok().and_then(|fx| {
@@ -132,7 +133,7 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
                         log_error!("airdrop: no Flame to make a flare's of");
                         return;
                     };
-                    world.insert_resource(Meshes { flare, shut, open, chute, plane, heli, rotor, puff, shaft, flame, marked, refused, port, starboard, radio, display, shell });
+                    world.insert_resource(Meshes { flare, shut, open, chute, plane, heli, rotor, puff, shaft, flame, marked, refused, port, starboard, radio, display, shell, query });
                 }
                 _ => log_error!("airdrop: no Flare, Crate, Open, Chute, Plane, Heli, Rotor or Radio"),
             }
@@ -205,7 +206,9 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
                 let wide = (0.45 + 2.3 * share) * (0.8 + 0.4 * ((k * 5) % 7) as f64 / 6.0);
                 let model = Mat4::from_translation(tip + Vec3::new(0.0, 0.3 + COLUMN * share, 0.0) + lean) * Mat4::from_scale(Vec3::new(wide, wide * 1.15, wide));
                 let thin = (1.0 - share).powf(1.3) * (share * 8.0).min(1.0);
-                renderer.draw_soft(Draw { mesh: m.puff, model, emissive: 0.25, fog: 1.0, tint: SMOKE.0 }, SMOKE.1 * thin as f32);
+                // (A mystery drop's is its own colour.)
+                let tint = if f.call == Call::MysteryDrop { prize::SMOKE } else { SMOKE.0 };
+                renderer.draw_soft(Draw { mesh: m.puff, model, emissive: 0.25, fog: 1.0, tint }, SMOKE.1 * thin as f32);
             }
         }
     }
@@ -218,6 +221,9 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
                 let hung = Mat4::from_translation(d.at + Vec3::new(0.0, height, 0.0) + pivot) * Mat4::from_quat(swing(d.age)) * Mat4::from_translation(-pivot);
                 let turned = hung * Mat4::from_quat(Quat::from_rotation_y(d.at.x + d.age * 0.15));
                 renderer.draw(lit(m.shut, turned));
+                if d.call == Call::MysteryDrop {
+                    prize::marks(renderer, m.query, turned, false, time);
+                }
                 renderer.draw(lit(m.chute, turned * Mat4::from_translation(Vec3::new(0.0, CRATE_TOP, 0.0))));
             }
             Some(t) => {
@@ -226,6 +232,9 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
                 let sunk = ((t - (STANDS - 1.5)) / 1.5).clamp(0.0, 1.0);
                 let stood = Mat4::from_translation(d.at - Vec3::new(0.0, sunk * 0.7, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(d.at.x + d.age * 0.15));
                 renderer.draw(lit(m.open, stood));
+                if d.call == Call::MysteryDrop {
+                    prize::marks(renderer, m.query, stood, true, time);
+                }
                 // (It comes down beside the crate, flat and gathered in,
                 // and after a while sinks away.)
                 let fall = (t / SETTLES).clamp(0.0, 1.0);
@@ -382,85 +391,9 @@ pub fn strikes(world: &mut World, renderer: &mut Renderer, time: f64) {
     }
 }
 
-/// Every strafing run called in: its strip, till its rounds have been
-/// through it, and its plane coming over (its guns alight as they fire).
-pub fn runs(world: &mut World, renderer: &mut Renderer, time: f64) {
-    let (Some(m), Some(flames)) = (world.get_resource::<Meshes>().copied(), world.get_resource::<crate::throw::draw::Meshes>().copied()) else { return };
-    let all: Vec<Strafe> = world.query::<&Strafe>().iter(world).copied().collect();
-    for s in all {
-        if s.threatens() {
-            zone(world, renderer, None, &s.strip, time);
-        }
-        let (at, dir) = s.plane();
-        // (Its nose is the model's -Z.)
-        let placed = Mat4::from_translation(at) * Mat4::from_quat(Quat::from_rotation_y((-dir.x).atan2(-dir.z)));
-        renderer.draw(Draw { mesh: m.plane, model: placed, emissive: 1.0, fog: 1.0, tint: [1.0; 3] });
-        // A light at each wingtip, so it's seen against the night.
-        for (side, mesh) in [(-6.9, m.port), (6.9, m.starboard)] {
-            renderer.draw(Draw { mesh, model: placed * Mat4::from_translation(Vec3::new(side, 0.0, -0.5)) * Mat4::from_scale(Vec3::splat(0.35)), emissive: 1.0, fog: 0.3, tint: [1.0; 3] });
-        }
-        // (And one under its belly, blinking.)
-        if (time * 2.5).fract() < 0.25 {
-            renderer.draw(Draw { mesh: m.port, model: placed * Mat4::from_translation(Vec3::new(0.0, -0.85, 0.5)) * Mat4::from_scale(Vec3::splat(0.4)), emissive: 1.0, fog: 0.3, tint: [1.0; 3] });
-        }
-        let firing = s.front() > 0.0 && s.front() < LONG;
-        if firing {
-            let spit = 5.0 + 2.5 * (time * 90.0).sin().abs();
-            renderer.draw(Draw { mesh: flames.flash, model: placed * Mat4::from_translation(Vec3::new(0.12, -0.62, -7.8)) * Mat4::from_quat(Quat::from_rotation_y(std::f64::consts::FRAC_PI_2)) * Mat4::from_scale(Vec3::splat(spit)), emissive: 1.0, fog: 0.5, tint: [1.0; 3] });
-        }
-    }
-}
-
-/// Where the gunship is, and how it's turned: its nose the way it flies,
-/// leaning in to its circle while it's on it.
-fn hovering(g: &Gunship) -> Mat4 {
-    let (at, way) = g.place();
-    let lean = if g.on_station() { -LEANS } else { 0.0 };
-    Mat4::from_translation(at) * Mat4::from_quat(Quat::from_rotation_y((-way.x).atan2(-way.z)) * Quat::from_rotation_z(lean) * Quat::from_rotation_x(-0.07))
-}
-
-/// Where its searchlight's on: what it's shooting at, or (nothing to
-/// shoot) sweeping the ground under its circle.
-fn searched(g: &Gunship, time: f64) -> Vec3 {
-    g.lit.unwrap_or(g.over + Vec3::new((time * 0.6).sin() * g.out.0 * 0.5, 0.0, (time * 0.43).cos() * g.out.1 * 0.5)) + Vec3::new(0.0, 0.4, 0.0)
-}
-
-/// The gunship: its body and its turning rotor, its lights, its gun's
-/// flash, and the shaft of its searchlight.
-pub fn gunship(world: &mut World, renderer: &mut Renderer, time: f64) {
-    let (Some(m), Some(flames)) = (world.get_resource::<Meshes>().copied(), world.get_resource::<crate::throw::draw::Meshes>().copied()) else { return };
-    for g in world.query::<&Gunship>().iter(world) {
-        let placed = hovering(g);
-        // (Its own glow showing: it's seen against the night.)
-        let lit = |mesh, model| Draw { mesh, model, emissive: 1.0, fog: 1.0, tint: [1.0; 3] };
-        renderer.draw(lit(m.heli, placed));
-        renderer.draw(lit(m.rotor, placed * Mat4::from_translation(HUB) * Mat4::from_quat(Quat::from_rotation_y(time * SPINS))));
-        // A light on each skid, and one on its tail, blinking.
-        let lamp = |mesh, at: Vec3, size: f64| Draw { mesh, model: placed * Mat4::from_translation(at) * Mat4::from_scale(Vec3::splat(size)), emissive: 1.0, fog: 0.3, tint: [1.0; 3] };
-        renderer.draw(lamp(m.port, Vec3::new(-1.2, -1.7, -1.8), 0.22));
-        renderer.draw(lamp(m.starboard, Vec3::new(1.2, -1.7, -1.8), 0.22));
-        if (time * 1.8).fract() < 0.2 {
-            renderer.draw(lamp(m.port, Vec3::new(0.0, 2.2, 7.9), 0.3));
-        }
-        if g.firing() {
-            let spit = 2.2 + 1.2 * (time * 80.0).sin().abs();
-            renderer.draw(Draw { mesh: flames.flash, model: placed * Mat4::from_translation(MUZZLE) * Mat4::from_quat(Quat::from_rotation_z(-0.35)) * Mat4::from_scale(Vec3::splat(spit)), emissive: 1.0, fog: 0.5, tint: [1.0; 3] });
-        }
-        // Its searchlight, once it's over the compound: a shaft from
-        // under its nose down to where it's looking.
-        if g.on_station() {
-            let from = placed.transform_point(Vec3::new(0.0, -1.0, -2.6));
-            let to = searched(g, time);
-            // (Its point up at the lamp.)
-            let Some(up) = (from - to).try_normalize() else { continue };
-            let model = Mat4::from_translation((from + to) * 0.5) * Mat4::from_quat(Quat::from_rotation_arc(Vec3::Y, up)) * Mat4::from_scale(Vec3::new(SHAFT.0, (to - from).length(), SHAFT.0));
-            renderer.draw_soft(Draw { mesh: m.shaft, model, emissive: 0.5, fog: 0.6, tint: SEARCHLIGHT }, SHAFT.1);
-        }
-    }
-}
-
 /// What they light at `time`, to `renderer`: a flare's red.
 pub fn lights(world: &mut World, renderer: &mut Renderer, time: f64) {
+    prize::lights(world, renderer, time);
     for f in world.query::<&Flare>().iter(world) {
         let k = 1.5 * (0.8 + 0.2 * flutter(time, f.pos.x + f.pos.z));
         renderer.light(Light::open(f.pos + Vec3::new(0.0, 0.35, 0.0), REACH, GLOW.map(|c| c * k as f32)));
@@ -471,7 +404,7 @@ pub fn lights(world: &mut World, renderer: &mut Renderer, time: f64) {
         let (at, _) = g.place();
         renderer.light(Light::open(at - Vec3::new(0.0, 1.5, 0.0), 9.0, [0.45, 0.5, 0.55]));
         if g.on_station() {
-            renderer.light(Light::open(searched(g, time) + Vec3::new(0.0, 1.2, 0.0), SPOT, SEARCHLIGHT.map(|c| c * 1.7)));
+            renderer.light(Light::open(air::searched(g, time) + Vec3::new(0.0, 1.2, 0.0), SPOT, SEARCHLIGHT.map(|c| c * 1.7)));
         }
         if g.firing() {
             let k = 1.0 + (time * 80.0).sin().abs();

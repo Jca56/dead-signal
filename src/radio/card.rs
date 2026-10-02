@@ -1,7 +1,8 @@
 //! The radio's card, drawn beside the handset while it's out: the signal
 //! there is, and everything there is to call for, each with what it costs
 //! in bars and its code of arrows, amber on dark as the handset's display
-//! is. What there isn't the signal for is dim, its cost in red. As a
+//! is; what costs points too, its price after its name. What there isn't
+//! the signal for is dim, its cost in red (or the points: its price). As a
 //! code's punched in, the lines it could still be stay lit, their arrows
 //! so far bright, and the rest go dim; a wrong arrow (or a code there's
 //! not the signal for) flashes it red; a whole code, and its line's lit across
@@ -14,7 +15,7 @@ use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
-use super::codes::{Arrow, ENTRIES};
+use super::codes::{Arrow, ENTRIES, Entry};
 use super::{Radio, WRONG_FOR, meter};
 use crate::style;
 
@@ -25,12 +26,13 @@ const DARK: Color = Color::rgb(0.05, 0.04, 0.02);
 const DIMMED: f64 = 0.36;
 /// The smallest its words are, pixels, whatever the pane.
 const SMALLEST: f64 = 18.0;
-/// A line's height at its tallest and shortest, the header's, the foot's,
-/// and the space round it all; times the scale.
+/// A line's height at its shortest and tallest; and, with lines that
+/// short and that tall, the header's, the foot's, and the space round it
+/// all; times the scale.
 const ROW: (f64, f64) = (26.0, 50.0);
-const HEAD: f64 = 52.0;
-const FOOT: f64 = 36.0;
-const PAD: f64 = 14.0;
+const HEAD: (f64, f64) = (40.0, 52.0);
+const FOOT: (f64, f64) = (28.0, 36.0);
+const PAD: (f64, f64) = (10.0, 14.0);
 const MARGIN: f64 = 16.0;
 /// What's bottom left of a pane (health, armor, stamina): how far across
 /// and up it reaches; and how far under the middle the dot and its ring
@@ -39,6 +41,15 @@ const VITALS: (f64, f64) = (500.0, 185.0);
 const MIDDLE: f64 = 30.0;
 /// The most arrows a code's column holds.
 const COLUMN: usize = 5;
+/// How far after a name its price in points is, for each pixel of the
+/// type's size.
+const PRICE_GAP: f64 = 0.55;
+
+/// A line's price in points, as it's written after its name (if it has
+/// one).
+fn price(e: &Entry) -> Option<String> {
+    (e.points > 0).then(|| format!("[{}]", e.points))
+}
 
 /// What the foot of the card says: what dials, what puts it away, and
 /// (a flare in hand, a strike to place) the trigger, which throws or
@@ -71,11 +82,20 @@ fn cost_wide(row: f64) -> f64 {
     row * 0.9
 }
 
+/// What's round the lines, theirs `row` tall: how tall the header is, and
+/// the foot, and how much space is left round it all (the shorter the
+/// lines, the less of each: there's little room).
+fn chrome(row: f64, s: f64) -> (f64, f64, f64) {
+    let t = ((row / s - ROW.0) / (ROW.1 - ROW.0)).clamp(0.0, 1.0);
+    let at = |(least, most): (f64, f64)| (least + (most - least) * t) * s;
+    (at(HEAD), at(FOOT), at(PAD))
+}
+
 /// How wide the card is with its lines `row` tall: a cost, its longest
-/// name (`names` wide for each pixel of its type's size) and a code's
-/// column, or its foot's words (`foot` wide) if they're wider.
+/// name (`names` wide for each pixel of its type's size), a gap, and a
+/// code's column, or its foot's words (`foot` wide) if they're wider.
 fn width(row: f64, s: f64, names: f64, foot: f64) -> f64 {
-    (cost_wide(row) + names * type_size(row, s) + 26.0 * s + column(row)).max(foot) + 2.0 * PAD * s
+    (cost_wide(row) + names * type_size(row, s) + row * 0.52 + column(row)).max(foot) + 2.0 * chrome(row, s).2
 }
 
 /// The card over `pane` of `window`, at scale `s` (`names` and `foot` as
@@ -89,7 +109,6 @@ fn lay(pane: Rect, window: Rect, s: f64, names: f64, foot: f64) -> Lay {
     let sees = crate::render::viewmodel_sees(window.width() / window.height().max(1.0), pane.width() / pane.height().max(1.0));
     let mid = pane.center();
     let (margin, clear) = (MARGIN * s, MIDDLE * s);
-    let rest = (HEAD + FOOT + 2.0 * PAD) * s;
     let lines = ENTRIES.len() as f64;
     // Its right side at `right`, no higher than `ceiling`: the card with
     // the tallest lines that fit under that, and whether any did. (Shorter
@@ -99,7 +118,8 @@ fn lay(pane: Rect, window: Rect, s: f64, names: f64, foot: f64) -> Lay {
         let at = |row: f64| {
             let left = (right - width(row, s, names, foot)).max(pane.min.x + margin);
             let floor = if left < pane.min.x + VITALS.0 * s { pane.max.y - VITALS.1 * s } else { pane.max.y - margin };
-            let tall = rest + row * lines;
+            let (head, foot, pad) = chrome(row, s);
+            let tall = head + foot + 2.0 * pad + row * lines;
             let top = floor - tall;
             (Lay { card: Rect::from_min_size(Vec2::new(left, top.max(pane.min.y + margin)), Vec2::new(right - left, tall)), row }, top >= ceiling - 1e-9)
         };
@@ -139,14 +159,18 @@ fn arrow(ui: &mut Ui, at: Vec2, size: f64, which: Arrow, colour: Color) {
     ui.draw.triangle(at + d * (size * 0.5), neck + across * (size * 0.42), neck - across * (size * 0.42), colour);
 }
 
-/// Draw `radio`'s card over `pane` of `window`.
-pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints) {
+/// Draw `radio`'s card over `pane` of `window`, for someone with `purse`
+/// points to spend (none: points are no matter).
+pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, purse: Option<u32>, hints: &Hints) {
     let s = ui.m.scale;
     let shows = radio.card();
     let words = |row: f64| TextStyle::new(type_size(row, s) as f32).bold().family(style::FONT);
-    // As wide as its longest name, a code's column, and the foot's words.
+    // As wide as its longest name (with its price, if it has one), a
+    // code's column, and the foot's words.
     let tallest = words(ROW.1 * s);
-    let names = ENTRIES.iter().map(|e| ui.measure(e.name, &tallest)).fold(0.0, f64::max) / type_size(ROW.1 * s, s);
+    let tall = type_size(ROW.1 * s, s);
+    let named = |ui: &mut Ui, e: &Entry| ui.measure(e.name, &tallest) + price(e).map_or(0.0, |p| PRICE_GAP * tall + ui.measure(&p, &tallest));
+    let names = ENTRIES.iter().map(|e| named(ui, e)).fold(0.0, f64::max) / tall;
     let small = TextStyle::new((SMALLEST.max(18.0 * s)) as f32).bold().family(style::FONT);
     // (A flare in hand, the foot says how it's thrown; the card's as wide
     // for either.)
@@ -162,7 +186,7 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     };
     let Lay { card, row } = lay(pane, window, s, names, foot_wide);
     let text = words(row);
-    let pad = PAD * s;
+    let (head_tall, foot_tall, pad) = chrome(row, s);
 
     // A wrong arrow: red, fading back to amber.
     let wrong = radio.wrong().map_or(0.0, |t| 1.0 - t / WRONG_FOR);
@@ -179,10 +203,10 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
         (None, Some(_)) => "CALLING IN",
         (None, None) => "CALL IN",
     };
-    ui.text_at(title, &head, Vec2::new(card.min.x + pad, card.min.y + pad + (HEAD * s - f64::from(head.line_height())) * 0.4), card.width(), faded(edge, shows));
-    let rule = card.min.y + pad + HEAD * s - 8.0 * s;
+    ui.text_at(title, &head, Vec2::new(card.min.x + pad, card.min.y + pad + (head_tall - f64::from(head.line_height())) * 0.4), card.width(), faded(edge, shows));
+    let rule = card.min.y + pad + head_tall - 8.0 * s;
     // The signal there is, at the header's right.
-    let bars = (HEAD - 22.0) * s;
+    let bars = head_tall - 22.0 * s;
     meter::draw(ui, Vec2::new(card.max.x - pad - meter::width(bars), rule - 7.0 * s), bars, &radio.signal, AMBER, shows);
     ui.draw.hline(card.min.x + pad, card.max.x - pad, rule, 2.0 * s, faded(edge, 0.45 * shows));
 
@@ -191,14 +215,15 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     let step = row * 0.8;
     let codes = card.max.x - pad - column(row);
     for (i, e) in ENTRIES.iter().enumerate() {
-        let top = card.min.y + pad + HEAD * s + row * i as f64;
+        let top = card.min.y + pad + head_tall + row * i as f64;
         let mid = top + row * 0.5;
         // (Being called in, or its flare still to throw: lit across.)
         let chosen = radio.calling().or(marking);
         let called = chosen == Some(e.call);
         // (Lit: what the code so far could still be, and there's the
-        // signal for.)
-        let afford = radio.signal.has(e.cost);
+        // signal for, and the points.)
+        let (bars, poor) = (radio.signal.has(e.cost), purse.is_some_and(|p| p < e.points));
+        let afford = bars && !poor;
         let live = match chosen {
             Some(_) => called,
             None => afford && dial.begins(e.code),
@@ -213,10 +238,16 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
         let cost = e.cost.to_string();
         let name_at = card.min.x + pad + cost_wide(row);
         let line = mid - f64::from(text.line_height()) * 0.5;
-        let short = !afford && !called;
+        let short = !bars && !called;
         let cost_at = card.min.x + pad + (cost_wide(row) * 0.6 - ui.measure(&cost, &text)) * 0.5;
         ui.text_at(&cost, &text, Vec2::new(cost_at, line), cost_wide(row), if short { faded(style::SIGNAL, shows) } else { faded(ink, a) });
         ui.text_at(e.name, &text, Vec2::new(name_at, line), codes - name_at, faded(ink, a));
+        // What it costs in points, after its name (red, where they've not
+        // that many).
+        if let Some(price) = price(e) {
+            let at = name_at + ui.measure(e.name, &text) + PRICE_GAP * type_size(row, s);
+            ui.text_at(&price, &text, Vec2::new(at, line), codes - at, if poor && !called { faded(style::SIGNAL, shows) } else { faded(ink, a) });
+        }
         for (k, &which) in e.code.iter().enumerate() {
             // (Punched in already, on a line it's on the way to: bright.)
             let colour = if called { DARK } else if live && k < dial.len() { LIT } else { faded(AMBER, 0.8) };
@@ -225,7 +256,7 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     }
 
     // The foot: what dials, and what puts it away.
-    let at = Vec2::new(card.min.x + pad, card.max.y - pad - FOOT * s + (FOOT * s - f64::from(small.line_height())) * 0.7);
+    let at = Vec2::new(card.min.x + pad, card.max.y - pad - foot_tall + (foot_tall - f64::from(small.line_height())) * 0.7);
     ui.text_at(&foot, &small, at, card.width(), faded(AMBER, 0.6 * shows));
 }
 
@@ -234,9 +265,9 @@ mod tests {
     use super::*;
 
     /// A longest name's width for each pixel of its type's size, and a
-    /// foot's.
-    const NAMES: f64 = 8.3;
-    const FOOT_WIDE: f64 = 300.0;
+    /// foot's (as the game's own type has them).
+    const NAMES: f64 = 12.3;
+    const FOOT_WIDE: f64 = 330.0;
 
     fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
         Rect::from_min_size(Vec2::new(x, y), Vec2::new(w, h))
@@ -249,23 +280,24 @@ mod tests {
     }
 
     #[test]
-    fn alone_it_s_beside_the_handset_under_the_middle_its_lines_at_their_tallest() {
+    fn alone_it_s_beside_the_handset_under_the_middle_its_lines_near_their_tallest() {
         let window = rect(0.0, 0.0, 1920.0, 1080.0);
         let l = lay(window, window, 1.0, NAMES, FOOT_WIDE);
-        assert_eq!(l.row, ROW.1);
+        assert!(l.row >= 46.0 && l.row <= ROW.1, "{l:?}");
         assert!(l.card.min.x > VITALS.0 && l.card.max.x < handset(window, window), "{:?}", l.card);
         assert!(l.card.max.y <= 1080.0 - MARGIN + 1e-9 && l.card.min.y > 540.0 + MIDDLE, "{:?}", l.card);
-        assert!((l.card.width() - width(ROW.1, 1.0, NAMES, FOOT_WIDE)).abs() < 1e-9);
+        assert!((l.card.width() - width(l.row, 1.0, NAMES, FOOT_WIDE)).abs() < 1e-9);
     }
 
     #[test]
     fn where_there_s_no_room_under_the_middle_it_s_to_the_left_of_it() {
         // One above the other: too short a pane to be under the middle,
-        // so it's left of it (clear of the health), its lines still tall.
+        // so it's left of it (clear of the health), its lines as tall as
+        // fit between the two.
         let window = rect(0.0, 0.0, 1920.0, 1080.0);
         let pane = rect(0.0, 540.0, 1920.0, 540.0);
         let l = lay(pane, window, 1.0, NAMES, FOOT_WIDE);
-        assert!(l.row > 36.0, "{l:?}");
+        assert!(l.row > 30.0 && type_size(l.row, 1.0) >= SMALLEST, "{l:?}");
         assert!(l.card.min.x >= VITALS.0 && l.card.max.x <= 960.0 - MIDDLE + 1e-9, "{:?}", l.card);
         assert!(l.card.min.y >= pane.min.y + MARGIN - 1e-9 && l.card.max.y <= 1080.0 - MARGIN + 1e-9, "{:?}", l.card);
     }
@@ -309,7 +341,7 @@ mod tests {
             radio.press(arrow);
             h.frame(|ui| {
                 let window = ui.clip();
-                draw(ui, window, window, &radio, &hints);
+                draw(ui, window, window, &radio, Some(900), &hints);
                 assert!(!ui.draw.is_empty());
             });
         }

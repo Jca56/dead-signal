@@ -289,3 +289,44 @@ fn no_radio_no_radio() {
     run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 60);
     assert!(!seat.radio_out() && combat.arms[0].hands.held == Some(Slot::Sidearm) && !combat.arms[0].hands.busy());
 }
+
+#[test]
+fn a_mystery_drop_costs_points_too_and_without_them_it_s_refused() {
+    let mut h = Harness::new(800.0, 600.0);
+    let mut combat = Combat::new();
+    let mut seat = seat(&mut combat);
+    let mut game = game();
+    // Up, right, down, down, down, with too few points: refused, and
+    // nothing's spent of either.
+    seat.points = Some(900);
+    run_in(&mut game, &mut h, &mut seat, &mut combat, Some(Key::Char('q')), (false, false), 90);
+    let dial = |game: &mut Game, h: &mut Harness, seat: &mut Seat, combat: &mut Combat| {
+        for key in ['w', 'd', 's', 's', 's'] {
+            run_in(game, h, seat, combat, Some(Key::Char(key)), (false, false), 2);
+        }
+    };
+    dial(&mut game, &mut h, &mut seat, &mut combat);
+    assert_eq!(seat.note.map(|(n, _)| n), Some("NOT ENOUGH POINTS"));
+    assert_eq!(seat.radio.map(|r| (r.signal.bars(), r.flare(), r.dialing(), r.dial().len())), Some((5.0, None, true, 0)));
+    assert_eq!(seat.points, Some(900));
+    // With them: its flare's in hand, and the points and the bars gone.
+    seat.points = Some(1000);
+    dial(&mut game, &mut h, &mut seat, &mut combat);
+    assert_eq!(seat.radio.map(|r| (r.signal.bars(), r.flare())), Some((3.0, Some(Call::MysteryDrop))));
+    assert_eq!(seat.points, Some(50));
+    // The points but not the signal: refused, and the points kept.
+    let mut seat = self::seat(&mut combat);
+    seat.radio = Some(Radio::default());
+    seat.points = Some(5000);
+    run_in(&mut game, &mut h, &mut seat, &mut combat, Some(Key::Char('q')), (false, false), 90);
+    dial(&mut game, &mut h, &mut seat, &mut combat);
+    assert_eq!((seat.note.map(|(n, _)| n), seat.points), (Some("NOT ENOUGH SIGNAL"), Some(5000)));
+    // What costs no points asks for none (nor does anything, for the
+    // dev's free hand).
+    seat.radio.iter_mut().for_each(|r| r.signal.fill());
+    seat.points = Some(0);
+    for key in ['d', 'd', 'w'] {
+        run_in(&mut game, &mut h, &mut seat, &mut combat, Some(Key::Char(key)), (false, false), 2);
+    }
+    assert_eq!(seat.radio.map(|r| (r.strike(), r.signal.bars())), Some((Some(Call::PrecisionStrike), 3.0)));
+}

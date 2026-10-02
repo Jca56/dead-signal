@@ -139,6 +139,7 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - [x] 9. Seen by the other player (`src/survivor/radio.rs`): the handset in the survivor figure's right hand, up before the chest, at the mouth when it's keyed, down at the hip as it's pulled out and put away; a drop's flare lit in the left hand, wound back and flung.
 - [x] 10. Precision strike (`src/support/strike.rs`), asked for after the plan: a red circle with a cross in it on the ground where the player looks (5 m radius), the trigger sends it, and two seconds on one heavy shell comes straight down: a blow, not a blast. 2 bars.
 - [x] 11. Room for it all: the Relay Station stretched to 1.5 times its size each way (156 m by 58 m), nothing added: every room, the yard and the lots as they were, with more than twice the floor; what stands in them the size it was. The floods reach further to match.
+- [x] 12. Mystery drop (`src/holdout/mystery.rs`, `src/support/mystery.rs`), our mystery box: up, right, down, down, down; 2 bars and 950 points (the only call-in that costs points, shown after its name on the card). A drop like the others (violet smoke, question marks on the crate); down, the guns it could be flick past over it, then the one it is turns there to be taken: never one its caller carries, the better the rarer, 1 in 6 already amplified. Taken, it's in hand with a full carry.
 
 
 ---
