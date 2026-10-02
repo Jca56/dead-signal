@@ -65,6 +65,7 @@ impl Run {
         self.seats = vec![Seat::new(0, loadout, perks, seed, combat)];
         self.xp_before = xp_before;
         game.world.insert_resource(crate::zombie::Stealth(perks.seen_from()));
+        game.world.insert_resource(crate::items::Ground::default());
         crate::items::scatter(&mut game.world, seed, &map.pickups);
         crate::containers::fill(&mut game.world, seed.rotate_left(13));
         self.dice = Dice(seed.rotate_left(7) | 1);

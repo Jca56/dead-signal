@@ -128,8 +128,10 @@ pub struct Arena {
     /// The compound's corners, on the ground.
     pub bounds: (Vec3, Vec3),
     pub zones: Vec<&'static str>,
-    /// The zone the player starts in.
+    /// The zone the player starts in, and where in it (one bled out
+    /// comes back there).
     pub start: usize,
+    pub spawn: Vec3,
     pub windows: Vec<Window>,
     pub doors: Vec<Door>,
     pub buys: Vec<Buy>,
@@ -173,6 +175,6 @@ pub(super) fn of(plan: &Layout) -> (Map, Arena) {
     };
     let reach = [x0, z0, x1, z1].iter().map(|v| f64::from(v.abs())).fold(0.0, f64::max) + BEYOND;
     let on = |x: i32, z: i32| Vec3::new(f64::from(x) + OFFSET, 0.0, f64::from(z) + OFFSET);
-    let arena = Arena { reach, bounds: (on(x0, z0), on(x1, z1)), zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys, lamps: raised.lamps, signs: raised.signs };
+    let arena = Arena { reach, bounds: (on(x0, z0), on(x1, z1)), zones: plan.zones.to_vec(), start: raised.start_zone, spawn: raised.start.0, windows: raised.windows, doors: raised.doors, buys: raised.buys, lamps: raised.lamps, signs: raised.signs };
     (map, arena)
 }

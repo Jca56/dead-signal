@@ -118,8 +118,15 @@ impl Combat {
     }
 
     pub(super) fn drop_something(&mut self, game: &mut Game, e: bevy_ecs::entity::Entity) {
-        // A holdout's dead carry nothing.
-        if game.world.get::<zombie::brain::Zombie>(e).is_some_and(|z| z.relentless) {
+        // A holdout's dead: now and then some rounds, or something to mend
+        // with (`holdout/drops.rs`).
+        if let Some(kind) = game.world.get::<zombie::brain::Zombie>(e).filter(|z| z.relentless).map(|z| z.kind) {
+            let Some(at) = game.world.get::<Body>(e).map(|b| b.pos) else { return };
+            for stack in crate::holdout::drops::left_by(kind, &mut self.loot) {
+                let yaw = self.loot.unit() * std::f64::consts::TAU;
+                let off = Vec3::new(yaw.cos(), 0.0, yaw.sin()) * (0.5 * self.loot.unit());
+                items::set_down(&mut game.world, stack, at + off + Vec3::new(0.0, 1.0, 0.0), yaw);
+            }
             return;
         }
         // A Juggernaut always had something, and plenty of it.

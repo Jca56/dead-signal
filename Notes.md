@@ -109,6 +109,7 @@
 - [ ] Waves tuning and difficulty (the counts are still the small map's).
 - [x] Upgradable guns, the first half: the Amplifier, in the bunker's ops room, signed from the yard. Three tiers (5,000, 10,000, 20,000): more damage, more rounds, a name and a glow for each.
 - [ ] Upgradable guns, the second half: attachments at a workbench (the bench goes in the bunker's armory).
+- [x] Drops and trading: the dead leave rounds, bandages, medkits and plates; everything on the ground lies 30 s, marked, and is taken with a look and a press; a bought gun keeps the one it replaces (in the pack); bled out, a player's things are left where they lay and they're back next round with a pistol.
 - [ ] Perks
 - [ ] Mystery box
 

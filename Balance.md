@@ -214,6 +214,23 @@ Bandages and medkits take half as long in HOLDOUT (1 s and 2 s): there's never a
   - Killing one pays 1500 to whoever did it and 500 to everyone else, and fills every gun's spare rounds.
 - **A hound round** is round 5 or 6, then every 4 or 5: no dead, only Hellhounds. 8 in the first, 2 more each time, to 24 (half as many again for two players); 4 up at once (6 for two). The first pack is let off a little: a quarter less health, and bites of 8.5, not 10. The last one dead fills every gun's spare rounds.
 
+### What the dead leave, and what lies on the ground
+
+One of a holdout's dead, killed, may leave something where it fell:
+
+| Left | Chance | What |
+|---|---|---|
+| Rounds | 10% | of any kind at all (9mm 24, shells 8, .308 8, 5.56 30, a belt of 50, flame fuel 100) |
+| Bandage | 5% | one |
+| Medkit | 2% | one |
+| Armor plate | 2% | one |
+
+- That's a Shambler's. A Ripper is 1.75× as likely to leave something and a Spitter 1.5×; a Hellhound never does; a Juggernaut always leaves two things.
+- Whatever is set down in a holdout lies there **30 seconds** (blinking for the last six), then it's gone: what the dead leave, what a player drops out of their bag, and all a player had when they bled out. It's marked by a ring and a beam of light: amber for rounds, green for what mends, blue for armor, white for anything else.
+- It's taken by looking at it and pressing interact, by anyone: that's how things are handed over.
+- A gun off the wall goes into its slot; the one it takes the place of goes into the pack, or onto the ground if there's no room.
+- Bled out, a player leaves everything where they lay, and is back at the start as the next round begins, whole, with the pistol, the knife and the rounds a holdout begins with (their points are kept).
+
 ### The Amplifier
 
 Down in the bunker's ops room (the signs lead to it from the yard): what's in hand put through it, up to three times, each dearer. Any weapon but bare fists; a blade only hits harder.

@@ -69,6 +69,14 @@ fn balance_md_matches_the_game() {
         assert!((num(&row["Every"]) - (t.swipe.time + t.swipe.cooldown)).abs() < 0.01, "{name} swipes every {}", row["Every"]);
     }
     assert_eq!(dead.len(), Kind::ALL.len());
+    // What a holdout's dead leave.
+    let left = table("| Left | Chance |");
+    use crate::holdout::drops;
+    for (name, chance) in [("Rounds", drops::AMMO), ("Bandage", drops::BANDAGE), ("Medkit", drops::MEDKIT), ("Armor plate", drops::PLATE)] {
+        let row = left.iter().find(|r| r["Left"] == name).unwrap_or_else(|| panic!("no row for {name}"));
+        assert!((num(&row["Chance"]) - chance * 100.0).abs() < 1e-9, "{name}: {}", row["Chance"]);
+    }
+    assert_eq!(left.len(), 4);
     // The Amplifier's tiers.
     let tiers = table("| Tier | Cost |");
     assert_eq!(tiers.len(), usize::from(crate::weapon::amp::TIERS));

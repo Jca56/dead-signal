@@ -227,6 +227,18 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
     let medkit = h.arena.buys.iter().position(|b| b.wares == Wares::Kit(Kind::Medkit)).expect("a medkit on a wall");
     h.press(&mut world, 0, Aimed::Buy(medkit), &mut bag, None);
     assert_eq!(bag.count(Kind::Medkit), 1);
+    // The pistol it took the place of is kept, in the pack, its rounds in it.
+    let kept = bag.pack.items.iter().find(|i| i.stack.kind == Kind::Pistol).map(|i| i.stack.loaded);
+    assert_eq!((kept, h.spilled.len()), (Some(12), 0));
+    // With no room there for what's put out of hand, it's for the ground
+    // at their feet.
+    while bag.pack.place(Stack::one(Kind::Battery)).count == 0 {}
+    while bag.pockets.place(Stack::one(Kind::Watch)).count == 0 {}
+    let rifle = h.arena.buys.iter().position(|b| b.wares == Wares::Weapon(Kind::Rifle)).expect("a rifle on a wall");
+    *bag.slot_mut(Slot::Primary) = Some(Stack::gun(Kind::Shotgun, 3));
+    h.press(&mut world, 0, Aimed::Buy(rifle), &mut bag, None);
+    assert_eq!(bag.slot(Slot::Primary).map(|g| g.kind), Some(Kind::Rifle));
+    assert_eq!(h.spilled, vec![(0, Stack::gun(Kind::Shotgun, 3))]);
 }
 
 #[test]

@@ -204,7 +204,14 @@ impl Holdout {
         if !ammo_only && let Some(slot) = Slot::of(kind) {
             let mut weapon = Stack::one(kind);
             weapon.loaded = kind.weapon().map_or(0, |w| w.spec().mag);
-            *bag.slot_mut(slot) = Some(weapon);
+            // What it takes the place of is kept: in the pack, or (no room
+            // there) set down at their feet.
+            if let Some(old) = bag.slot_mut(slot).replace(weapon) {
+                let left = bag.add(old);
+                if left.count > 0 {
+                    self.spilled.push((seat, left));
+                }
+            }
             took = Some(slot);
         } else if !ammo_only && bag.add(Stack::one(kind)).count > 0 {
             return (None, Some("NO ROOM"), None);

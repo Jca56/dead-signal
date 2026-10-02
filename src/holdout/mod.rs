@@ -6,6 +6,7 @@
 //! points more. It lasts as long as the player does.
 
 pub mod arena;
+pub mod drops;
 mod buy;
 #[cfg(test)]
 pub use buy::AMPLIFY;
@@ -130,6 +131,9 @@ pub struct Holdout {
     opened: Vec<bool>,
     /// Each player's, by seat: they earn and spend their own.
     pub wallets: Vec<Wallet>,
+    /// What a purchase put out of a player's hands with no room for it in
+    /// their pack (whose, and what): to be set down at their feet.
+    pub spilled: Vec<(usize, Stack)>,
 }
 
 impl Holdout {
@@ -140,7 +144,7 @@ impl Holdout {
         open[arena.start] = true;
         let opened = vec![false; arena.doors.len()];
         let players = players.max(1);
-        Self { arena, rounds: Rounds::new(seed, players), open, opened, wallets: vec![Wallet::new(); players] }
+        Self { arena, rounds: Rounds::new(seed, players), open, opened, wallets: vec![Wallet::new(); players], spilled: Vec::new() }
     }
 
     /// Player `seat`'s wallet.

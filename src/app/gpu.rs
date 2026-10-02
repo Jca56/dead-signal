@@ -53,6 +53,7 @@ impl AppHost for DeadSignal {
         zombie::spit::load(&mut renderer, &mut self.game.world);
         crate::throw::draw::load(&mut renderer, &mut self.game.world);
         crate::glass::load(&mut renderer, &mut self.game.world);
+        crate::items::load_marks(&mut renderer, &mut self.game.world);
         self.load_things(&mut renderer, gpu, images);
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
             Ok(model) => self.game.world.insert_resource(model),

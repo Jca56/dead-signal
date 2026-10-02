@@ -57,6 +57,8 @@ const SHOTS: &[Shot] = &[
     Shot("sign_yard", 18.5, 6.5, 0, 90.0, 6.0),
     Shot("sign_lobby", 27.5, 13.5, 0, 180.0, 8.0),
     Shot("sign_foot", 27.0, 11.0, -1, 90.0, 6.0),
+    // What the dead left in the yard, marked.
+    Shot("drops", 3.5, -9.5, 0, 175.0, -14.0),
 ];
 
 impl DeadSignal {
@@ -222,6 +224,10 @@ fn shots() {
         zombie::spawn_kind(&mut app.game.world, Vec3::new(x + 0.5, 0.0, z + 0.5), 0.0, kind, Theme::Drifter);
     }
     crate::throw::pyre(&mut app.game.world, Vec3::new(-4.5, 0.0, 3.5), 0);
+    // And what the dead leave, lying marked in the yard by the door.
+    for (x, z, stack) in [(2.5, -6.0, crate::loot::Stack::new(crate::loot::Kind::Rounds, 24)), (4.5, -5.0, crate::loot::Stack::one(crate::loot::Kind::Bandage)), (3.2, -3.5, crate::loot::Stack::one(crate::loot::Kind::ArmorPlate)), (5.6, -7.0, crate::loot::Stack::gun(crate::loot::Kind::Shotgun, 5))] {
+        crate::items::set_down(&mut app.game.world, stack, Vec3::new(x + 0.5, 1.0, z + 0.5), 0.6);
+    }
     for lamp in app.game.world.query::<&crate::holdout::lamps::Lamp>().iter(&app.game.world).filter(|l| l.mood != crate::holdout::lamps::Mood::Steady) {
         eprintln!("shots: a {:?} lamp at {:.0}, {:.1}, {:.0}", lamp.mood, lamp.light.at.x - 0.5, lamp.light.at.y, lamp.light.at.z - 0.5);
     }

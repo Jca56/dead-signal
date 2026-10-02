@@ -20,6 +20,9 @@ use crate::settings::keys::Action;
 use crate::sound::Sfx;
 use crate::world::Game;
 
+/// How far apart those who come back are set down.
+const BACK_APART: f64 = 1.2;
+
 impl Run {
     /// A fresh holdout in `arena` for `players`: each whole, with a pistol
     /// and a knife, the windows boarded, the first round on its way.
@@ -35,6 +38,8 @@ impl Run {
         }
         game.world.insert_resource(crate::zombie::Stealth(1.0));
         game.world.insert_resource(crate::zombie::Heat::default());
+        // (What's set down in a holdout doesn't lie there long.)
+        game.world.insert_resource(crate::items::Ground { fades: Some(crate::holdout::drops::LIES_FOR) });
         let mut holdout = Holdout::new(arena, seed.rotate_left(3), self.seats.len());
         holdout.begin(&mut game.world);
         self.holdout = Some(holdout);
@@ -86,6 +91,11 @@ impl Run {
                     combat.play(Sfx::Static, 0.9);
                     if wave == Wave::Hounds {
                         combat.play(Sfx::Howl, 0.9);
+                    }
+                    // Whoever bled out is back, where it all began.
+                    for seat in self.seats.iter_mut().filter(|s| s.out) {
+                        let at = h.arena.spawn + Vec3::new(seat.n as f64 * BACK_APART, 0.1, 0.0);
+                        seat.come_back(game, combat, at);
                     }
                 }
                 Event::Cleared(wave) => {
@@ -147,13 +157,18 @@ impl Seat {
         }
         // Down, or picking someone up (whose prompt it is), nothing else.
         let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some();
-        let aimed = if busy { None } else { loot::eye(game, self.n).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir)) };
+        let eye = if busy { None } else { loot::eye(game, self.n) };
+        // Something lying there to take comes first (what the dead left,
+        // what someone set down); then what's on the walls.
+        let lying = eye.and_then(|(eye, dir)| crate::items::in_view(&mut game.world, eye, dir));
+        let aimed = eye.filter(|_| lying.is_none()).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir));
         // (Boards are nailed, and someone picked up, by holding: a tap of a
         // pad's X is still a reload there.)
         self.input.set_prompt(match aimed {
             _ if self.reviving.is_some() => Prompt::Hold,
             Some(crate::holdout::Aimed::Window(_)) => Prompt::Hold,
             Some(_) => Prompt::Press,
+            None if lying.is_some() => Prompt::Press,
             None => Prompt::None,
         });
         if let Some(a) = aimed
@@ -177,13 +192,21 @@ impl Seat {
             if took.is_some() {
                 self.take_up(combat, took);
             }
+            // (What it put out of their hands, with no room in the pack.)
+            let feet = game.player(self.n).map(|(b, _)| b.pos);
+            for (_, stack) in h.spilled.extract_if(.., |(seat, _)| *seat == self.n).collect::<Vec<_>>() {
+                if let Some(at) = feet {
+                    crate::items::set_down(&mut game.world, stack, at + Vec3::new(0.0, 0.8, 0.0), self.dice.unit() * std::f64::consts::TAU);
+                }
+            }
         }
         if let Some(sfx) = h.hold(&mut game.world, self.n, aimed, self.input.held(ui, Action::Interact), dt) {
             combat.play(sfx, 0.8);
         }
-        let prompt = match self.reviving {
-            Some((j, _)) => Some(("E", format!("REVIVE P{}", j + 1))),
-            None => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
+        let prompt = match (self.reviving, lying) {
+            (Some((j, _)), _) => Some(("E", format!("REVIVE P{}", j + 1))),
+            (None, Some((_, stack))) => Some(("E", stack.label())),
+            (None, None) => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
         };
         let picking_up = self.reviving.map(|(_, p)| p).filter(|&p| p > 0.0);
         self.hud(ui, pane, combat, game, prompt, h.nail_progress(self.n).or(picking_up));
@@ -193,7 +216,7 @@ impl Seat {
         }
         if self.standing() {
             self.bag_ui.pane = (!alone).then_some(pane);
-            self.looting(ui, cx, game, combat, icons, dt, loot::Aimed::Nothing);
+            self.looting(ui, cx, game, combat, icons, dt, lying.map_or(loot::Aimed::Nothing, |(e, stack)| loot::Aimed::Pickup(e, stack)));
         }
     }
 }

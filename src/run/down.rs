@@ -24,6 +24,8 @@ const REACH: f64 = 1.8;
 const LEVEL: f64 = 1.0;
 /// The share of their health they get up with.
 const GET_UP_WITH: f64 = 0.5;
+/// What one bled out carried lies this near to this far from them.
+const PILE: (f64, f64) = (0.4, 1.3);
 
 /// Down: seconds left before bleeding out, and how far along someone is
 /// with picking them up (0–1).
@@ -52,6 +54,31 @@ impl Seat {
         let sidearm = self.bag.slot(Slot::Sidearm).is_some().then_some(Slot::Sidearm);
         self.take_up(combat, sidearm);
         combat.play(Sfx::Heartbeat, 1.0);
+    }
+
+    /// Bled out: all they carried is left where they lay, for whoever's
+    /// quick enough (it lies there no longer than anything does in a
+    /// holdout), and they've what a holdout begins with to come back to.
+    pub(super) fn leave_all(&mut self, game: &mut Game) {
+        let Some(at) = game.player(self.n).map(|(b, _)| b.pos) else { return };
+        let all: Vec<crate::loot::Stack> = std::mem::replace(&mut self.bag, crate::holdout::Holdout::loadout()).everything().collect();
+        for stack in all {
+            let a = self.dice.unit() * std::f64::consts::TAU;
+            let r = PILE.0 + (PILE.1 - PILE.0) * self.dice.unit();
+            crate::items::set_down(&mut game.world, stack, at + Vec3::new(a.cos() * r, 0.8, a.sin() * r), self.dice.unit() * std::f64::consts::TAU);
+        }
+    }
+
+    /// Back, as a new round begins: on their feet at `at`, whole, with
+    /// what a holdout begins with in hand.
+    pub(super) fn come_back(&mut self, game: &mut Game, combat: &mut Combat, at: Vec3) {
+        (self.out, self.down, self.reviving) = (false, None, None);
+        self.vitals = crate::vitals::Vitals::with(&self.perks);
+        self.vitals.quicken_mending(crate::holdout::MENDING);
+        game.set_fallen(self.n, false);
+        game.teleport(self.n, at);
+        self.take_up(combat, self.first_armed());
+        self.note = Some(("BACK IN THE FIGHT", super::loot::NOTE_FOR));
     }
 
     /// Picked up: on their feet with half their health, what's first in
@@ -138,6 +165,7 @@ impl Run {
         for s in &mut self.seats {
             if s.bleed(dt) {
                 combat.play(Sfx::Died, 0.6);
+                s.leave_all(game);
             }
         }
         self.seats.iter().any(Seat::standing)
@@ -161,5 +189,43 @@ mod tests {
         seat.down.as_mut().unwrap().revive = 0.0;
         assert!(seat.bleed(0.6), "bled out");
         assert!(seat.out && seat.down.is_none() && !seat.standing());
+    }
+
+    #[test]
+    fn bled_out_they_leave_all_they_had_where_they_lay_and_come_back_with_a_pistol() {
+        use crate::items::{Ground, Meshes, Pickup};
+        use crate::loot::{Kind, Stack};
+        use crate::render::MeshId;
+        let mut game = Game::new();
+        game.world.insert_resource(crate::world::Solid(crate::testing::bare_world()));
+        game.world.insert_resource(Meshes(crate::loot::ALL.iter().map(|&k| (k, MeshId::placeholder())).collect()));
+        game.world.insert_resource(Ground { fades: Some(crate::holdout::drops::LIES_FOR) });
+        game.spawn_player(0, 3.0, 4.0, 0.0);
+        let mut combat = Combat::new();
+        let mut seat = Seat::default();
+        seat.bag = crate::holdout::Holdout::loadout();
+        // Well off: an amplified rifle, a vest on, kits and rounds.
+        let mut rifle = Stack::gun(Kind::AssaultRifle, 20);
+        rifle.tier = 2;
+        *seat.bag.slot_mut(Slot::Primary) = Some(rifle);
+        *seat.bag.worn_mut(crate::loot::gear::Wear::Chest) = Some(Stack::fresh(Kind::LightVest, 1));
+        seat.bag.add(Stack::new(Kind::Medkit, 2));
+        let had: Vec<Stack> = seat.bag.everything().collect();
+        seat.down = Some(Down { left: 0.1, revive: 0.0 });
+        assert!(seat.bleed(0.2));
+        seat.leave_all(&mut game);
+        // All of it's on the ground about them (the rifle as it was), to
+        // lie there half a minute; and they've a holdout's start to hand.
+        let lying: Vec<Pickup> = game.world.query::<&Pickup>().iter(&game.world).copied().collect();
+        assert_eq!(lying.len(), had.len());
+        assert!(had.iter().all(|s| lying.iter().any(|p| p.stack == *s)), "{had:?} vs {lying:?}");
+        assert!(lying.iter().all(|p| p.left == Some(crate::holdout::drops::LIES_FOR) && Vec2::new(p.at.x - 3.0, p.at.z - 4.0).length() < 1.5));
+        assert_eq!(seat.bag.everything().collect::<Vec<_>>(), crate::holdout::Holdout::loadout().everything().collect::<Vec<_>>());
+        // The next round: up, whole, at the start, the pistol out.
+        seat.vitals.hp = 0.0;
+        seat.come_back(&mut game, &mut combat, Vec3::new(10.0, 0.2, -6.0));
+        assert!(seat.standing() && seat.vitals.hp == seat.vitals.max_hp);
+        assert_eq!(game.player(0).map(|(b, _)| b.pos), Some(Vec3::new(10.0, 0.2, -6.0)));
+        assert_eq!(combat.arms[0].hands.weapon, crate::weapon::Weapon::Pistol);
     }
 }

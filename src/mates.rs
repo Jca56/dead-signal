@@ -109,8 +109,8 @@ pub fn down(ui: &mut Ui, screen: Rect, left: f64, of: f64, revive: f64) {
     ui.draw.rect(Rect::from_min_size(bar.min, Vec2::new(bar.width() * share, bar.height())), colour);
 }
 
-/// A bled out player's pane: out, and watching `watching` (a seat), if
-/// anyone's standing.
+/// A bled out player's pane: out till the next round, and watching
+/// `watching` (a seat), if anyone's standing.
 pub fn out(ui: &mut Ui, screen: Rect, watching: Option<usize>) {
     let s = ui.m.scale;
     let big = TextStyle::new((60.0 * s) as f32).bold().family(style::SERIF);
@@ -121,7 +121,7 @@ pub fn out(ui: &mut Ui, screen: Rect, watching: Option<usize>) {
     let w = ui.measure("BLED OUT", &big);
     ui.text_at("BLED OUT", &big, Vec2::new(c - w * 0.5, band.min.y + 12.0 * s), w + 8.0, style::SIGNAL);
     if let Some(seat) = watching {
-        let words = format!("WATCHING P{}", seat + 1);
+        let words = format!("BACK NEXT ROUND  ·  WATCHING P{}", seat + 1);
         let ww = ui.measure(&words, &line);
         ui.text_at(&words, &line, Vec2::new(c - ww * 0.5, band.min.y + 20.0 * s + f64::from(big.line_height())), ww + 8.0, style::player(seat));
     }

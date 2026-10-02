@@ -403,7 +403,7 @@ fn ground_colour(map: &Map, network: &Network, tri: [Vec3; 3], luck: f64) -> Rgb
 }
 
 /// A box's twelve triangles, each face outwards, from its corners.
-fn box_tris(lo: Vec3, hi: Vec3) -> Vec<[Vec3; 3]> {
+pub(crate) fn box_tris(lo: Vec3, hi: Vec3) -> Vec<[Vec3; 3]> {
     let p = |x: bool, y: bool, z: bool| Vec3::new(if x { hi.x } else { lo.x }, if y { hi.y } else { lo.y }, if z { hi.z } else { lo.z });
     let quads = [
         [p(false, false, false), p(true, false, false), p(true, false, true), p(false, false, true)],
