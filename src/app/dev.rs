@@ -124,6 +124,7 @@ impl DeadSignal {
             }
             DevAction::Amplify => self.run.dev_amplify(&mut self.combat),
             DevAction::Signal => self.run.dev_signal(),
+            DevAction::Stims => self.run.dev_stims(),
             DevAction::ToAmplifier => {
                 if let Some(at) = self.run.holdout.as_mut().and_then(|h| h.dev_amplifier(&mut self.game.world)) {
                     self.game.teleport(0, at);

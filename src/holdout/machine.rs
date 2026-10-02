@@ -44,12 +44,12 @@ pub fn cabinet(wall: Vec3, out: Vec3, up: f64) -> Block {
 }
 
 /// A frame whose z is `out` (flat), x along, y up, at `at`.
-fn facing(at: Vec3, out: Vec3) -> Mat4 {
+pub(super) fn facing(at: Vec3, out: Vec3) -> Mat4 {
     Mat4::from_translation(at) * Mat4::from_quat(Quat::from_rotation_y(out.x.atan2(out.z)))
 }
 
 /// `list` as a mesh alight: each box its own colour's light.
-fn alight(list: &[(Vec3, Vec3, [f32; 3], Mat4)], bright: f32) -> Vec<Vertex> {
+pub(super) fn alight(list: &[(Vec3, Vec3, [f32; 3], Mat4)], bright: f32) -> Vec<Vertex> {
     let mut out = boxes(list);
     for v in &mut out {
         v.emissive = [v.color[0] * bright, v.color[1] * bright, v.color[2] * bright];

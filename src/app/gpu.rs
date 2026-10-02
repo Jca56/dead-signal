@@ -79,7 +79,8 @@ impl AppHost for DeadSignal {
             }
         }
         let radio = assets::load_viewmodel(&mut renderer, "viewmodel_radio").map_err(|e| log_error!("viewmodel_radio: {e}")).ok();
-        self.viewmodel = Some(Viewmodel::new(rigs, radio));
+        let stim = assets::load_plain_viewmodel(&mut renderer, "viewmodel_stim").map_err(|e| log_error!("viewmodel_stim: {e}")).ok();
+        self.viewmodel = Some(Viewmodel::new(rigs, radio, stim));
         self.mark = renderer.mark();
         renderer.upload(gpu);
         self.renderer = Some(renderer);
@@ -142,7 +143,7 @@ impl AppHost for DeadSignal {
                 if self.run.ending.is_none()
                     && hands.scoped() < SCOPE_HIDES
                     && let Some(vm) = &self.viewmodel
-                    && let Some(draw) = vm.draw(seat.n, &view, hands, seat.radio_shown().map(|r| (r, crate::render::viewmodel_sees(window_aspect, panes[i].aspect()))), time, seat.lowered())
+                    && let Some(draw) = vm.draw(seat.n, &view, hands, seat.in_hand_instead(crate::render::viewmodel_sees(window_aspect, panes[i].aspect())), time, seat.lowered())
                 {
                     renderer.draw_viewmodel(i, draw);
                 }

@@ -110,8 +110,9 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
     }
     let outline = mesh(&outline);
     let chalk = Look { emissive: 1.0, fog: 0.8, tint: [1.0; 3] };
-    // (The Amplifier's no outline on a wall: it stands there itself.)
-    for b in arena.buys.iter().filter(|b| b.wares != Wares::Amplifier) {
+    // (The Amplifier's no outline on a wall, nor a med station: each
+    // stands there itself.)
+    for b in arena.buys.iter().filter(|b| !matches!(b.wares, Wares::Amplifier | Wares::Stim(_))) {
         let frame = facing(b.at, b.facing);
         world.spawn((Placed(frame), Model(outline), chalk, OnMap));
         if let Some(&m) = b.wares.kind().and_then(|k| items.0.get(&k)) {
@@ -123,7 +124,8 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
             world.spawn((Placed(hung), Model(m), Look::default(), OnMap));
         }
     }
-    super::machine::spawn(world, arena, super::raise::buy_height(), mesh);
+    super::machine::spawn(world, arena, super::raise::buy_height(), &mut mesh);
+    super::station::spawn(world, arena, super::raise::buy_height(), mesh);
 }
 
 /// Put away what's gone: boards torn off, doors bought open.

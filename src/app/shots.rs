@@ -25,7 +25,9 @@
 //! landed. `MYSTERY=fall|shuffle|won|jackpot`: a mystery drop's crate a
 //! few metres ahead: coming down, its guns flicking past, the one it is
 //! over it, or that one amplified. `POINTS=<n>`: the points the radio's
-//! card takes them to have.
+//! card takes them to have. `STIM=bulwark|twitch|rush|lazarus`: that
+//! stim's injector in their arm, every stim in their blood, and their
+//! own HUD drawn over the picture.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -88,6 +90,13 @@ const SHOTS: &[Shot] = &[
     Shot("sign_foot", 40.0, 17.0, -1, 90.0, 6.0),
     // What the dead left in the yard, marked.
     Shot("drops", 5.0, -15.5, 0, 175.0, -14.0),
+    // The med stations: Lazarus in the control room, Rush in the motor
+    // pool's bay, Bulwark in the barracks' showers, Twitch upstairs among
+    // the servers.
+    Shot("stim_lazarus", 2.5, -21.0, 0, 205.0, -4.0),
+    Shot("stim_rush", -70.5, 10.5, 0, 288.0, -4.0),
+    Shot("stim_bulwark", 45.0, -13.5, 0, 162.0, -4.0),
+    Shot("stim_twitch", 70.5, 6.0, 1, 72.0, -4.0),
 ];
 
 impl DeadSignal {
@@ -315,6 +324,15 @@ impl DeadSignal {
                 hands.stow();
                 r.update(hands.stowed().is_some(), 1.0 / 60.0);
             }
+            // (A stim going in, asked for: the needle's in by the picture.)
+            if let (Ok(which), Some(seat)) = (std::env::var("STIM"), self.run.seats.first_mut()) {
+                use crate::holdout::stims::{ALL, Stim};
+                if k == 20 {
+                    ALL.into_iter().for_each(|s| seat.stims.take(s));
+                    seat.stims.begin(ALL.into_iter().find(|s| s.name().eq_ignore_ascii_case(&which)).unwrap_or(Stim::Bulwark));
+                }
+                seat.stimming(&mut self.combat, 1.0 / 60.0);
+            }
             self.place_cameras(time, f64::from(SIZE[0]) / f64::from(SIZE[1]));
             let mut graph = RenderGraph::new();
             let backbuffer = graph.import(&view);
@@ -329,11 +347,16 @@ impl DeadSignal {
             self.render(&mut cx);
             graph.execute(gpu, &mut pool, &mut encoder);
         }
-        if let (Some(seat), (over, images)) = (self.run.seats.first().filter(|s| s.radio_out()), over) {
+        let stim = std::env::var("STIM").is_ok();
+        if let (Some(seat), (over, images)) = (self.run.seats.first().filter(|s| s.radio_out() || stim), over) {
             let holdout = self.run.holdout.as_ref();
+            let (game, combat) = (&mut self.game, &self.combat);
             // (Its dial worked by the keys, as far as its card's told.)
             over.ui.frame(|ui| {
                 let window = ui.clip();
+                if stim {
+                    seat.hud(ui, window, combat, game, None, None);
+                }
                 if let Some(h) = holdout {
                     crate::holdout::hud::draw(ui, window, h, 0, seat.signal_shown().as_ref().map(|(s, key)| (s, key.as_str())));
                 }

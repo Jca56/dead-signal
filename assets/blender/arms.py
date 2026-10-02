@@ -10,7 +10,8 @@ arms and that weapon as one skinned mesh on one armature, and the
 weapon's clips (every one has Idle and Bash; a gun has Fire and Reload
 too). Each weapon is a module (`fists.py`, `pistol.py`, `shotgun.py`,
 `rifle.py`, `knife.py`, `machete.py`, `axe.py`; and `radio.py`, the
-handheld radio, which is held as they are)
+handheld radio, and `stim.py`, a stim's injector, which are held as they
+are)
 that adds its parts and bones to the arms (`build`, none for bare fists)
 and makes its clips (`animate`). Built in camera space: the eye at the origin,
 looking down Blender's +Y (the exporter makes that glTF's -Z), +Z up, +X
@@ -45,12 +46,14 @@ import radio  # noqa: E402
 import rifle  # noqa: E402
 import shotgun  # noqa: E402
 import smg  # noqa: E402
+import stim  # noqa: E402
 from kit import Builder, banded, norm, rotate  # noqa: E402
 MODELS = os.path.join(HERE, "..", "models")
 
-# Every weapon's viewmodel (and the radio's, held as they are): its name
+# Every weapon's viewmodel (and the radio's and the injector's, held as
+# they are): its name
 # in the file's, and its module.
-WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("smg", smg), ("ar", ar), ("lmg", lmg), ("flamethrower", flamethrower), ("knife", knife), ("machete", machete), ("axe", axe), ("radio", radio)]
+WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("smg", smg), ("ar", ar), ("lmg", lmg), ("flamethrower", flamethrower), ("knife", knife), ("machete", machete), ("axe", axe), ("radio", radio), ("stim", stim)]
 
 # Colours (sRGB, as in the title scene).
 SLEEVE = (0.30, 0.29, 0.20)

@@ -15,6 +15,7 @@ mod loot;
 mod out;
 mod radio;
 mod seat;
+mod stims;
 mod support;
 mod throwing;
 

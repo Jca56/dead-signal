@@ -78,6 +78,13 @@ impl Run {
         }
     }
 
+    /// (The dev's.) Every stim, in the first player's blood.
+    pub fn dev_stims(&mut self) {
+        if let Some(seat) = self.seats.first_mut() {
+            crate::holdout::stims::ALL.into_iter().for_each(|stim| seat.stims.take(stim));
+        }
+    }
+
     /// The round a holdout ended on, once.
     pub fn take_holdout_round(&mut self) -> Option<u32> {
         self.holdout_over.take()
@@ -184,7 +191,7 @@ impl Seat {
         }
         // Down, or picking someone up (whose prompt it is), nothing else.
         // (Nor with the radio out: the hands are its.)
-        let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some() || self.radio_out();
+        let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some() || self.hands_taken();
         let eye = if busy { None } else { loot::eye(game, self.n) };
         // Something lying there to take comes first (what the dead left,
         // what someone set down); then what's on the walls.
@@ -201,7 +208,13 @@ impl Seat {
             None if lying.is_some() || prize.is_some() => Prompt::Press,
             None => Prompt::None,
         });
-        if let Some(a) = aimed
+        // A med station's stim: paid for, and jabbed in.
+        let stim = aimed.and_then(|a| h.stim_at(a));
+        if let Some(stim) = stim
+            && self.input.pressed(ui, Action::Interact)
+        {
+            self.buy_stim(h, game, combat, stim, alone);
+        } else if let Some(a) = aimed
             && self.input.pressed(ui, Action::Interact)
         {
             let held = combat.arms[self.n].hands.held;
@@ -246,7 +259,7 @@ impl Seat {
             (Some((j, _)), ..) => Some(("E", format!("REVIVE P{}", j + 1))),
             (None, Some((_, stack)), _) => Some(("E", stack.label())),
             (None, None, Some((_, gun))) => Some(("E", format!("TAKE {}", gun.name()))),
-            (None, None, None) => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
+            (None, None, None) => aimed.map(|a| ("E", stim.map_or_else(|| h.prompt(a, &self.bag, combat.arms[self.n].hands.held), |stim| self.stim_prompt(stim, alone)))),
         };
         let picking_up = self.reviving.map(|(_, p)| p).filter(|&p| p > 0.0);
         self.hud(ui, pane, combat, game, prompt, h.nail_progress(self.n).or(picking_up));

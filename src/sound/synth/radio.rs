@@ -3,7 +3,8 @@
 //! of a wrong arrow; a plane going over, high up, and a crate coming to
 //! ground; a boost coming on; a strafing run's plane, and its guns; a
 //! precision strike's shell coming down, and landing; a mystery drop's
-//! guns flicking past, and the one it is.
+//! guns flicking past, and the one it is. And a stim's jab, and Lazarus's
+//! jolt.
 
 use super::{Svf, env, pulse, render, sine};
 use crate::sound::{RATE, Sfx};
@@ -185,6 +186,35 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
             render(1.2, 0.5, |t, _| {
                 let bell = |from: f32, hz: f32| if t >= from { (sine(t - from, hz) + sine(t - from, hz * 2.76) * 0.25) * env(t - from, 0.003, 0.3) } else { 0.0 };
                 bell(0.0, 1046.5) + bell(0.07, 1568.0) * 0.8 + bell(0.14, 2093.0) * 0.6
+            })
+        }
+        Sfx::Jab => {
+            // An injector: the snap of its spring, the needle's thump,
+            // and its charge hissing in, thinning out.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(0.9, 0.55, move |t, n| {
+                let x = n.next();
+                let snap = g.run(x, 2800.0, 0.4).1 * env(t, 0.0004, 0.008) * 1.2;
+                let thump = sine(t, 120.0 - 50.0 * (t / 0.08).min(1.0)) * env(t, 0.002, 0.05) * 0.9;
+                let into = (t - 0.04).max(0.0);
+                let hiss = f.run(x, 5200.0 - 2600.0 * (into / 0.7).min(1.0), 0.7).1 * env(into, 0.03, 0.26) * f32::from(t >= 0.04) * 0.7;
+                snap + thump + hiss
+            })
+        }
+        Sfx::Jolt => {
+            // Lazarus: a heart struck back to work. A hard thump, a
+            // charge whining up under it, and two beats after.
+            let mut f = Svf::default();
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(1.5, 0.95, move |t, n| {
+                let x = n.next();
+                let thump = sine(t, 70.0 - 30.0 * (t / 0.15).min(1.0)) * env(t, 0.002, 0.14) * 1.6;
+                let crack = f.run(x, 1900.0, 0.5).1 * env(t, 0.0005, 0.03);
+                phase = (phase + (300.0 + 1500.0 * (t / 0.6).min(1.0)) * dt).fract();
+                let whine = (std::f32::consts::TAU * phase).sin() * env(t, 0.05, 0.28) * 0.22;
+                let beat = |from: f32| if t >= from { sine(t - from, 58.0) * env(t - from, 0.004, 0.07) } else { 0.0 };
+                thump + crack + whine + beat(0.62) * 0.9 + beat(0.8) * 0.7 + beat(1.12) * 0.6 + beat(1.3) * 0.45
             })
         }
         _ => Vec::new(),

@@ -1,7 +1,8 @@
 //! The viewmodels from the real files: every weapon's arms rest as
 //! modelled, its clips last as its hands think, and its sights (or scope)
 //! sit on the middle of the view when aimed; the hands hold what they
-//! should. And the radio's: held where the arms think it is.
+//! should. And the radio's: held where the arms think it is. And a stim's
+//! injector's: its needle in when the game says it is.
 
 use lntrn_math::{Mat4, Vec3, Vec4};
 use lntrn_model::Gltf;
@@ -87,6 +88,33 @@ fn the_radio_rests_as_modelled_and_is_held_out_at_the_right_where_the_arms_think
     // Keyed, it's brought up and in, towards the mouth.
     let spoken = held("Key", 0.3);
     assert!(spoken.x < at.x - 0.04 && spoken.y > at.y + 0.03 && spoken.z > at.z + 0.04, "keyed at {spoken:?}");
+}
+
+#[test]
+fn a_stim_s_injector_rests_as_modelled_and_its_needle_s_in_when_the_stim_takes() {
+    use crate::holdout::stims::{IN_AT, JAB};
+    let g = Gltf::load(format!("{}/assets/models/viewmodel_stim.glb", env!("CARGO_MANIFEST_DIR"))).expect("the injector");
+    let skin = &g.skins[0];
+    assert_eq!(skin.joints.len(), 20, "19 for the arms, 1 for the injector");
+    for (i, m) in skin.joint_matrices(&g.world_matrices(&g.rest_pose())).iter().enumerate() {
+        assert!(m.approx_eq(&Mat4::IDENTITY, 1e-4), "joint {i} moves the mesh at rest");
+    }
+    assert!((length(&g, "Jab") - JAB).abs() < 0.05, "the jab lasts {}", length(&g, "Jab"));
+    let held = |t: f64| {
+        let mut pose = g.rest_pose();
+        g.animations.iter().find(|a| a.name.as_deref() == Some("Jab")).expect("the clip").sample(t, &mut pose);
+        let bone = g.nodes.iter().position(|n| n.name.as_deref() == Some("gun")).expect("its bone");
+        g.world_matrices(&pose)[bone].transform_point(Vec3::ZERO)
+    };
+    // Held ready out at the right; brought in over the left forearm (in
+    // view, well out from the eye) and down into it: as far down as it
+    // goes by the time the stim's theirs, and still there a while after.
+    let (ready, lifted, taken, after) = (held(0.0), held(11.0 / 30.0), held(IN_AT), held(IN_AT + 0.4));
+    assert!(on_screen(ready).is_some_and(|(x, y)| x > 0.4 && y < -0.2), "ready at {ready:?}");
+    assert!(taken.x < ready.x - 0.15 && taken.z < -0.3, "in at {taken:?}");
+    assert!(on_screen(taken).is_some_and(|(x, y)| x.abs() < 0.5 && y.abs() < 0.9), "in at {taken:?}");
+    assert!((lifted - taken).length() > 0.05 && (after - taken).length() < 0.012, "lifted {lifted:?}, in {taken:?}, after {after:?}");
+    assert!((held(JAB) - ready).length() < 1e-3, "back where it began");
 }
 
 #[test]

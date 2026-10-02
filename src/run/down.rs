@@ -2,7 +2,8 @@
 //! standing goes down instead, crawling, their sidearm in hand, bleeding
 //! out for a while. Another standing by them holding interact picks them
 //! up (and while they do, the bleeding waits). Bled out, they're out for
-//! the rest of it, watching. With nobody left standing, it's over.
+//! the rest of it, watching. With nobody left standing, it's over (but,
+//! alone, for Lazarus: `stims.rs`).
 
 use lntrn_math::{Vec2, Vec3};
 use lntrn_ui::Ui;
@@ -49,6 +50,8 @@ impl Seat {
         self.vitals.healing = None;
         self.vitals.bleeding = 0;
         self.vitals.poison = 0.0;
+        // (And every stim's gone from their blood.)
+        self.lose_stims();
         (self.aiming, self.reviving) = (None, None);
         game.set_fallen(self.n, true);
         let sidearm = self.bag.slot(Slot::Sidearm).is_some().then_some(Slot::Sidearm);
@@ -115,6 +118,10 @@ impl Run {
             self.seats[i].go_down(game, combat);
             return false;
         }
+        // Alone, with Lazarus in their blood: back they come, the once.
+        if self.seats.len() == 1 && self.seats[i].second_life(game, combat) {
+            return false;
+        }
         self.end(game, how, combat);
         true
     }
@@ -149,7 +156,8 @@ impl Run {
                 Some((t, p)) if t == j => p,
                 _ => 0.0,
             };
-            let now = if held { so_far + dt / REVIVE_FOR } else { 0.0 };
+            // (With Lazarus in their blood, in half the time.)
+            let now = if held { so_far + dt / REVIVE_FOR * helper.stims.revives() } else { 0.0 };
             if now >= 1.0 {
                 helper.reviving = None;
                 helper.stats.revives += 1;

@@ -141,6 +141,14 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - [x] 11. Room for it all: the Relay Station stretched to 1.5 times its size each way (156 m by 58 m), nothing added: every room, the yard and the lots as they were, with more than twice the floor; what stands in them the size it was. The floods reach further to match.
 - [x] 12. Mystery drop (`src/holdout/mystery.rs`, `src/support/mystery.rs`), our mystery box: up, right, down, down, down; 2 bars and 950 points (the only call-in that costs points, shown after its name on the card). A drop like the others (violet smoke, question marks on the crate); down, the guns it could be flick past over it, then the one it is turns there to be taken: never one its caller carries, the better the rarer, 1 in 6 already amplified. Taken, it's in hand with a full carry.
 
+## Phase 13: Stims 💉
+
+HOLDOUT's perks. Decided 2026-10-02 (Alva's note: "Perks are Stimpacks that you inject. You acquire them through med stations around the map"): one med station a stim, spread about the compound; bought, it's jabbed into the arm there and then, seen in the hands; going down loses them all; alone, the revive one is a second life, the once in a run.
+
+- [x] The stims (`src/holdout/stims.rs`, `src/run/stims.rs`): BULWARK (+75 health, 2500), TWITCH (reload twice as fast, 3000), RUSH (sprint a fifth faster, 2000), LAZARUS (1500: alone, back on their feet at half health the once, the dead thrown off; together, picks the others up in half the time). A tab for each by the health.
+- [x] The med stations (`src/holdout/station.rs`): an enamelled cabinet, a lit cross, tubes and a beacon in its stim's colour. Lazarus in the control room, Rush at the far end of the motor pool's bay, Bulwark in the barracks' showers, Twitch upstairs among the servers.
+- [x] The jab (`assets/blender/stim.py` → `viewmodel_stim.glb`): the gun's put away, an injector comes up in the right hand, what's in it glowing the stim's colour, and it's jabbed into the left forearm; the needle in, it's theirs.
+
 
 ---
 

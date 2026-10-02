@@ -5,7 +5,9 @@
 //! the arena. Boards torn off the windows can be nailed back, for a few
 //! points more. The radio's boosts (`boosts.rs`) double what's earned, or
 //! make any hit a kill, for a while; its mystery drop (`mystery.rs`) is a
-//! gun, luck's choice. It lasts as long as the player does.
+//! gun, luck's choice. Med stations (`station.rs`) sell stims
+//! (`stims.rs`): more health, a faster reload, a faster sprint, a second
+//! life, till they next go down. It lasts as long as the player does.
 
 pub mod arena;
 pub mod boosts;
@@ -23,6 +25,8 @@ pub mod props;
 mod raise;
 mod relay;
 pub mod rounds;
+mod station;
+pub mod stims;
 
 use bevy_ecs::prelude::*;
 use lntrn_math::Vec3;

@@ -246,6 +246,20 @@ Down in the bunker's ops room (the signs lead to it from the yard): what's in ha
 - Its shots leave a streak and flash in its glow's colour.
 - Against round 20's Shambler (456 health) a tier-III gun does what the plain one does to round 1's (100).
 
+### Stims
+
+Four med stations stand about the Relay Station, each selling one stim. Bought (points), it's jabbed into the arm there and then: the gun's put away, the injector comes up, and **0.5 s** into the jab it's in the blood (the whole thing takes **1.5 s**, and the feet are free). Each can be had once at a time. **Going down loses all of them.**
+
+| Stim | Cost | Where | What it does |
+|---|---|---|---|
+| BULWARK | 2500 | Barracks, the showers | +75 health (and that much more the moment it's in) |
+| TWITCH | 3000 | Broadcast floor, the servers | Reloads 2 times as fast |
+| RUSH | 2000 | Motor pool, the far end of the bay | Sprints 1.2 times as fast |
+| LAZARUS | 1500 | Control room | Alone: a second life. Together: picks someone up 2 times as fast |
+
+- **Lazarus, alone:** when they'd have died it brings them back on their feet with **half** their health, what was killing them gone (the cuts, the poison, the fire), the dead within **6 m** thrown off and sent stumbling, and for **2 s** nothing can hurt them. It's used up by that, and can't be bought again that run. Their other stims stay.
+- **Lazarus, together:** no second life (they go down, as ever, and lose it with the rest), but whoever has it picks the others up in half the time.
+
 ### The radio
 
 Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's put away and the keys that walk (a pad's d-pad) punch a code in; a whole code calls it in, paid for in **signal**.

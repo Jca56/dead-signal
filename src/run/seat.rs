@@ -76,6 +76,8 @@ pub struct Seat {
     /// for the frame).
     pub radio: Option<crate::radio::Radio>,
     pub points: Option<u32>,
+    /// What's in their blood (a holdout's stims), and what's going in.
+    pub stims: crate::holdout::stims::Stims,
     /// Their controls, this frame (the keys and mouse, a pad), and whether
     /// a sprint's been toggled on (sprint set to toggle, or on a pad).
     pub input: Input,
@@ -173,7 +175,7 @@ impl Seat {
         // What's worn weighs on the sprint, the breath and the feet; the
         // armor worn has room for a plate or it hasn't.
         let (fast, breath, _) = crate::loot::gear::burden(self.weight());
-        game.set_load(n, fast);
+        game.set_load(n, self.stims.sprint(fast));
         self.vitals.breath = breath;
         let (armor, most) = self.bag.armor();
         self.vitals.armor_room = most - armor;
@@ -253,6 +255,8 @@ impl Seat {
         // A throw being aimed puts the gun down. (Down, there's only the
         // gun in hand.)
         let busy = (!down && self.throwing(ui, game, combat, !busy)) || busy;
+        // A stim going in: the hands are its, and nothing else's.
+        let busy = self.stimming(combat, dt) || busy;
         // The radio out, the hands are its: till they're wanted for
         // anything else.
         self.radioing(ui, game, combat, !busy && !down, super::radio::Pulls { fire: firing, hold: holding, strike: striking }, dt);
@@ -261,6 +265,7 @@ impl Seat {
         }
         self.switch_hands(ui, combat, !busy && !down);
         let busy = busy || self.radio_out();
+        combat.arms[n].hands.reload_speed = self.perks.reload_speed() * self.stims.reloads();
         // The sights up while the right button's held; a sprint takes them
         // down.
         let aim = self.input.held(ui, Action::Aim) && !wants_sprint;
@@ -322,8 +327,9 @@ impl Seat {
     /// (`felt`); nothing hurts them with `god` on. How they died of it, if
     /// they did.
     pub(super) fn suffer(&mut self, game: &mut Game, combat: &mut Combat, blows: impl IntoIterator<Item = Blow>, poisoned: bool, felt: Felt, god: bool) -> Option<Outcome> {
-        // Down (or out), nothing more can hurt them.
-        if !self.standing() {
+        // Down (or out), nothing more can hurt them; nor just brought
+        // back by Lazarus.
+        if !self.standing() || self.stims.safe() {
             return None;
         }
         // Standing in a Spitter's bile.
@@ -426,7 +432,7 @@ impl Seat {
     /// what's aimed at, and `busy`, how far through a job at hand (a way
     /// out, nailing boards) that isn't patching up or searching.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn hud(&self, ui: &mut Ui, pane: Rect, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>, busy: Option<f64>) {
+    pub fn hud(&self, ui: &mut Ui, pane: Rect, combat: &Combat, game: &mut Game, prompt: Option<(&'static str, String)>, busy: Option<f64>) {
         let time = game.clock().time;
         let v = &self.vitals;
         let interact = self.input.name(Action::Interact);
@@ -474,6 +480,7 @@ impl Seat {
                 bleeding: v.bleeding,
                 poison: v.poison,
                 armor: self.bag.armor(),
+                stims: &self.stims.all().map(|s| (&s.name()[..1], s.colour())).collect::<Vec<_>>(),
             },
         );
     }

@@ -99,6 +99,8 @@ impl Holdout {
                     Some(gun) if gun.tier >= amp::TIERS => format!("{}  ·  FULLY AMPLIFIED", gun.name()),
                     Some(gun) => format!("AMPLIFY {} [{}]", gun.name(), AMPLIFY[usize::from(gun.tier)]),
                 },
+                // (What a player has of them is the run's to say.)
+                Wares::Stim(stim) => format!("{} [{}]", stim.name(), stim.price()),
                 Wares::Weapon(kind) => {
                     let name = kind.def().name;
                     if !has(bag, kind) {
@@ -153,6 +155,30 @@ impl Holdout {
         }
     }
 
+    /// The stim the med station at `aimed` sells, if that's what it is.
+    pub fn stim_at(&self, aimed: Aimed) -> Option<super::stims::Stim> {
+        match aimed {
+            Aimed::Buy(i) => match self.arena.buys[i].wares {
+                Wares::Stim(stim) => Some(stim),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Player `seat` pays `cost` points (nothing, with the dev's free
+    /// hand), if they've that many. Whether they did.
+    pub fn pay(&mut self, world: &World, seat: usize, cost: u32) -> bool {
+        let free = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.free);
+        let Some(wallet) = self.wallets.get_mut(seat) else { return false };
+        let cost = if free { 0 } else { cost };
+        let can = wallet.points >= cost;
+        if can {
+            wallet.points -= cost;
+        }
+        can
+    }
+
     /// What's in `held` put through the Amplifier: a tier up, its
     /// magazine full and its rounds topped up to what it now carries.
     fn amplify(&mut self, seat: usize, bag: &mut Bag, held: Option<Slot>, free: bool) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
@@ -200,7 +226,7 @@ impl Holdout {
             },
             Wares::Weapon(kind) | Wares::Kit(kind) => (kind, price(kind), false),
             Wares::Gear(kind) => return self.outfit(kind, seat, bag, free),
-            Wares::Amplifier => return (None, None, None),
+            Wares::Amplifier | Wares::Stim(_) => return (None, None, None),
         };
         let cost = if free { 0 } else { cost };
         if self.wallets[seat].points < cost {

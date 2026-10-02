@@ -87,6 +87,24 @@ fn balance_md_matches_the_game() {
         let held = f64::from(crate::weapon::amp::capacity(Weapon::Pistol, tier)) / f64::from(Weapon::Pistol.spec().mag);
         assert_eq!(num(&row["Rounds held"]), held, "tier {tier} rounds");
     }
+    // The stims.
+    use crate::holdout::stims::{self, Stim};
+    let sold = table("| Stim | Cost |");
+    assert_eq!(sold.len(), stims::ALL.len());
+    for stim in stims::ALL {
+        let row = sold.iter().find(|r| r["Stim"] == stim.name()).unwrap_or_else(|| panic!("no row for {}", stim.name()));
+        assert_eq!(num(&row["Cost"]), f64::from(stim.price()), "{} cost", stim.name());
+        let does = match stim {
+            Stim::Bulwark => format!("+{} health", stims::HEALTH),
+            Stim::Twitch => format!("Reloads {} times as fast", stims::RELOADS),
+            Stim::Rush => format!("Sprints {} times as fast", stims::SPRINTS),
+            Stim::Lazarus => format!("picks someone up {} times as fast", stims::REVIVES),
+        };
+        assert!(row["What it does"].contains(&does), "{}: {}", stim.name(), row["What it does"]);
+    }
+    let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Balance.md")).expect("Balance.md");
+    assert!(text.contains(&format!("**{} s** into the jab it's in the blood (the whole thing takes **{} s**", stims::IN_AT, stims::JAB)));
+    assert!(stims::BACK_WITH == 0.5 && text.contains(&format!("the dead within **{} m** thrown off", stims::THROWS.0)) && text.contains(&format!("for **{} s** nothing can hurt them", stims::SAFE_FOR)));
     // The radio: every call-in's code and cost, and what charges it.
     let calls = table("| Call-in | Code |");
     assert_eq!(calls.len(), crate::radio::codes::ENTRIES.len());

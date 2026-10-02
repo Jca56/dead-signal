@@ -8,6 +8,7 @@ use std::ops::Range;
 use lntrn_math::{Vec2, Vec3};
 
 use super::layout::{Layout, OFFSET};
+use super::stims::Stim;
 use super::{land, raise, relay};
 use crate::loot::Kind;
 use crate::map::Map;
@@ -24,13 +25,15 @@ const WOODS_BACK: f64 = 6.0;
 
 /// Something for sale on a wall: a weapon (with its rounds), a kit, or
 /// something to wear (armor: put on as it's bought). Or, standing against
-/// it, the Amplifier (`machine.rs`): what's in hand made more of.
+/// it, the Amplifier (`machine.rs`): what's in hand made more of; or a
+/// med station (`station.rs`), and the stim it sells.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Wares {
     Weapon(Kind),
     Kit(Kind),
     Gear(Kind),
     Amplifier,
+    Stim(Stim),
 }
 
 impl Wares {
@@ -38,7 +41,7 @@ impl Wares {
     pub fn kind(self) -> Option<Kind> {
         match self {
             Wares::Weapon(kind) | Wares::Kit(kind) | Wares::Gear(kind) => Some(kind),
-            Wares::Amplifier => None,
+            Wares::Amplifier | Wares::Stim(_) => None,
         }
     }
 }

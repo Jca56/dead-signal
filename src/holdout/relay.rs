@@ -40,6 +40,7 @@ mod wings;
 
 use super::arena::{Wares, Way};
 use super::layout::{BuyAt, Build, Face, FloodAt, Gap, Layout, Prop, Run, SignAt, Yard, ew, ns};
+use super::stims::Stim;
 use crate::loot::Kind as Item;
 use crate::loot::tables::Source;
 use crate::map::building::furnish::Furn;
@@ -140,6 +141,13 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(29, 13.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(-36, -0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(48, 23.75), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
+        // The med stations, one a stim: Lazarus in the control room, Rush
+        // at the far end of the motor pool's bay, Bulwark in the barracks'
+        // showers, Twitch up on the broadcast floor among the servers.
+        BuyAt(ew(-17, 0.5), 0, Face::N, Wares::Stim(Stim::Lazarus)),
+        BuyAt(ns(-75, 9.0), 0, Face::E, Wares::Stim(Stim::Rush)),
+        BuyAt(ew(-9, 46.5), 0, Face::N, Wares::Stim(Stim::Bulwark)),
+        BuyAt(ns(75, 4.5), 1, Face::W, Wares::Stim(Stim::Twitch)),
     ],
     // The way to the Amplifier: on the station house by its doors on the
     // yard, in its lobby over the flight down, and at the foot of that by

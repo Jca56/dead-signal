@@ -8,7 +8,7 @@ use lntrn_math::{Vec2, Vec3};
 
 use super::arena::{Buy, Door, LampAt, Sign, Wares, Window};
 use super::layout::{Build, BuyAt, Face, Gap, House, Layout, Line, Prop, Run, ew, ns, world, yaw};
-use super::machine;
+use super::{machine, station};
 use crate::map::dig::Dig;
 use crate::collide::Surface;
 use crate::loot::Dice;
@@ -397,12 +397,18 @@ fn centre(gap: &Gap) -> f64 {
 fn buy(layout: &Layout, b: &BuyAt, out: &mut Raised) {
     let BuyAt(on, level, face, wares) = *b;
     let (at, facing, zone) = on_wall(layout, on, level, face);
-    // (The Amplifier stands out from its wall: it's used at its front.)
-    let at = if wares == Wares::Amplifier {
-        out.blocks.push(machine::cabinet(at, facing, BUY_HEIGHT));
-        at + facing * machine::DEEP
-    } else {
-        at
+    // (The Amplifier stands out from its wall, and a med station: each
+    // is used at its front.)
+    let at = match wares {
+        Wares::Amplifier => {
+            out.blocks.push(machine::cabinet(at, facing, BUY_HEIGHT));
+            at + facing * machine::DEEP
+        }
+        Wares::Stim(_) => {
+            out.blocks.push(station::cabinet(at, facing, BUY_HEIGHT));
+            at + facing * station::DEEP
+        }
+        _ => at,
     };
     out.buys.push(Buy { at, facing, wares, zone });
 }

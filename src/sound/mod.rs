@@ -127,6 +127,10 @@ pub enum Sfx {
     /// A mystery drop: its guns flicking past, and the one it is.
     Mystery,
     Prize,
+    /// A stim: its injector's needle in and its charge let go; and
+    /// Lazarus bringing someone back.
+    Jab,
+    Jolt,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -141,7 +145,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 78] = [
+const ALL: [Sfx; 80] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -212,6 +216,8 @@ const ALL: [Sfx; 78] = [
     Sfx::Impact,
     Sfx::Mystery,
     Sfx::Prize,
+    Sfx::Jab,
+    Sfx::Jolt,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

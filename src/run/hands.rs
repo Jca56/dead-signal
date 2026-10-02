@@ -49,8 +49,8 @@ impl Seat {
         // What's held was thrown out of its slot: it's gone from the hands.
         let lost = hands.held.is_some_and(|s| self.bag.slot(s).and_then(|st| st.kind.weapon()) != Some(hands.weapon));
         if lost {
-            // (The radio out, it waits its turn.)
-            if self.radio_out() {
+            // (The radio out, or a stim going in, it waits its turn.)
+            if self.hands_taken() {
                 combat.arms[self.n].hands.put_away(self.first_armed());
             } else {
                 self.take_up(combat, self.first_armed());
@@ -71,7 +71,7 @@ impl Seat {
         // Y's down still: it may yet be the blade that's wanted. Nor with
         // the radio out: the hands are its, till a weapon's asked for.)
         if let Some(next) = combat.arms[self.n].hands.stowed()
-            && !self.radio_out()
+            && !self.hands_taken()
         {
             if self.input.swapping() {
                 return;

@@ -120,6 +120,14 @@ pub fn load_viewmodel(renderer: &mut Renderer, name: &str) -> Result<Rigged<Skin
     Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })
 }
 
+/// A viewmodel whose every part's as it's made (none of it marked as a
+/// weapon to be steeped in a glow): the arms, and what's no weapon in
+/// them (a stim's injector: only what's unlit of it takes its colour).
+pub fn load_plain_viewmodel(renderer: &mut Renderer, name: &str) -> Result<Rigged<SkinnedMeshId>, String> {
+    let (vertices, gltf, skin) = load_skinned(name)?;
+    Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })
+}
+
 /// A figure out in the world (the dead) made of parts: every skinned mesh
 /// in the file, by its node's name, all on the one skin.
 pub fn load_figure(renderer: &mut Renderer, name: &str) -> Result<Rigged<Vec<(String, FigureMeshId)>>, String> {

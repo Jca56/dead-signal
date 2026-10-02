@@ -4,7 +4,8 @@
 //! landing, settle when crouched, and breathe with their idle animation.
 //! Whatever's in them is its own viewmodel (the arms and that weapon, and
 //! its clips), dropped out of view as it's put away and raised as it's
-//! taken up; the radio, pulled out, is one too, in the weapon's place.
+//! taken up; the radio, pulled out, is one too, in the weapon's place,
+//! and a stim's injector as it's jabbed in.
 //! All in camera space: x right, y up, -z ahead.
 
 use std::collections::HashMap;
@@ -38,6 +39,8 @@ const STOW_TIP: f64 = 0.7;
 /// ahead), and how far it reaches to the side of that.
 const RADIO_AT: Vec3 = Vec3::new(0.225, -0.125, -0.37);
 const RADIO_REACH: f64 = 0.05;
+/// How bright what's in a stim's injector is, of its colour.
+const VIAL: f32 = 0.65;
 
 /// How far the arms trail the view: a spring pulled by how fast it turns.
 #[derive(Clone, Copy, Debug, Default)]
@@ -68,17 +71,27 @@ struct Motion {
     lift: f64,
 }
 
+/// What's in hand in a weapon's place: the radio (and how far the pane
+/// it's drawn in sees across and up, as tangents), or a stim's injector
+/// (and the colour of what's in it).
+#[derive(Clone, Copy, Debug)]
+pub enum Instead {
+    Radio(Shown, [f64; 2]),
+    Stim(Shown, [f32; 3]),
+}
+
 pub struct Viewmodel {
-    /// Every weapon's viewmodel; and the radio's.
+    /// Every weapon's viewmodel; the radio's; and a stim's injector's.
     rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>,
     radio: Option<Rigged<SkinnedMeshId>>,
+    stim: Option<Rigged<SkinnedMeshId>>,
     /// Each player's arms' motion, by seat.
     motions: Vec<Motion>,
 }
 
 impl Viewmodel {
-    pub fn new(rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>, radio: Option<Rigged<SkinnedMeshId>>) -> Self {
-        Self { rigs, radio, motions: vec![Motion::default()] }
+    pub fn new(rigs: HashMap<Weapon, Rigged<SkinnedMeshId>>, radio: Option<Rigged<SkinnedMeshId>>, stim: Option<Rigged<SkinnedMeshId>>) -> Self {
+        Self { rigs, radio, stim, motions: vec![Motion::default()] }
     }
 
     /// Forget the last run's motion: fresh, for each of `players`.
@@ -99,17 +112,22 @@ impl Viewmodel {
     /// Player `seat`'s arms and what's in `hands` as they are drawn this
     /// frame (the clip playing, blended toward the weapon's aimed one as far
     /// as the sights are up; idles loop on the game's clock, `time`); none
-    /// if that weapon's viewmodel didn't load. With the `radio` in view
-    /// (and how far their pane sees across and up, as tangents), it's the
-    /// arms and the radio instead.
-    pub fn draw(&self, seat: usize, view: &View, hands: &Hands, radio: Option<(Shown, [f64; 2])>, time: f64, lowered: f64) -> Option<SkinnedDraw> {
-        if let Some((shown, sees)) = radio {
-            let rig = self.radio.as_ref()?;
+    /// if that weapon's viewmodel didn't load. With something else in
+    /// hand `instead` (the radio, a stim's injector), it's the arms and
+    /// that.
+    pub fn draw(&self, seat: usize, view: &View, hands: &Hands, instead: Option<Instead>, time: f64, lowered: f64) -> Option<SkinnedDraw> {
+        if let Some(instead) = instead {
+            // (The radio's moved over into a narrow pane; what's in an
+            // injector glows its own colour.)
+            let (rig, shown, over, glow) = match instead {
+                Instead::Radio(shown, sees) => (self.radio.as_ref()?, shown, radio_over(sees), [0.0; 4]),
+                Instead::Stim(shown, c) => (self.stim.as_ref()?, shown, 0.0, [c[0] * VIAL, c[1] * VIAL, c[2] * VIAL, 0.9]),
+            };
             let pose = sample(&rig.gltf, shown.clip, shown.t.unwrap_or(time), shown.t.is_none());
             let joints = rig.gltf.skins[rig.skin].joint_matrices(&rig.gltf.world_matrices(&pose));
             let motion = self.motions.get(seat).copied().unwrap_or_default();
-            let model = Mat4::from_translation(Vec3::new(-radio_over(sees), 0.0, 0.0)) * placement(&motion, view, 0.0, shown.stowed, 0.0);
-            return Some(SkinnedDraw { mesh: rig.mesh, model, joints, glow: [0.0; 4] });
+            let model = Mat4::from_translation(Vec3::new(-over, 0.0, 0.0)) * placement(&motion, view, 0.0, shown.stowed, 0.0);
+            return Some(SkinnedDraw { mesh: rig.mesh, model, joints, glow });
         }
         let rig = self.rigs.get(&hands.weapon)?;
         let gltf = &rig.gltf;

@@ -44,6 +44,8 @@ pub struct Hud<'a> {
     /// Cuts bleeding, and seconds of poison left.
     pub bleeding: u8,
     pub poison: f64,
+    /// The stims in their blood: each its letter, and its colour.
+    pub stims: &'a [(&'a str, [f32; 3])],
     /// Armor points left, and the most (none worn: no bar).
     pub armor: (u32, u32),
 }
@@ -164,6 +166,17 @@ pub fn draw(ui: &mut Ui, screen: Rect, h: &Hud) {
         ui.draw.stroke_rect(r, 2.0 * s, 0.0, Color::rgba(colour.r, colour.g, colour.b, beat));
         ui.text_at(&text, &chip, r.min + Vec2::new(12.0 * s, 5.0 * s), w, style::BONE);
         cx += w + 12.0 * s;
+    }
+    // The stims in their blood, up the left of all that: a tab each, its
+    // letter on its colour.
+    let letter = TextStyle::new((24.0 * s) as f32).bold().family(style::FONT);
+    let (tab_w, tab_h) = (44.0 * s, 30.0 * s);
+    for (k, &(name, c)) in h.stims.iter().enumerate() {
+        let tab = Rect::from_min_size(Vec2::new(left - 8.0 * s - tab_w, stamina_top + stamina_h - tab_h - (tab_h + 4.0 * s) * k as f64), Vec2::new(tab_w, tab_h));
+        ui.draw.rounded_rect(tab, 5.0 * s, Color::rgb(f64::from(c[0]), f64::from(c[1]), f64::from(c[2])));
+        ui.draw.stroke_rect(tab, 2.0 * s, 5.0 * s, Color::rgba(0.0, 0.0, 0.0, 0.8));
+        let w = ui.measure(name, &letter);
+        ui.text_at(name, &letter, Vec2::new(tab.min.x + (tab_w - w) * 0.5, tab.min.y + (tab_h - f64::from(letter.line_height())) * 0.5), tab_w, Color::rgb(0.04, 0.04, 0.04));
     }
     let stamina = Rect::from_min_size(Vec2::new(left, stamina_top), Vec2::new(width, stamina_h));
     ui.draw.rect(stamina, TROUGH);
