@@ -83,6 +83,8 @@ pub struct Seat {
     /// (and when, the game's clock).
     pub(super) throwable: Option<Throwable>,
     pub(super) aiming: Option<Aiming>,
+    /// The radio's flare, its throw being aimed.
+    pub(super) marking: Option<Aiming>,
     pub(super) threw: Option<(Throwable, f64)>,
     /// Playing together: down (bleeding out, crawling), or out (bled out,
     /// watching); and picking someone downed up (their place in the seats,
@@ -248,7 +250,7 @@ impl Seat {
         let busy = (!down && self.throwing(ui, game, combat, !busy)) || busy;
         // The radio out, the hands are its: till they're wanted for
         // anything else.
-        self.radioing(ui, combat, !busy && !down, firing || striking, dt);
+        self.radioing(ui, game, combat, !busy && !down, super::radio::Pulls { fire: firing, hold: holding, strike: striking }, dt);
         if !busy && !self.radio_out() && self.input.pressed(ui, Action::FireMode) && combat.arms[n].hands.switch_fire() {
             combat.play(Sfx::Tick, 0.9);
         }

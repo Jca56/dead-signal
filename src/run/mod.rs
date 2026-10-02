@@ -2,7 +2,8 @@
 //! movement, shots and healing, their health and stamina, the count of
 //! what happened); what's in hand (`hands.rs`); what's carried and found
 //! (`loot.rs`); going down and being picked up, playing together
-//! (`down.rs`); the radio they pull out (`radio.rs`); and what the players
+//! (`down.rs`); the radio they pull out (`radio.rs`) and what it calls
+//! down (`support.rs`); and what the players
 //! share: the dead brought in, the ways
 //! out (`out.rs`) or a holdout's rounds (`holdout.rs`), and the end, when
 //! it comes to that.
@@ -14,6 +15,7 @@ mod loot;
 mod out;
 mod radio;
 mod seat;
+mod support;
 mod throwing;
 
 use lntrn_math::{Rect, Vec3};
@@ -33,6 +35,8 @@ use crate::sound::Sfx;
 use crate::world::Game;
 use crate::zombie::director::Director;
 use seat::Seat;
+#[cfg(test)]
+pub use support::MEDIC;
 
 #[derive(Default)]
 pub struct Run {

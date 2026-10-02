@@ -61,6 +61,7 @@ impl DeadSignal {
                 zombie::clear(&mut self.game.world);
                 zombie::spit::clear(&mut self.game.world);
                 crate::throw::clear(&mut self.game.world);
+                crate::support::clear(&mut self.game.world);
                 if let Some(arena) = self.arena.take() {
                     // A holdout: nothing of the profile's goes in.
                     self.settle_run();

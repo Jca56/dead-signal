@@ -5,7 +5,8 @@
 //! beside it); a whole code keys it, brought to the mouth with the talk
 //! button pressed, and what was called for goes out as the button's let
 //! go, paid for in signal (`signal.rs`: charged by kills; `meter.rs`: its
-//! bars drawn); put away, it goes down and the gun comes back. A machine of
+//! bars drawn); a drop called for, a lit flare comes up in the left hand
+//! to be thrown where it's to land, the radio still up in the right; put away, it goes down and the gun comes back. A machine of
 //! states, like the hands (`weapon`): it knows nothing of the world, and
 //! says what's to be heard at the moments its clips show them. How it's
 //! drawn is the viewmodel's (`viewmodel`), in the weapon's place.
@@ -26,6 +27,11 @@ pub const KEY: f64 = 1.0;
 /// Into keying it, when the talk button goes down and when it's let go.
 const TALK_AT: f64 = 0.3;
 const OVER_AT: f64 = 0.8;
+/// How long a flare takes to come up in the left hand, and to be thrown;
+/// and into the throw, when it leaves the hand.
+const FLARE_UP: f64 = 0.27;
+pub const THROW: f64 = 0.43;
+const THROWN_AT: f64 = 0.2;
 /// How long its card takes to come up, and a wrong arrow shows on it.
 const CARD_IN: f64 = 0.12;
 pub const WRONG_FOR: f64 = 0.35;
@@ -40,6 +46,11 @@ enum State {
     Raise,
     Up,
     Key,
+    /// A flare coming up in the left hand; held there, to be thrown; and
+    /// thrown.
+    FlareUp,
+    Flare,
+    Throw,
     Lower,
 }
 
@@ -51,6 +62,9 @@ pub enum Cue {
     /// The talk button down; and let go, what was called for sent.
     Talk,
     Over(Call),
+    /// A flare struck, coming up in the left hand; and leaving it, thrown.
+    Lit,
+    Thrown(Call),
 }
 
 /// The handset as it's drawn: which of its clips, how far into it (an
@@ -77,6 +91,9 @@ pub struct Radio {
     wrong: Option<f64>,
     /// What there is to call things in with.
     pub signal: Signal,
+    /// A drop called for and not yet marked: its flare's still to throw
+    /// (kept, put away, till the radio's out again).
+    flare: Option<Call>,
 }
 
 impl Radio {
@@ -95,7 +112,31 @@ impl Radio {
     /// Whether arrows are being taken: from the moment it's pulled out
     /// (the fingers needn't wait for it to come up), till a code's in.
     pub fn dialing(&self) -> bool {
-        matches!(self.state, State::Wanted | State::Raise | State::Up) && self.calling.is_none()
+        matches!(self.state, State::Wanted | State::Raise | State::Up) && self.calling.is_none() && self.flare.is_none()
+    }
+
+    /// The drop whose flare's still to throw, if there's one.
+    pub fn flare(&self) -> Option<Call> {
+        self.flare
+    }
+
+    /// `call` is on its way: a flare for it, to mark where it's to land.
+    pub fn give_flare(&mut self, call: Call) {
+        self.flare = Some(call);
+    }
+
+    /// Whether the flare's up in the left hand, to be thrown.
+    pub fn marking(&self) -> bool {
+        self.state == State::Flare
+    }
+
+    /// Throw the flare, if it's in hand. Whether it's on its way.
+    pub fn throw(&mut self) -> bool {
+        let can = self.marking();
+        if can {
+            self.start(State::Throw);
+        }
+        can
     }
 
     /// What's punched in so far; what's being called in (or about to be);
@@ -129,13 +170,13 @@ impl Radio {
     /// Pull it out (once the gun's away).
     pub fn pull(&mut self) {
         if self.state == State::Away {
-            *self = Self { state: State::Wanted, signal: self.signal, ..Self::default() };
+            *self = Self { state: State::Wanted, signal: self.signal, flare: self.flare, ..Self::default() };
         }
     }
 
     /// Put it away, from wherever it's got to (a code half in is
-    /// forgotten; one not yet sent isn't). Whether it was in view, and is
-    /// on its way down now.
+    /// forgotten, and one not yet sent; a flare not yet thrown is kept).
+    /// Whether it was in view, and is on its way down now.
     pub fn put_away(&mut self) -> bool {
         match self.state {
             State::Away | State::Lower => return false,
@@ -149,7 +190,7 @@ impl Radio {
                 self.start(State::Lower);
                 self.t = (1.0 - up) * LOWER;
             }
-            State::Up | State::Key => self.start(State::Lower),
+            State::Up | State::Key | State::FlareUp | State::Flare | State::Throw => self.start(State::Lower),
         }
         self.dial.clear();
         self.calling = None;
@@ -157,9 +198,9 @@ impl Radio {
     }
 
     /// Away at once, wherever it was (they're down and out): its signal's
-    /// kept.
+    /// kept, and a flare not yet thrown.
     pub fn drop_it(&mut self) {
-        *self = Self { signal: self.signal, ..Self::default() };
+        *self = Self { signal: self.signal, flare: self.flare, ..Self::default() };
     }
 
     /// What was just dialled can't be called in (there's not the signal
@@ -204,6 +245,21 @@ impl Radio {
             State::Raise if self.t >= RAISE => self.start(State::Up),
             // A code's in: brought to the mouth, the talk button pressed.
             State::Up if self.calling.is_some() => self.start(State::Key),
+            // A drop's on its way: its flare struck, up in the left hand.
+            State::Up if self.flare.is_some() => {
+                self.start(State::FlareUp);
+                cues.push(Cue::Lit);
+            }
+            State::FlareUp if self.t >= FLARE_UP => self.start(State::Flare),
+            State::Throw => {
+                if let Some(call) = self.flare.filter(|_| crossed(THROWN_AT)) {
+                    self.flare = None;
+                    cues.push(Cue::Thrown(call));
+                }
+                if self.t >= THROW {
+                    self.start(State::Up);
+                }
+            }
             State::Key => {
                 if crossed(TALK_AT) {
                     cues.push(Cue::Talk);
@@ -218,7 +274,7 @@ impl Radio {
                 }
             }
             State::Lower if self.t >= LOWER => self.start(State::Away),
-            State::Raise | State::Up | State::Lower => {}
+            State::Raise | State::Up | State::FlareUp | State::Flare | State::Lower => {}
         }
         cues
     }
@@ -231,6 +287,9 @@ impl Radio {
             State::Raise => Some(idle(1.0 - (self.t / RAISE).min(1.0))),
             State::Up => Some(idle(0.0)),
             State::Key => Some(Shown { clip: "Key", t: Some(self.t), stowed: 0.0 }),
+            State::FlareUp => Some(Shown { clip: "FlareUp", t: Some(self.t), stowed: 0.0 }),
+            State::Flare => Some(Shown { clip: "Flare", t: None, stowed: 0.0 }),
+            State::Throw => Some(Shown { clip: "Throw", t: Some(self.t), stowed: 0.0 }),
             State::Lower => Some(idle((self.t / LOWER).min(1.0))),
         }
     }

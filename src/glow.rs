@@ -1,7 +1,7 @@
 //! What's alight, told to the renderer each frame of a night: the lamps
 //! (as bright as each is just now), the fires and what's burning, the
 //! hounds, a rift opening, a stream of flame, the mast's beacon when it
-//! flashes, and a shot's or a blast's flash.
+//! flashes, a flare thrown for a drop, and a shot's or a blast's flash.
 
 use bevy_ecs::prelude::*;
 use lntrn_math::Vec3;
@@ -74,6 +74,7 @@ pub fn gather(world: &mut World, fx: &Fx, renderer: &mut Renderer, time: f64) {
             renderer.light(Light::open(bounds.centre, 22.0, times(BEACON, 1.4)));
         }
     }
+    crate::support::draw::lights(world, renderer, time);
     for light in fx.flashes() {
         renderer.light(light);
     }

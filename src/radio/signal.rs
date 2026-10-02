@@ -47,6 +47,11 @@ impl Signal {
         self.add(JUGGERNAUT);
     }
 
+    /// `bars` of it back (what was called for couldn't come).
+    pub fn refund(&mut self, bars: u32) {
+        self.add(bars * BAR);
+    }
+
     /// (The dev's.) All of it.
     pub fn fill(&mut self) {
         self.units = BARS * BAR;

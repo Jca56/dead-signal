@@ -3,6 +3,7 @@
 
 mod guns;
 mod hound;
+mod radio;
 
 use super::{RATE, Sfx};
 
@@ -96,6 +97,7 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
         // The guns', and what's thrown and burns (`guns.rs`).
         Sfx::Shot | Sfx::Blast | Sfx::Pump | Sfx::ShellIn | Sfx::RifleShot | Sfx::SmgShot | Sfx::ArShot | Sfx::LmgShot | Sfx::Flame | Sfx::Shatter | Sfx::Ignite | Sfx::Crackle | Sfx::Beep | Sfx::Explosion | Sfx::Bolt | Sfx::DryFire | Sfx::MagOut | Sfx::MagIn | Sfx::SlideRack => guns::make(sfx),
         Sfx::Bark | Sfx::Growl | Sfx::Yelp | Sfx::Howl | Sfx::Zap => hound::make(sfx),
+        Sfx::RadioOn | Sfx::RadioTalk | Sfx::RadioOver | Sfx::DialUp | Sfx::DialRight | Sfx::DialDown | Sfx::DialLeft | Sfx::DialWrong | Sfx::Flyover | Sfx::Thud => radio::make(sfx),
         Sfx::Whoosh => {
             let mut f = Svf::default();
             render(0.32, 0.5, |t, n| {
@@ -341,65 +343,6 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 let click = if t >= 0.15 { g.run(x, 3500.0, 0.2).1 * env(t - 0.15, 0.0003, 0.006) + sine(t - 0.15, 1900.0) * env(t - 0.15, 0.0005, 0.02) * 0.4 } else { 0.0 };
                 let spring = if t >= 0.24 { sine(t - 0.24, 950.0) * env(t - 0.24, 0.0008, 0.06) * 0.5 } else { 0.0 };
                 turn + click + spring
-            })
-        }
-        Sfx::RadioOn => {
-            // The handset switched on: its knob clicked round, and a
-            // breath of hiss as the squelch opens and shuts.
-            let (mut f, mut g) = (Svf::default(), Svf::default());
-            render(0.3, 0.4, |t, n| {
-                let x = n.next();
-                let click = g.run(x, 2400.0, 0.5).1 * env(t, 0.0004, 0.006) + sine(t, 1300.0) * env(t, 0.0006, 0.012) * 0.5;
-                let open = (t - 0.04).max(0.0);
-                let hiss = f.run(x, 2900.0, 0.8).1 * env(open, 0.01, 0.07) * f32::from(t >= 0.04) * 0.55;
-                click + hiss
-            })
-        }
-        Sfx::RadioTalk => {
-            // The talk button down: its click, and the carrier coming up
-            // under a thin hiss.
-            let (mut f, mut g) = (Svf::default(), Svf::default());
-            render(0.22, 0.38, |t, n| {
-                let x = n.next();
-                let click = g.run(x, 3000.0, 0.4).1 * env(t, 0.0003, 0.005);
-                let hiss = f.run(x, 3400.0, 0.9).1 * env(t, 0.015, 0.09) * 0.4;
-                click + hiss + sine(t, 420.0) * env(t, 0.004, 0.05) * 0.25
-            })
-        }
-        Sfx::RadioOver => {
-            // Let go: the roger beep, two notes up, and the squelch's
-            // tail after it.
-            let mut f = Svf::default();
-            render(0.42, 0.42, |t, n| {
-                let note = |from: f32, hz: f32| if t >= from { sine(t - from, hz) * env(t - from, 0.004, 0.035) * f32::from(t - from < 0.09) } else { 0.0 };
-                let tail = (t - 0.2).max(0.0);
-                let hiss = f.run(n.next(), 3000.0, 0.8).1 * env(tail, 0.004, 0.05) * f32::from(t >= 0.2) * 0.5;
-                note(0.0, 1250.0) + note(0.1, 1660.0) + hiss
-            })
-        }
-        Sfx::DialUp | Sfx::DialRight | Sfx::DialDown | Sfx::DialLeft => {
-            // A key of the handset: two notes at once, as a telephone's
-            // are, each arrow its own pair, through a small speaker.
-            let (low, high) = match sfx {
-                Sfx::DialUp => (852.0, 1477.0),
-                Sfx::DialRight => (770.0, 1336.0),
-                Sfx::DialLeft => (697.0, 1209.0),
-                _ => (620.0, 1075.0),
-            };
-            let mut f = Svf::default();
-            render(0.11, 0.4, move |t, n| {
-                let tone = sine(t, low) + sine(t, high) * 0.8;
-                let shape = (t / 0.004).min(1.0) * (1.0 - ((t - 0.07) / 0.035).clamp(0.0, 1.0));
-                f.run(tone + n.next() * 0.06, 1300.0, 0.9).1 * shape
-            })
-        }
-        Sfx::DialWrong => {
-            // A wrong arrow: the handset's low double buzz.
-            let mut f = Svf::default();
-            render(0.26, 0.42, move |t, n| {
-                let on = f32::from(t < 0.09 || (0.13..0.24).contains(&t));
-                let buzz = pulse(t, 148.0) + pulse(t, 151.0) * 0.6 + n.next() * 0.1;
-                f.run(buzz, 900.0, 0.8).0 * on
             })
         }
         Sfx::Static => {

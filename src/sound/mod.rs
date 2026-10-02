@@ -112,6 +112,10 @@ pub enum Sfx {
     DialDown,
     DialLeft,
     DialWrong,
+    /// What it calls down: a plane going over, high up, and a crate
+    /// coming to ground.
+    Flyover,
+    Thud,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -126,7 +130,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 69] = [
+const ALL: [Sfx; 71] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -188,6 +192,8 @@ const ALL: [Sfx; 69] = [
     Sfx::DialDown,
     Sfx::DialLeft,
     Sfx::DialWrong,
+    Sfx::Flyover,
+    Sfx::Thud,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

@@ -13,7 +13,9 @@
 //! the round, the points and the signal) drawn over the picture as the
 //! window's UI would (`RADIO=dial`: a code half
 //! in; `RADIO=key`: a whole one, the handset at their mouth). `SIZE=1920x1080`
-//! draws them that big (1280x720 if not).
+//! draws them that big (1280x720 if not). `RADIO=flare`: a drop's flare in
+//! their left hand. `DROP=1`: a crate coming down on its flare in the
+//! yard, and another down and open, what it held about it.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -165,6 +167,19 @@ impl DeadSignal {
         self.game.simulating = true;
         let view = target.create_view(&Default::default());
         let radio = std::env::var("RADIO").ok();
+        // (Drops in the yard, asked for: one on its way down, one landed.)
+        if std::env::var("DROP").is_ok() {
+            use crate::radio::codes::Call;
+            crate::support::clear(&mut self.game.world);
+            crate::items::clear(&mut self.game.world);
+            let yard = |x: f64, z: f64| Vec3::new(x + 0.5, 0.0, z + 0.5);
+            crate::support::drop_at(&mut self.game.world, Call::AmmoDrop, yard(-1.0, 1.0), 13.0);
+            crate::support::drop_at(&mut self.game.world, Call::MedicDrop, yard(5.5, -4.0), 0.0);
+            for (i, kind) in [crate::loot::Kind::Medkit, crate::loot::Kind::Bandage, crate::loot::Kind::Bandage, crate::loot::Kind::ArmorPlate].into_iter().enumerate() {
+                let a = i as f64 * 2.4;
+                crate::items::set_down(&mut self.game.world, crate::loot::Stack::one(kind), yard(5.5, -4.0) + Vec3::new(a.cos() * 1.3, 0.6, a.sin() * 1.3), a);
+            }
+        }
         for k in 0..90 {
             self.game.tick(time + f64::from(k) / 60.0);
             self.game.teleport(0, feet);
@@ -180,6 +195,9 @@ impl DeadSignal {
                 // (Some signal to see: two bars, and most of a third.)
                 seat.stats.gun_kills = 27;
                 r.signal.charge(&seat.stats);
+                if how == "flare" && k == 0 {
+                    r.give_flare(crate::radio::codes::Call::AmmoDrop);
+                }
                 r.pull();
                 let code = crate::radio::codes::ENTRIES[0].code;
                 for &arrow in code.iter().take(if how == "key" { code.len() } else { 2 }).filter(|_| (how == "key" && k == 64) || (how == "dial" && k == 88)) {

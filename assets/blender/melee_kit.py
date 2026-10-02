@@ -38,13 +38,11 @@ def haft(gun, along):
     return wrist, fwd, back
 
 
-def animate(rig, gun_rest, left_rest, rest, clips, left=None, shoulders=None, also=None):
+def animate(rig, gun_rest, left_rest, rest, clips, left=None, shoulders=None):
     """Every clip, posed and baked; their names. `rest` is the weapon's
     frame at rest, `clips` {name: [(frame, weapon's frame)]} (frames from
     0), `left(g)` where the left hand is for a weapon at `g` (none: up in
-    its guard), `shoulders` (left, right) moves if they're rolled forward,
-    `also(name, frame, f)` whatever else is keyed at each key of a clip
-    (`frame` on the timeline, `f` into the clip)."""
+    its guard), `shoulders` (left, right) moves if they're rolled forward."""
     r = poses.Rig(rig, gun_rest, left_rest)
     r.add_ik()
     bpy.context.view_layer.objects.active = rig
@@ -67,8 +65,6 @@ def animate(rig, gun_rest, left_rest, rest, clips, left=None, shoulders=None, al
         g = Matrix.Translation(Vector((0, 0, 0.005 * math.sin(t * math.tau)))) @ rest
         r.key(f, g, hold(g))
         steady(f)
-        if also:
-            also("Idle", f, f - start)
     spans["Idle"] = (start, start + 90)
 
     for k, (name, keys) in enumerate(clips.items()):
@@ -76,8 +72,6 @@ def animate(rig, gun_rest, left_rest, rest, clips, left=None, shoulders=None, al
         for f, g in keys:
             r.key(start + f, g, hold(g))
             steady(start + f)
-            if also:
-                also(name, start + f, f)
         spans[name] = (start, start + keys[-1][0])
 
     for name, (a, b) in spans.items():

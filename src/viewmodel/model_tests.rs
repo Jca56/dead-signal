@@ -66,11 +66,12 @@ fn every_viewmodel_rests_as_modelled_with_its_clips() {
 fn the_radio_rests_as_modelled_and_is_held_out_at_the_right_where_the_arms_think() {
     let g = Gltf::load(format!("{}/assets/models/viewmodel_radio.glb", env!("CARGO_MANIFEST_DIR"))).expect("the radio");
     let skin = &g.skins[0];
-    assert_eq!(skin.joints.len(), 20, "19 for the arms, 1 for the radio");
+    assert_eq!(skin.joints.len(), 22, "19 for the arms, 1 for the radio, 2 for the flare and its flame");
     for (i, m) in skin.joint_matrices(&g.world_matrices(&g.rest_pose())).iter().enumerate() {
         assert!(m.approx_eq(&Mat4::IDENTITY, 1e-4), "joint {i} moves the mesh at rest");
     }
     assert!((length(&g, "Idle") - 3.0).abs() < 0.05 && (length(&g, "Key") - crate::radio::KEY).abs() < 0.05, "idle {}, key {}", length(&g, "Idle"), length(&g, "Key"));
+    assert!((length(&g, "Flare") - 3.0).abs() < 0.05 && length(&g, "FlareUp") > 0.2 && (length(&g, "Throw") - crate::radio::THROW).abs() < 0.05, "throw {}", length(&g, "Throw"));
     // Where it's held (what it's moved over from, in a narrow pane): out
     // at the right of the view, in its lower half.
     let held = |clip: &str, t: f64| {

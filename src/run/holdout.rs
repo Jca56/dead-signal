@@ -30,6 +30,7 @@ impl Run {
         *self = Self::default();
         self.best_round = best_round;
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
+        self.dice = crate::loot::Dice(seed.rotate_left(7) | 1);
         combat.reset(players);
         self.seats = (0..players).map(|n| Seat::new(n, Holdout::loadout(), Perks::default(), seed, combat)).collect();
         for seat in &mut self.seats {
@@ -86,6 +87,7 @@ impl Run {
     /// the players, the boards and doors shown as they are.
     pub(super) fn holdout_step(&mut self, game: &mut Game, combat: &mut Combat, dt: f64) {
         let feet: Vec<Vec3> = self.seats.iter().filter(|s| s.standing()).filter_map(|s| game.player(s.n).map(|(body, _)| body.pos)).collect();
+        self.supported(game, combat);
         let Some(h) = &mut self.holdout else { return };
         let alive = crate::zombie::alive(&mut game.world) as u32;
         for seat in &mut self.seats {

@@ -17,11 +17,10 @@ pub enum Arrow {
 pub enum Call {
     AmmoDrop,
     MedicDrop,
+    DoublePoints,
+    Instakill,
     StrafingRun,
     Gunship,
-    DoublePoints,
-    OneHitKills,
-    MaxAmmo,
 }
 
 /// A line of the radio's card: what's called for, its name, its code,
@@ -37,20 +36,25 @@ pub struct Entry {
 use Arrow::{Down as D, Left as L, Right as R, Up as U};
 
 /// Everything on the card, in its order.
-pub const ENTRIES: [Entry; 7] = [
+pub const ENTRIES: [Entry; 6] = [
     Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 1 },
     Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 1 },
+    Entry { call: Call::DoublePoints, name: "DOUBLE POINTS", code: &[L, R, L, R], cost: 2 },
+    Entry { call: Call::Instakill, name: "INSTAKILL", code: &[R, U, D, D, L], cost: 3 },
     Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 2 },
     Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U], cost: 5 },
-    Entry { call: Call::DoublePoints, name: "DOUBLE POINTS", code: &[L, R, L, R], cost: 2 },
-    Entry { call: Call::OneHitKills, name: "ONE-HIT KILLS", code: &[R, U, D, D, L], cost: 3 },
-    Entry { call: Call::MaxAmmo, name: "MAX AMMO", code: &[L, D, U, U, R], cost: 2 },
 ];
 
 /// The longest code there is.
 pub const LONGEST: usize = 6;
 
 impl Call {
+    /// Whether it's a drop: where it's to land is marked with a flare,
+    /// thrown.
+    pub fn dropped(self) -> bool {
+        matches!(self, Call::AmmoDrop | Call::MedicDrop)
+    }
+
     /// Its line of the card.
     pub fn entry(self) -> &'static Entry {
         ENTRIES.iter().find(|e| e.call == self).expect("every call has a line")

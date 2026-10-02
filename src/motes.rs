@@ -111,7 +111,7 @@ fn speck(size: [f32; 3], color: [f32; 3], glow: [f32; 3]) -> Vec<Vertex> {
 
 /// A ball a metre across, smooth all round (its normals out from its
 /// middle): a wisp, squashed and stretched as it's drawn.
-fn ball() -> Vec<Vertex> {
+pub(crate) fn ball() -> Vec<Vertex> {
     let (rings, round) = (8u32, 14u32);
     let at = |i: u32, j: u32| {
         let (lat, lon) = (std::f64::consts::PI * f64::from(i) / f64::from(rings), std::f64::consts::TAU * f64::from(j) / f64::from(round));

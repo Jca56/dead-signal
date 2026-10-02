@@ -23,7 +23,7 @@ use crate::zombie::kind::Kind;
 /// (`effects.glb`).
 #[derive(Resource, Clone, Copy)]
 pub struct Meshes {
-    flame: MeshId,
+    pub flame: MeshId,
     dot: MeshId,
     pub ring: MeshId,
     pub flash: MeshId,

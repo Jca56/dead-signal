@@ -88,14 +88,45 @@ impl Seat {
         false
     }
 
-    /// What's being wound up to throw, if anything (not thought better of).
-    pub fn winding(&self) -> Option<Throwable> {
-        self.throw_arc().and(self.throwable)
+    /// Where a flare leaves the left hand, and how, thrown now.
+    pub(super) fn flare_throw(&self, game: &mut Game) -> Option<(Vec3, Vec3)> {
+        let (body, view) = game.player(self.n)?;
+        let eye = crate::head::eye_position(&view, &body, game.alpha());
+        let (yaw, pitch) = view.aim();
+        let forward = Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos());
+        let left = Vec3::new(-yaw.cos(), 0.0, yaw.sin());
+        Some((eye + forward * 0.4 + left * 0.15 - Vec3::new(0.0, 0.15, 0.0), throw::launch(forward)))
     }
 
-    /// The arc of a throw being aimed, to draw: its dots and where it lands.
+    /// A frame of aiming the radio's flare (it's in hand: `can`), the
+    /// trigger `held`: its arc shown while it is, the other hand's button
+    /// to think better of it. Whether it was just let go, to be thrown.
+    pub(super) fn aim_flare(&mut self, ui: &mut Ui, game: &mut Game, can: bool, held: bool) -> bool {
+        if !can {
+            self.marking = None;
+            return false;
+        }
+        if !held {
+            return self.marking.take().is_some_and(|a| !a.cancelled);
+        }
+        let Some((from, vel)) = self.flare_throw(game) else { return false };
+        let aiming = self.marking.get_or_insert_with(Aiming::default);
+        aiming.cancelled |= self.input.pressed(ui, Action::Aim);
+        let (dots, lands) = throw::arc(&game.world.resource::<crate::world::Solid>().0, from, vel, DOTS_EVERY);
+        aiming.dots = dots;
+        aiming.lands = lands;
+        false
+    }
+
+    /// What's being wound up to throw, if anything (not thought better of).
+    pub fn winding(&self) -> Option<Throwable> {
+        self.aiming.as_ref().filter(|a| !a.cancelled).and(self.throwable)
+    }
+
+    /// The arc of a throw being aimed (a flare's too), to draw: its dots
+    /// and where it lands.
     pub fn throw_arc(&self) -> Option<(&[Vec3], Option<Vec3>)> {
-        self.aiming.as_ref().filter(|a| !a.cancelled).map(|a| (a.dots.as_slice(), a.lands))
+        self.aiming.as_ref().or(self.marking.as_ref()).filter(|a| !a.cancelled).map(|a| (a.dots.as_slice(), a.lands))
     }
 
     /// What the fires and blasts did to them since last frame (`felt`): a

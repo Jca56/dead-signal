@@ -43,6 +43,7 @@ mod slots_ui;
 mod sound;
 mod stats;
 mod style;
+mod support;
 mod survivor;
 mod targets;
 mod throw;

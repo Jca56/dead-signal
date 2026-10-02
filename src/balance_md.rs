@@ -101,6 +101,12 @@ fn balance_md_matches_the_game() {
     use crate::radio::signal;
     assert!(text.contains(&format!("a meter of **{} bars**", signal::BARS)));
     assert_eq!((signal::KILL * 10, signal::KEEN * 20), (signal::BAR, signal::BAR * 3), "a tenth of a bar a kill, half again to the head");
+    // What it calls down.
+    use crate::support::{COMES_IN, FALLS, FROM};
+    assert!(text.contains(&format!("let go over it **{COMES_IN} s** later and comes down under a parachute in **{} s**", FROM / FALLS)));
+    use crate::loot::Kind as Thing;
+    assert_eq!(crate::run::MEDIC, [(Thing::Medkit, 1), (Thing::Bandage, 2), (Thing::ArmorPlate, 1)]);
+    assert!(text.contains("**1 medkit, 2 bandages and 1 armor plate**"));
     // Everything worn.
     let gear = table("| Gear | Worn on |");
     for kind in crate::loot::ALL {

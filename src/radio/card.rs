@@ -5,7 +5,8 @@
 //! code's punched in, the lines it could still be stay lit, their arrows
 //! so far bright, and the rest go dim; a wrong arrow (or a code there's
 //! not the signal for) flashes it red; a whole code, and its line's lit across
-//! while it's called in. It keeps to the left of the handset, clear of
+//! while it's called in (and, a drop's, till its flare's thrown: the foot
+//! says how). It keeps to the left of the handset, clear of
 //! the middle of the view and of the health bottom left where there's
 //! room for that, its lines as tall as the pane allows.
 
@@ -39,10 +40,12 @@ const MIDDLE: f64 = 30.0;
 /// The most arrows a code's column holds.
 const COLUMN: usize = 5;
 
-/// What the foot of the card says: what dials, and what puts it away.
+/// What the foot of the card says: what dials, what puts it away, and
+/// (a flare in hand) what's held to aim its throw.
 pub struct Hints {
     pub dial: String,
     pub away: String,
+    pub throw: String,
 }
 
 /// Where the card goes, and how tall each of its lines is.
@@ -144,8 +147,14 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     let tallest = words(ROW.1 * s);
     let names = ENTRIES.iter().map(|e| ui.measure(e.name, &tallest)).fold(0.0, f64::max) / type_size(ROW.1 * s, s);
     let small = TextStyle::new((SMALLEST.max(18.0 * s)) as f32).bold().family(style::FONT);
-    let foot = format!("{}  DIAL      {}  PUT AWAY", hints.dial, hints.away);
-    let Lay { card, row } = lay(pane, window, s, names, ui.measure(&foot, &small));
+    // (A flare in hand, the foot says how it's thrown; the card's as wide
+    // for either.)
+    let dialling = format!("{}  DIAL      {}  PUT AWAY", hints.dial, hints.away);
+    let throwing = format!("HOLD {}  AIM      LET GO  THROW", hints.throw);
+    let foot_wide = ui.measure(&dialling, &small).max(ui.measure(&throwing, &small));
+    let marking = radio.flare();
+    let foot = if marking.is_some() { throwing } else { dialling };
+    let Lay { card, row } = lay(pane, window, s, names, foot_wide);
     let text = words(row);
     let pad = PAD * s;
 
@@ -158,7 +167,11 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
 
     // The header, ruled off.
     let head = TextStyle::new((type_size(row, s) * 1.15) as f32).bold().family(style::FONT);
-    let title = if radio.calling().is_some() { "CALLING IN" } else { "CALL IN" };
+    let title = match (marking, radio.calling()) {
+        (Some(_), _) => "THROW THE FLARE",
+        (None, Some(_)) => "CALLING IN",
+        (None, None) => "CALL IN",
+    };
     ui.text_at(title, &head, Vec2::new(card.min.x + pad, card.min.y + pad + (HEAD * s - f64::from(head.line_height())) * 0.4), card.width(), faded(edge, shows));
     let rule = card.min.y + pad + HEAD * s - 8.0 * s;
     // The signal there is, at the header's right.
@@ -173,11 +186,13 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     for (i, e) in ENTRIES.iter().enumerate() {
         let top = card.min.y + pad + HEAD * s + row * i as f64;
         let mid = top + row * 0.5;
-        let called = radio.calling() == Some(e.call);
+        // (Being called in, or its flare still to throw: lit across.)
+        let chosen = radio.calling().or(marking);
+        let called = chosen == Some(e.call);
         // (Lit: what the code so far could still be, and there's the
         // signal for.)
         let afford = radio.signal.has(e.cost);
-        let live = match radio.calling() {
+        let live = match chosen {
             Some(_) => called,
             None => afford && dial.begins(e.code),
         };
@@ -279,7 +294,7 @@ mod tests {
     #[test]
     fn it_draws_whatever_the_radio_s_doing() {
         let mut h = lntrn_ui::testing::Harness::new(1280.0, 720.0);
-        let hints = Hints { dial: "WASD".into(), away: "Q".into() };
+        let hints = Hints { dial: "WASD".into(), away: "Q".into(), throw: "MOUSE LEFT".into() };
         let mut radio = Radio::default();
         radio.pull();
         for arrow in [Arrow::Down, Arrow::Down, Arrow::Left, Arrow::Up, Arrow::Right, Arrow::Right] {

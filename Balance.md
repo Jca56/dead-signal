@@ -254,12 +254,13 @@ Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's
 |---|---|---|
 | AMMO DROP | ↓ ↓ ↑ → | 1 bar |
 | MEDIC DROP | ↓ ↑ → ← | 1 bar |
+| DOUBLE POINTS | ← → ← → | 2 bars |
+| INSTAKILL | → ↑ ↓ ↓ ← | 3 bars |
 | STRAFING RUN | ↑ → → | 2 bars |
 | GUNSHIP | ↑ ← → ↓ ↑ | 5 bars |
-| DOUBLE POINTS | ← → ← → | 2 bars |
-| ONE-HIT KILLS | → ↑ ↓ ↓ ← | 3 bars |
-| MAX AMMO | ← ↓ ↑ ↑ → | 2 bars |
 
+- A **drop** (ammo, medic) is marked with a flare: it comes up lit in the left hand, the radio still up in the right; the trigger held aims its throw, let go throws it. Once it's come to rest a crate is let go over it **2.5 s** later and comes down under a parachute in **6 s**. Under a roof the flare gutters out, nothing comes, and the signal it cost is given back.
+- An **ammo drop** holds what every player's guns lack of a full carry (what a hound round's worth tops them up to), a stack a kind. A **medic drop** holds, for each player, **1 medkit, 2 bandages and 1 armor plate**. It's all spilled about the crate to be taken, by anyone, and lies there the 30 seconds everything does.
 - Signal is each player's own, a meter of **5 bars** (a whole one shows green; the one being charged, amber). A kill charges **a tenth of a bar**; one to the head or by hand, half again as much (0.15); a Juggernaut, a whole bar on top of its kill.
 - It's spent as the call goes out (the talk button let go): put the radio away before that and nothing's spent. A code there isn't the signal for is refused.
 - It's kept through bleeding out.

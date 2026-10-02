@@ -114,3 +114,27 @@ fn its_signal_s_kept_through_being_pulled_out_put_away_and_dropped_and_a_refused
     r.drop_it();
     assert!(!r.out() && r.signal.has(signal::BARS));
 }
+
+#[test]
+fn a_flare_given_comes_up_in_the_left_hand_is_thrown_and_is_kept_if_the_radio_s_put_away_first() {
+    let mut r = up();
+    r.give_flare(Call::AmmoDrop);
+    assert!(!r.dialing() && r.press(U).is_none(), "no dialling with a flare to throw");
+    assert!(!r.throw(), "not till it's in hand");
+    assert_eq!(r.update(true, DT), [Cue::Lit]);
+    assert_eq!(r.shown().map(|s| s.clip), Some("FlareUp"));
+    run(&mut r, FLARE_UP + 0.1);
+    assert!(r.marking() && r.shown() == Some(Shown { clip: "Flare", t: None, stowed: 0.0 }));
+    // Put away with it not thrown: it's kept, and up again with the radio.
+    r.put_away();
+    run(&mut r, LOWER + 0.1);
+    assert!(!r.out() && r.flare() == Some(Call::AmmoDrop));
+    r.drop_it();
+    r.pull();
+    assert_eq!(run(&mut r, RAISE + FLARE_UP + 0.2), [Cue::On, Cue::Lit]);
+    // Thrown: it leaves the hand part way through, and the dial's free.
+    assert!(r.marking() && r.throw() && !r.throw());
+    assert_eq!(r.shown().map(|s| s.clip), Some("Throw"));
+    assert_eq!(run(&mut r, THROW + 0.1), [Cue::Thrown(Call::AmmoDrop)]);
+    assert!(r.flare().is_none() && r.dialing() && r.shown().map(|s| s.clip) == Some("Idle"));
+}

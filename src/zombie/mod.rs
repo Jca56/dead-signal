@@ -151,7 +151,7 @@ impl Horde {
 }
 
 pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
-    fixed.add_systems((step::think, spit::fly, spit::fester, crate::throw::step, rift::step).chain());
+    fixed.add_systems((step::think, spit::fly, spit::fester, crate::throw::step, rift::step, crate::support::step).chain());
     frame.add_systems((step::pose, step::bury, harm::drain));
 }
 

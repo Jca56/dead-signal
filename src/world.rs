@@ -156,6 +156,7 @@ impl Game {
         world.insert_resource(zombie::Heat::default());
         world.insert_resource(crate::dev::Cheats::default());
         world.insert_resource(crate::throw::Booms::default());
+        world.insert_resource(crate::support::Support::default());
         world.insert_resource(crate::glass::Glazing::default());
         world.insert_resource(crate::items::Ground::default());
         world.insert_resource(zombie::Stealth::default());
@@ -317,6 +318,7 @@ impl Game {
         zombie::clear(&mut self.world);
         zombie::spit::clear(&mut self.world);
         crate::throw::clear(&mut self.world);
+        crate::support::clear(&mut self.world);
         crate::items::clear(&mut self.world);
         crate::exits::hide(&mut self.world);
         self.world.remove_resource::<crate::exits::Exits>();

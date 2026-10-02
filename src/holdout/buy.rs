@@ -72,6 +72,23 @@ impl Holdout {
         }
     }
 
+    /// What the guns in `bag`'s slots lack of a full carry, each kind of
+    /// round a stack: what an ammo drop holds for them.
+    pub fn lacking(bag: &Bag) -> Vec<Stack> {
+        let mut out: Vec<Stack> = Vec::new();
+        for slot in Slot::ALL {
+            let Some((ammo, most)) = bag.slot(slot).and_then(|gun| spare(gun.kind, gun.tier)) else { continue };
+            // (Two guns on the same rounds: the bigger carry, once.)
+            let short = most.saturating_sub(bag.count(ammo));
+            match out.iter_mut().find(|s| s.kind == ammo) {
+                Some(s) => s.count = s.count.max(short),
+                None if short > 0 => out.push(Stack::new(ammo, short)),
+                None => {}
+            }
+        }
+        out
+    }
+
     /// What using `aimed` would do, in words (`held`: the slot of what's
     /// in hand).
     pub fn prompt(&self, aimed: Aimed, bag: &Bag, held: Option<Slot>) -> String {
