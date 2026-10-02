@@ -29,8 +29,9 @@
 //! generator pen and the yard again. East, the station house's front
 //! doors: its offices and newsroom, the broadcast floor upstairs (a dead
 //! end to hold, the assault rifle in its studio), and by a flight of
-//! stairs at either end the bunker, behind blast doors, where the dead
-//! have dug back in along the escape tunnel. North, the barracks, its
+//! stairs at either end the bunker, behind blast doors: no way in for
+//! the dead but those stairs (and the Amplifier in its ops room). North,
+//! the barracks, its
 //! dorm upstairs, and out its far door the east court between it and the
 //! station. Every way in from above ground faces the woods.
 

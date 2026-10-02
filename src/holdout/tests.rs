@@ -366,26 +366,15 @@ fn up_in_the_stations_studio_they_come_for_the_player() {
 }
 
 #[test]
-fn down_in_the_bunker_they_come_for_the_player_by_the_stairs_and_the_tunnel() {
+fn down_in_the_bunker_they_come_for_the_player_by_the_stairs_alone() {
     let got = reach_the_player_at(indoors(41.0, 9.0, -1), 90.0);
     assert!(got >= 2, "only {got} got down to the ops room");
-    // In the stores, by its breach: its boards torn off from the tunnel.
-    let (mut world, mut h) = world_of(built());
-    open_everything(&mut world, &mut h);
-    let breach = h.arena.windows.iter().position(|w| w.centre.y < -1.0).expect("a way in under the ground");
-    assert_eq!(h.arena.zones[h.arena.windows[breach].zone], "THE BUNKER");
-    let at = indoors(45.0, 15.0, -1);
-    for mut b in world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut world) {
-        *b = Body::at(at);
-    }
-    let mut think = zombie::stepper();
-    let mut least = BOARDS;
-    for _ in 0..(90.0 / STEP) as usize {
-        h.update(&mut world, &[at], STEP);
-        think.run(&mut world);
-        least = least.min(world.resource::<Barriers>().0[breach].boards);
-    }
-    assert!(least < BOARDS, "none of the dead came along the tunnel");
+    // There's no way in under the ground: every one of them came down
+    // the stairs.
+    let (_, h) = world_of(built());
+    assert!(h.arena.windows.iter().all(|w| w.centre.y > -1.0), "a way in under the ground");
+    let bunker = h.arena.zones.iter().position(|z| *z == "THE BUNKER").expect("a bunker");
+    assert_eq!(h.arena.windows.iter().filter(|w| w.zone == bunker).count(), 0);
 }
 
 #[test]

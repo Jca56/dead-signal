@@ -136,9 +136,6 @@ pub const STATION_HOUSE: House = House {
         WindowAt(ew(20, 21.5), 0, true),
         WindowAt(ns(30, 3.5), 0, true),
         WindowAt(ns(30, 12.5), 0, true),
-        // And under them: the escape tunnel, caved in, that they've dug
-        // their way back along.
-        WindowAt(ew(20, 21.5), -1, true),
         // On the yard and the east court.
         WindowAt(ns(0, 6.5), 0, false),
         WindowAt(ns(0, 12.5), 0, false),
