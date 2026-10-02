@@ -89,7 +89,7 @@ fn shut_in_the_start_room_the_hounds_still_come_and_the_round_ends_with_full_gun
     assert!(h.rounds.resting() && h.rounds.round == 1);
     // What clearing it is worth: every gun's spare rounds, full.
     let mut bag = Holdout::loadout();
-    let (ammo, most) = spare(Kind::Pistol).unwrap();
+    let (ammo, most) = spare(Kind::Pistol, 0).unwrap();
     assert!(bag.count(ammo) < most);
     Holdout::max_ammo(&mut bag);
     assert_eq!(bag.count(ammo), most);
@@ -174,12 +174,12 @@ fn the_devs_holdout_cheats_open_the_doors_board_the_windows_and_make_it_all_free
     let mut bag = Holdout::loadout();
     h.wallets[0].points = 0;
     let gun = h.arena.buys.iter().position(|b| matches!(b.wares, Wares::Weapon(k) if k != Kind::Pistol)).unwrap();
-    let (_, said, took) = h.press(&mut world, 0, Aimed::Buy(gun), &mut bag);
+    let (_, said, took) = h.press(&mut world, 0, Aimed::Buy(gun), &mut bag, None);
     assert!(said.is_none() && took.is_some() && h.wallets[0].points == 0, "{said:?}");
-    h.press(&mut world, 0, Aimed::Door(0), &mut bag);
+    h.press(&mut world, 0, Aimed::Door(0), &mut bag, None);
     assert!(h.door_open(0));
     world.insert_resource(crate::dev::Cheats::default());
-    assert_eq!(h.press(&mut world, 0, Aimed::Door(1), &mut bag).1, Some("NOT ENOUGH POINTS"));
+    assert_eq!(h.press(&mut world, 0, Aimed::Door(1), &mut bag, None).1, Some("NOT ENOUGH POINTS"));
     h.open_all(&mut world);
     assert!((0..h.arena.doors.len()).all(|i| h.door_open(i)));
     let start = feet(&mut world);

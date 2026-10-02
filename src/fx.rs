@@ -52,6 +52,19 @@ impl Marker {
     }
 }
 
+/// An amplified round's streak through the air, fading: from where to
+/// where, the tier whose colour it is, how long it has left.
+struct Streak {
+    from: Vec3,
+    to: Vec3,
+    tier: u8,
+    left: f64,
+}
+
+/// How long a streak lasts, and how thick it is.
+const STREAK_FOR: f64 = 0.09;
+const STREAK_THICK: f64 = 0.022;
+
 /// A flash of light: as bright as it gets, how long it lasts, how long
 /// it has left.
 struct Flash {
@@ -64,7 +77,11 @@ struct Flash {
 pub struct Fx {
     chips: Vec<Chip>,
     flashes: Vec<Flash>,
+    streaks: Vec<Streak>,
     mesh: Option<MeshId>,
+    /// A streak's mesh for each tier of the Amplifier: the chip's cube,
+    /// alight in that tier's colour.
+    streak_meshes: Vec<MeshId>,
     /// A little noise source, the same every run.
     seed: u32,
 }
@@ -101,6 +118,13 @@ impl Fx {
             }
         }
         self.mesh = Some(renderer.add_mesh(&verts));
+        self.streak_meshes = (1..=crate::weapon::amp::TIERS)
+            .filter_map(crate::weapon::amp::glow)
+            .map(|glow| {
+                let lit: Vec<Vertex> = verts.iter().map(|v| Vertex { color: [glow[0], glow[1], glow[2], 1.0], emissive: glow.map(|c| c * 1.6), ..*v }).collect();
+                renderer.add_mesh(&lit)
+            })
+            .collect();
     }
 
     fn rand(&mut self) -> f64 {
@@ -151,6 +175,12 @@ impl Fx {
         self.chips.len()
     }
 
+    /// The streak of a round from a gun amplified to `tier`, from `from`
+    /// to `to`.
+    pub fn streak(&mut self, from: Vec3, to: Vec3, tier: u8) {
+        self.streaks.push(Streak { from, to, tier, left: STREAK_FOR });
+    }
+
     /// A flash at `at`, reaching `radius`, of `color` (linear), gone in
     /// `life` seconds.
     pub fn flash(&mut self, at: Vec3, radius: f64, color: [f32; 3], life: f64) {
@@ -167,6 +197,10 @@ impl Fx {
             f.left -= dt;
         }
         self.flashes.retain(|f| f.left > 0.0);
+        for s in &mut self.streaks {
+            s.left -= dt;
+        }
+        self.streaks.retain(|s| s.left > 0.0);
         for c in &mut self.chips {
             c.vel.y -= GRAVITY * dt;
             c.vel *= (-1.5 * dt).exp();
@@ -184,6 +218,20 @@ impl Fx {
             let size = SIZE * (c.left / c.life).sqrt();
             let model = Mat4::from_translation(c.pos) * Mat4::from_quat(Quat::from_axis_angle(c.axis, c.angle)) * Mat4::from_scale(c.shape * size);
             renderer.draw(Draw { mesh, model, emissive: 0.0, fog: 1.0, tint: c.tint });
+        }
+        // The streaks: the chip's cube drawn out along each, alight,
+        // thinning as it fades.
+        for s in &self.streaks {
+            let Some(&mesh) = self.streak_meshes.get(usize::from(s.tier.max(1)) - 1) else { continue };
+            let along = s.to - s.from;
+            let len = along.length();
+            if len < 1e-6 {
+                continue;
+            }
+            let thick = STREAK_THICK * (s.left / STREAK_FOR);
+            let turn = Quat::from_rotation_arc(Vec3::Z, along * (1.0 / len));
+            let model = Mat4::from_translation((s.from + s.to) * 0.5) * Mat4::from_quat(turn) * Mat4::from_scale(Vec3::new(thick, thick, len));
+            renderer.draw(Draw { mesh, model, emissive: 1.0, fog: 0.3, tint: [1.0; 3] });
         }
     }
 }

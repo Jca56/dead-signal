@@ -1,7 +1,8 @@
 //! Buying, in a holdout: what's on the walls and what it costs (a gun
 //! with its rounds, more rounds for half; a kit; armor, put on as it's
-//! bought and made whole again for half), the doors, and what a player
-//! sees before they press.
+//! bought and made whole again for half), the doors, the Amplifier (what's
+//! in hand made more of, a tier at a time), and what a player sees before
+//! they press.
 
 use bevy_ecs::prelude::*;
 
@@ -10,6 +11,7 @@ use super::{Aimed, Holdout};
 use crate::loot::bag::{Bag, Slot};
 use crate::loot::{Kind, Stack};
 use crate::sound::Sfx;
+use crate::weapon::amp;
 
 /// What a weapon off the wall costs; its rounds cost half. Armor the
 /// same: half to make a piece worn whole again.
@@ -35,18 +37,26 @@ pub(super) fn price(kind: Kind) -> u32 {
     }
 }
 
+/// What the Amplifier asks to put a weapon through, each time.
+pub const AMPLIFY: [u32; amp::TIERS as usize] = [5000, 10_000, 20_000];
+
 /// A weapon's rounds, bought with it or after: so many magazines' worth
 /// carried spare (fewer of an LMG's belts and a flamethrower's tanks:
-/// each is a lot).
-pub(super) fn spare(kind: Kind) -> Option<(Kind, u32)> {
-    let spec = kind.weapon()?.spec();
-    let ammo = spec.ammo?;
+/// each is a lot), its magazine as big as `tier` makes it.
+pub(super) fn spare(kind: Kind, tier: u8) -> Option<(Kind, u32)> {
+    let weapon = kind.weapon()?;
+    let ammo = weapon.spec().ammo?;
     let mags = match kind {
         Kind::Pistol => 10,
         Kind::Lmg | Kind::Flamethrower => 4,
         _ => 12,
     };
-    Some((ammo, spec.mag * mags))
+    Some((ammo, amp::capacity(weapon, tier) * mags))
+}
+
+/// How far `kind`, carried in its slot in `bag`, has been amplified.
+fn tier_of(bag: &Bag, kind: Kind) -> u8 {
+    Slot::of(kind).and_then(|s| bag.slot(s)).filter(|st| st.kind == kind).map_or(0, |st| st.tier)
 }
 
 impl Holdout {
@@ -54,7 +64,7 @@ impl Holdout {
     /// (what a hound round cleared is worth).
     pub fn max_ammo(bag: &mut Bag) {
         for slot in Slot::ALL {
-            let Some((ammo, most)) = bag.slot(slot).and_then(|gun| spare(gun.kind)) else { continue };
+            let Some((ammo, most)) = bag.slot(slot).and_then(|gun| spare(gun.kind, gun.tier)) else { continue };
             let have = bag.count(ammo);
             if have < most {
                 bag.add(Stack::new(ammo, most - have));
@@ -62,15 +72,21 @@ impl Holdout {
         }
     }
 
-    /// What using `aimed` would do, in words.
-    pub fn prompt(&self, aimed: Aimed, bag: &Bag) -> String {
+    /// What using `aimed` would do, in words (`held`: the slot of what's
+    /// in hand).
+    pub fn prompt(&self, aimed: Aimed, bag: &Bag, held: Option<Slot>) -> String {
         match aimed {
             Aimed::Buy(i) => match self.arena.buys[i].wares {
+                Wares::Amplifier => match held.and_then(|s| bag.slot(s)) {
+                    None => "THE AMPLIFIER  ·  NOTHING IN HAND".to_string(),
+                    Some(gun) if gun.tier >= amp::TIERS => format!("{}  ·  FULLY AMPLIFIED", gun.name()),
+                    Some(gun) => format!("AMPLIFY {} [{}]", gun.name(), AMPLIFY[usize::from(gun.tier)]),
+                },
                 Wares::Weapon(kind) => {
                     let name = kind.def().name;
                     if !has(bag, kind) {
                         format!("BUY {name} [{}]", price(kind))
-                    } else if spare(kind).is_some() {
+                    } else if spare(kind, 0).is_some() {
                         format!("BUY {name} AMMO [{}]", price(kind) / 2)
                     } else {
                         format!("{name} · CARRIED")
@@ -96,14 +112,16 @@ impl Holdout {
     }
 
     /// Player `seat` uses `aimed` (E pressed): buys what's on the wall
-    /// (into `bag`), or opens the door, from their own points. What
-    /// happened: the sound to play, a word for them, and the slot of a
-    /// weapon just bought (to take it up).
-    pub fn press(&mut self, world: &mut World, seat: usize, aimed: Aimed, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+    /// (into `bag`), or opens the door, or has what's in hand (the slot
+    /// `held`) amplified, from their own points. What happened: the sound
+    /// to play, a word for them, and the slot of a weapon just bought or
+    /// amplified (to take it up).
+    pub fn press(&mut self, world: &mut World, seat: usize, aimed: Aimed, bag: &mut Bag, held: Option<Slot>) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
         let Some(points) = self.wallets.get(seat).map(|w| w.points) else { return (None, None, None) };
         // (The dev's: it all costs nothing.)
         let free = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.free);
         match aimed {
+            Aimed::Buy(i) if self.arena.buys[i].wares == Wares::Amplifier => self.amplify(seat, bag, held, free),
             Aimed::Buy(i) => self.buy(i, seat, bag, free),
             Aimed::Door(i) => {
                 let cost = if free { 0 } else { self.arena.doors[i].cost };
@@ -118,20 +136,61 @@ impl Holdout {
         }
     }
 
+    /// What's in `held` put through the Amplifier: a tier up, its
+    /// magazine full and its rounds topped up to what it now carries.
+    fn amplify(&mut self, seat: usize, bag: &mut Bag, held: Option<Slot>, free: bool) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+        let Some((slot, gun)) = held.and_then(|s| bag.slot(s).map(|g| (s, g))) else { return (None, Some("NOTHING IN HAND"), None) };
+        if gun.tier >= amp::TIERS {
+            return (None, Some("FULLY AMPLIFIED"), None);
+        }
+        let cost = if free { 0 } else { AMPLIFY[usize::from(gun.tier)] };
+        if self.wallets[seat].points < cost {
+            return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
+        }
+        self.wallets[seat].points -= cost;
+        let mut gun = gun;
+        gun.tier += 1;
+        gun.loaded = gun.magazine().unwrap_or(0);
+        *bag.slot_mut(slot) = Some(gun);
+        if let Some((ammo, most)) = spare(gun.kind, gun.tier) {
+            let have = bag.count(ammo);
+            if have < most {
+                bag.add(Stack::new(ammo, most - have));
+            }
+        }
+        (Some(Sfx::Amplify), Some("AMPLIFIED"), Some(slot))
+    }
+
+    /// (The dev's.) What's in `held` amplified for nothing: its slot, if
+    /// there was anything to amplify.
+    pub fn amplify_free(&mut self, seat: usize, bag: &mut Bag, held: Option<Slot>) -> Option<Slot> {
+        self.amplify(seat, bag, held, true).2
+    }
+
+    /// (The dev's.) Where to stand to use the Amplifier, every door on
+    /// the way to it open.
+    pub fn dev_amplifier(&mut self, world: &mut World) -> Option<lntrn_math::Vec3> {
+        let b = *self.arena.buys.iter().find(|b| b.wares == Wares::Amplifier)?;
+        self.open_all(world);
+        Some(b.at + b.facing * 1.1 - lntrn_math::Vec3::new(0.0, super::raise::buy_height() - 0.1, 0.0))
+    }
+
     fn buy(&mut self, i: usize, seat: usize, bag: &mut Bag, free: bool) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
         let (kind, cost, ammo_only) = match self.arena.buys[i].wares {
-            Wares::Weapon(kind) if has(bag, kind) => match spare(kind) {
+            Wares::Weapon(kind) if has(bag, kind) => match spare(kind, 0) {
                 Some(_) => (kind, price(kind) / 2, true),
                 None => return (None, None, None),
             },
             Wares::Weapon(kind) | Wares::Kit(kind) => (kind, price(kind), false),
             Wares::Gear(kind) => return self.outfit(kind, seat, bag, free),
+            Wares::Amplifier => return (None, None, None),
         };
         let cost = if free { 0 } else { cost };
         if self.wallets[seat].points < cost {
             return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
         }
-        if let Some((ammo, most)) = spare(kind) {
+        // (Rounds for one that's carried: as many as it holds now.)
+        if let Some((ammo, most)) = spare(kind, if ammo_only { tier_of(bag, kind) } else { 0 }) {
             // Topped up to a full carry (none paid for that's already full).
             let have = bag.count(ammo);
             if ammo_only && have >= most {

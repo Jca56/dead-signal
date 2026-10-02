@@ -110,10 +110,11 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
     }
     let outline = mesh(&outline);
     let chalk = Look { emissive: 1.0, fog: 0.8, tint: [1.0; 3] };
-    for b in &arena.buys {
+    // (The Amplifier's no outline on a wall: it stands there itself.)
+    for b in arena.buys.iter().filter(|b| b.wares != Wares::Amplifier) {
         let frame = facing(b.at, b.facing);
         world.spawn((Placed(frame), Model(outline), chalk, OnMap));
-        if let Some(&m) = items.0.get(&b.wares.kind()) {
+        if let Some(&m) = b.wares.kind().and_then(|k| items.0.get(&k)) {
             // Stood up off the floor it lay on, the face that was up turned
             // out of the wall; a gun (made lying the other way up to a
             // kit) turned right way up.
@@ -122,6 +123,7 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
             world.spawn((Placed(hung), Model(m), Look::default(), OnMap));
         }
     }
+    super::machine::spawn(world, arena, super::raise::buy_height(), mesh);
 }
 
 /// Put away what's gone: boards torn off, doors bought open.

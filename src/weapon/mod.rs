@@ -7,6 +7,7 @@
 //! nothing of the world: the caller turns what they say into rays, sounds
 //! and hits, and says what to take up once they're empty.
 
+pub mod amp;
 mod spec;
 #[cfg(test)]
 mod tests;
@@ -100,6 +101,8 @@ pub struct Hands {
     pub weapon: Weapon,
     /// The slot it came from; none for bare fists.
     pub held: Option<Slot>,
+    /// How many times it's been through the Amplifier (`amp.rs`).
+    pub tier: u8,
     pub mag: u32,
     /// Rounds carried to reload with.
     pub spare: u32,
@@ -131,11 +134,21 @@ pub struct Hands {
 
 impl Default for Hands {
     fn default() -> Self {
-        Self { weapon: Weapon::Fists, held: None, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false, swing_speed: 1.0, chain: 0, since_swing: f64::INFINITY, backhand: false, single: false }
+        Self { weapon: Weapon::Fists, held: None, tier: 0, mag: 0, spare: 0, clip: Clip::Idle, t: 0.0, gap: 0.0, reload_speed: 1.0, next: None, aim: 0.0, fire_after: false, swing_speed: 1.0, chain: 0, since_swing: f64::INFINITY, backhand: false, single: false }
     }
 }
 
 impl Hands {
+    /// How many rounds it holds, amplified as it is.
+    pub fn capacity(&self) -> u32 {
+        amp::capacity(self.weapon, self.tier)
+    }
+
+    /// How many times as hard it hits, amplified as it is.
+    pub fn power(&self) -> f64 {
+        amp::power(self.tier)
+    }
+
     pub fn spec(&self) -> &'static Spec {
         self.weapon.spec()
     }
@@ -189,7 +202,7 @@ impl Hands {
 
     /// Room in the magazine and rounds to fill it with.
     fn can_reload(&self) -> bool {
-        self.spec().reload.is_some() && self.mag < self.spec().mag && self.spare > 0
+        self.spec().reload.is_some() && self.mag < self.capacity() && self.spare > 0
     }
 
     fn start(&mut self, clip: Clip) {
@@ -252,7 +265,7 @@ impl Hands {
     pub fn take_up(&mut self, held: Option<Slot>, weapon: Weapon, mag: u32) {
         self.weapon = weapon;
         self.held = held;
-        self.mag = mag.min(weapon.spec().mag);
+        self.mag = mag.min(self.capacity());
         self.gap = 0.0;
         self.next = None;
         self.aim = 0.0;
@@ -277,12 +290,12 @@ impl Hands {
         self.gap = (self.gap - dt).max(-dt);
         let crossed = |at: f64| before < at && self.t >= at;
         let marks = |marks: &[(f64, Act)]| marks.iter().filter(|(at, _)| crossed(*at)).map(|(_, act)| *act).collect::<Vec<Act>>();
-        let room = |h: &Self| h.mag < spec.mag && h.spare > 0;
+        let room = |h: &Self| h.mag < h.capacity() && h.spare > 0;
         match (self.clip, spec.reload) {
             (Clip::Reload, Some(Reload::Magazine { time, marks: m })) => {
                 acts.extend(marks(m));
                 if self.t >= time {
-                    let taken = (spec.mag - self.mag).min(self.spare);
+                    let taken = self.capacity().saturating_sub(self.mag).min(self.spare);
                     self.mag += taken;
                     self.spare -= taken;
                     self.start(Clip::Idle);

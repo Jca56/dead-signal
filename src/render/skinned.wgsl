@@ -14,6 +14,8 @@ struct Viewmodel {
     sun_color: vec4<f32>,
     ambient_sky: vec4<f32>,
     ambient_ground: vec4<f32>,
+    // An amplified weapon's glow: its colour, and how strong it is now.
+    glow: vec4<f32>,
     joints: array<mat4x4<f32>, 64>,
 };
 
@@ -52,11 +54,23 @@ fn vs(v: VertexIn) -> VertexOut {
 fn fs(in: VertexOut) -> @location(0) vec4<f32> {
     // Alpha under one marks a light of its own (the muzzle flash): drawn
     // at full strength, no shading.
+    let amplified = step(0.001, vm.glow.a);
     if in.color.a < 0.75 {
-        return vec4<f32>(in.color.rgb * 1.6, 1.0);
+        // (An amplified gun's flash is its glow's colour.)
+        let flash = mix(in.color.rgb, vm.glow.rgb * 1.4, 0.75 * amplified);
+        return vec4<f32>(flash * 1.6, 1.0);
     }
     let n = normalize(in.normal);
     let hemi = mix(vm.ambient_ground.rgb, vm.ambient_sky.rgb, n.y * 0.5 + 0.5);
     let sun = vm.sun_color.rgb * max(dot(n, vm.sun_dir.xyz), 0.0);
-    return vec4<f32>(in.color.rgb * (hemi + sun), 1.0);
+    var color = in.color.rgb * (hemi + sun);
+    // Alpha just under one marks the weapon (not the arms): amplified,
+    // it's steeped in its glow, and alight with it whatever the light.
+    if in.color.a < 0.95 {
+        // (Brightest along the edges of it: the faces turned from the eye.)
+        let rim = pow(1.0 - abs(dot(n, vm.to_world_z.xyz)), 1.5);
+        let lit = vm.glow.rgb * ((0.10 + 0.20 * vm.glow.a) * (0.3 + rim));
+        color = mix(color, color * (vm.glow.rgb * 1.5 + 0.5) + lit, amplified);
+    }
+    return vec4<f32>(color, 1.0);
 }

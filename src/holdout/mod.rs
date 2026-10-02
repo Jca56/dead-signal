@@ -7,10 +7,13 @@
 
 pub mod arena;
 mod buy;
+#[cfg(test)]
+pub use buy::AMPLIFY;
 pub mod hud;
 mod land;
 pub mod lamps;
 mod layout;
+mod machine;
 pub mod props;
 mod raise;
 mod relay;
@@ -150,7 +153,7 @@ impl Holdout {
         pistol.loaded = Kind::Pistol.weapon().map_or(0, |w| w.spec().mag);
         bag.add(pistol);
         bag.add(Stack::one(Kind::Knife));
-        if let Some((ammo, n)) = spare(Kind::Pistol) {
+        if let Some((ammo, n)) = spare(Kind::Pistol, 0) {
             bag.add(Stack::new(ammo, n / 2));
         }
         bag
@@ -306,6 +309,8 @@ fn flat_dist(a: Vec3, b: Vec3) -> f64 {
     lntrn_math::Vec2::new(a.x - b.x, a.z - b.z).length()
 }
 
+#[cfg(test)]
+mod amplifier_tests;
 #[cfg(test)]
 mod armor_tests;
 #[cfg(test)]

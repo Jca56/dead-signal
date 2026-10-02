@@ -33,7 +33,7 @@ impl Combat {
         }
         let hip = 1.0 - self.arms[seat].hands.aim();
         let nozzle = aim.eye + aim.right * (NOZZLE.0 * hip) - aim.up * (NOZZLE.1 * (0.5 + 0.5 * hip)) + aim.dir * NOZZLE.2;
-        throw::flame::spray(&mut game.world, seat, aim.eye, aim.dir, nozzle, shot.damage, shot.range, stream.cone);
+        throw::flame::spray(&mut game.world, seat, aim.eye, aim.dir, nozzle, shot.damage * self.arms[seat].hands.power(), shot.range, stream.cone);
     }
 }
 

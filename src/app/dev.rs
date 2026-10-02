@@ -122,6 +122,12 @@ impl DeadSignal {
                     }
                 }
             }
+            DevAction::Amplify => self.run.dev_amplify(&mut self.combat),
+            DevAction::ToAmplifier => {
+                if let Some(at) = self.run.holdout.as_mut().and_then(|h| h.dev_amplifier(&mut self.game.world)) {
+                    self.game.teleport(0, at);
+                }
+            }
             DevAction::BoardUp => {
                 if self.run.holdout.is_some() {
                     crate::holdout::Holdout::board_up(&mut self.game.world);

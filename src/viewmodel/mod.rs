@@ -108,7 +108,9 @@ impl Viewmodel {
         }
         let joints = gltf.skins[rig.skin].joint_matrices(&gltf.world_matrices(&pose));
         let motion = self.motions.get(seat).copied().unwrap_or_default();
-        Some(SkinnedDraw { mesh: rig.mesh, model: placement(&motion, view, lowered, hands.stowed_amount(), aim), joints })
+        // An amplified weapon glows, breathing slowly.
+        let glow = crate::weapon::amp::glow(hands.tier).map_or([0.0; 4], |g| [g[0], g[1], g[2], (0.55 + 0.45 * (time * 2.2).sin()) as f32]);
+        Some(SkinnedDraw { mesh: rig.mesh, model: placement(&motion, view, lowered, hands.stowed_amount(), aim), joints, glow })
     }
 }
 

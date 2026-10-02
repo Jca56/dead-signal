@@ -51,6 +51,17 @@ impl Run {
         h.rounds.force(wave, skip);
     }
 
+    /// (The dev's.) What the first player has in hand, put through the
+    /// Amplifier for nothing.
+    pub fn dev_amplify(&mut self, combat: &mut Combat) {
+        let (Some(h), Some(seat)) = (&mut self.holdout, self.seats.first_mut()) else { return };
+        let took = h.amplify_free(seat.n, &mut seat.bag, combat.arms[seat.n].hands.held);
+        if took.is_some() {
+            combat.play(crate::sound::Sfx::Amplify, 0.9);
+            seat.take_up(combat, took);
+        }
+    }
+
     /// The round a holdout ended on, once.
     pub fn take_holdout_round(&mut self) -> Option<u32> {
         self.holdout_over.take()
@@ -147,7 +158,15 @@ impl Seat {
         if let Some(a) = aimed
             && self.input.pressed(ui, Action::Interact)
         {
-            let (sound, note, took) = h.press(&mut game.world, self.n, a, &mut self.bag);
+            let held = combat.arms[self.n].hands.held;
+            let (sound, note, took) = h.press(&mut game.world, self.n, a, &mut self.bag, held);
+            // (Out of the Amplifier, a flash of what it's made of it.)
+            if sound == Some(crate::sound::Sfx::Amplify)
+                && let (Some(slot), Some((eye, dir))) = (took, loot::eye(game, self.n))
+                && let Some(glow) = self.bag.slot(slot).and_then(|g| crate::weapon::amp::glow(g.tier))
+            {
+                combat.fx.flash(eye + dir * 0.8, 9.0, glow.map(|c| c * 3.0), 0.5);
+            }
             if let Some(sfx) = sound {
                 combat.play(sfx, 0.9);
             }
@@ -163,7 +182,7 @@ impl Seat {
         }
         let prompt = match self.reviving {
             Some((j, _)) => Some(("E", format!("REVIVE P{}", j + 1))),
-            None => aimed.map(|a| ("E", h.prompt(a, &self.bag))),
+            None => aimed.map(|a| ("E", h.prompt(a, &self.bag, combat.arms[self.n].hands.held))),
         };
         let picking_up = self.reviving.map(|(_, p)| p).filter(|&p| p > 0.0);
         self.hud(ui, pane, combat, game, prompt, h.nail_progress(self.n).or(picking_up));

@@ -202,7 +202,7 @@ fn tooltip(ui: &mut Ui, stack: Stack, p: Vec2, screen: Rect) {
     let name = TextStyle::new((26.0 * s) as f32).bold().family(style::FONT);
     let line = TextStyle::new((22.0 * s) as f32).family(style::FONT);
     let worth = if stack.count > 1 { format!("${} each  ·  ${}", def.value, stack.value()) } else { format!("${}", def.value) };
-    let mut lines = vec![(def.name.to_string(), &name, def.rarity.colour()), (def.rarity.name().to_string(), &line, style::DIM)];
+    let mut lines = vec![(stack.name().to_string(), &name, def.rarity.colour()), (def.rarity.name().to_string(), &line, style::DIM)];
     if let Some(slot) = Slot::of(stack.kind) {
         let rounds = stack.magazine().map_or(String::new(), |mag| format!("  ·  {}/{mag} ROUNDS", stack.loaded));
         lines.push((format!("{}{rounds}", slot.name()), &line, style::BONE));

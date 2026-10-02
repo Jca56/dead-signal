@@ -52,6 +52,11 @@ fn chance(seed: u32, n: i64) -> f64 {
 }
 
 impl Lamp {
+    /// A lamp that never fails, giving `light`.
+    pub fn steady(light: Light) -> Self {
+        Self { light, mood: Mood::Steady, seed: 1 }
+    }
+
     /// How bright it is at `time`, 0–1: a failing one stutters, and now
     /// and then goes out for a few seconds.
     pub fn brightness(&self, time: f64) -> f64 {

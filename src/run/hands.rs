@@ -24,10 +24,17 @@ impl Seat {
 
     /// Take up what's in `slot` (none, or nothing there: bare fists).
     pub(super) fn take_up(&self, combat: &mut Combat, slot: Option<Slot>) {
-        let found = slot.and_then(|s| self.bag.slot(s).and_then(|stack| stack.kind.weapon().map(|w| (s, w, stack.loaded))));
+        let found = slot.and_then(|s| self.bag.slot(s).and_then(|stack| stack.kind.weapon().map(|w| (s, w, stack))));
         match found {
-            Some((s, weapon, loaded)) => combat.take_up(self.n, Some(s), weapon, loaded),
-            None => combat.take_up(self.n, None, Weapon::Fists, 0),
+            Some((s, weapon, stack)) => {
+                // (Amplified as it is: it holds what that makes it hold.)
+                combat.arms[self.n].hands.tier = stack.tier;
+                combat.take_up(self.n, Some(s), weapon, stack.loaded);
+            }
+            None => {
+                combat.arms[self.n].hands.tier = 0;
+                combat.take_up(self.n, None, Weapon::Fists, 0);
+            }
         }
     }
 
@@ -93,7 +100,9 @@ impl Seat {
     /// it in the bag load it).
     pub(super) fn pull_rounds(&self, combat: &mut Combat) {
         if let Some(stack) = combat.arms[self.n].hands.held.and_then(|slot| self.bag.slot(slot)) {
-            combat.arms[self.n].hands.mag = stack.loaded.min(combat.arms[self.n].hands.spec().mag);
+            let hands = &mut combat.arms[self.n].hands;
+            hands.tier = stack.tier;
+            hands.mag = stack.loaded.min(hands.capacity());
         }
     }
 

@@ -289,6 +289,23 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 opened + closed * f32::from(t >= 0.07)
             })
         }
+        Sfx::Amplify => {
+            // Valves warming: a hum climbing an octave and a half, a
+            // crackle riding it, and the thump of it coming on.
+            let mut f = Svf::default();
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(1.1, 0.6, move |t, n| {
+                let rise = (t / 0.75).min(1.0);
+                phase = (phase + (90.0 + 250.0 * rise * rise) * dt).fract();
+                let hum = (phase * 2.0 - 1.0) * 0.5 + sine(t, 60.0) * 0.25;
+                let body = f.run(hum, 300.0 + 1800.0 * rise, 0.8).0 * (0.35 + 0.65 * rise) * env(t, 0.03, 1.4);
+                let crackle = n.next() * f32::from(n.next() > 0.86) * 0.35 * rise * f32::from(t < 0.8);
+                let on = (t - 0.78).max(0.0);
+                let thump = (sine(on, 70.0) * env(on, 0.002, 0.12) + sine(on, 880.0) * env(on, 0.001, 0.09) * 0.4) * f32::from(t >= 0.78);
+                body * f32::from(t < 0.82) + crackle + thump * 1.3
+            })
+        }
         Sfx::Pickup => {
             let mut f = Svf::default();
             render(0.18, 0.5, |t, n| f.run(n.next(), 1800.0, 0.9).1 * env(t, 0.004, 0.04) + sine(t, 520.0) * env(t, 0.002, 0.05) * 0.3)

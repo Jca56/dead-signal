@@ -58,6 +58,7 @@ const COMPOUND: Layout = Layout {
     ],
     yards: &[Yard(-12, -10, 12, 10, YARD)],
     buys: &[BuyAt(ew(0, 0.0), -1, Face::N, Wares::Kit(Item::Bandage))],
+    signs: &[],
     floods: &[],
     props: &[],
 };

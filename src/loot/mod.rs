@@ -11,7 +11,7 @@ pub mod tables;
 
 use lntrn_math::Color;
 
-use crate::weapon::Weapon;
+use crate::weapon::{Weapon, amp};
 
 /// How rare a thing is: the classic five.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -301,11 +301,14 @@ pub struct Stack {
     pub count: u32,
     /// The rounds in it, a gun (it keeps them, whoever carries it).
     pub loaded: u32,
+    /// How many times it's been through the Amplifier, a weapon
+    /// (`weapon/amp.rs`: it hits harder and holds more).
+    pub tier: u8,
 }
 
 impl Stack {
     pub fn new(kind: Kind, count: u32) -> Self {
-        Self { kind, count, loaded: 0 }
+        Self { kind, count, loaded: 0, tier: 0 }
     }
 
     pub fn one(kind: Kind) -> Self {
@@ -341,15 +344,23 @@ impl Stack {
     /// How many of `ammo` this could take into its magazine now: a gun
     /// with room in it, and `ammo` what it takes (else none).
     pub fn room_for(self, ammo: Stack) -> u32 {
-        match self.kind.weapon().map(|w| w.spec()) {
-            Some(spec) if spec.ammo == Some(ammo.kind) => spec.mag.saturating_sub(self.loaded),
+        match self.kind.weapon() {
+            Some(w) if w.spec().ammo == Some(ammo.kind) => amp::capacity(w, self.tier).saturating_sub(self.loaded),
             _ => 0,
         }
     }
 
-    /// How many rounds a gun holds, if it's a gun.
+    /// How many rounds a gun holds (amplified as it is), if it's a gun.
     pub fn magazine(self) -> Option<u32> {
-        self.kind.weapon().map(|w| w.spec().mag).filter(|&m| m > 0)
+        self.kind.weapon().map(|w| amp::capacity(w, self.tier)).filter(|&m| m > 0)
+    }
+
+    /// What it's called: an amplified weapon by the name that gave it.
+    pub fn name(self) -> &'static str {
+        match self.kind.weapon() {
+            Some(w) if self.tier > 0 => amp::name(w, self.tier),
+            _ => self.kind.def().name,
+        }
     }
 
     /// What it all is worth.
@@ -359,13 +370,13 @@ impl Stack {
 
     /// What it's called, with how many when more than one could be.
     pub fn label(self) -> String {
-        let def = self.kind.def();
+        let (def, name) = (self.kind.def(), self.name());
         if let Some(most) = self.most() {
-            format!("{}  {}/{}", def.name, self.loaded, most)
+            format!("{name}  {}/{}", self.loaded, most)
         } else if def.stack > 1 {
-            format!("{}  ×{}", def.name, self.count)
+            format!("{name}  ×{}", self.count)
         } else {
-            def.name.to_string()
+            name.to_string()
         }
     }
 }

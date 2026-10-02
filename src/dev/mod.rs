@@ -52,6 +52,10 @@ pub enum DevAction {
     OpenDoors,
     MaxAmmo,
     BoardUp,
+    /// A holdout's: what's in hand put through the Amplifier, for
+    /// nothing; and the player set down in front of it.
+    Amplify,
+    ToAmplifier,
     /// To the middle of the place with this number.
     Teleport(usize),
     RevealExits,

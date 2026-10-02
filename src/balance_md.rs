@@ -69,6 +69,16 @@ fn balance_md_matches_the_game() {
         assert!((num(&row["Every"]) - (t.swipe.time + t.swipe.cooldown)).abs() < 0.01, "{name} swipes every {}", row["Every"]);
     }
     assert_eq!(dead.len(), Kind::ALL.len());
+    // The Amplifier's tiers.
+    let tiers = table("| Tier | Cost |");
+    assert_eq!(tiers.len(), usize::from(crate::weapon::amp::TIERS));
+    for (i, row) in tiers.iter().enumerate() {
+        let tier = i as u8 + 1;
+        assert_eq!(num(&row["Cost"]), f64::from(crate::holdout::AMPLIFY[i]), "tier {tier} cost");
+        assert_eq!(num(&row["Damage"]), crate::weapon::amp::power(tier), "tier {tier} damage");
+        let held = f64::from(crate::weapon::amp::capacity(Weapon::Pistol, tier)) / f64::from(Weapon::Pistol.spec().mag);
+        assert_eq!(num(&row["Rounds held"]), held, "tier {tier} rounds");
+    }
     // Everything worn.
     let gear = table("| Gear | Worn on |");
     for kind in crate::loot::ALL {

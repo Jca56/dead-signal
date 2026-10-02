@@ -99,6 +99,8 @@ pub enum Sfx {
     Tick,
     Click,
     Shutter,
+    /// The Amplifier, a weapon put through it.
+    Amplify,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -113,7 +115,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 60] = [
+const ALL: [Sfx; 61] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -166,6 +168,7 @@ const ALL: [Sfx; 60] = [
     Sfx::Tick,
     Sfx::Click,
     Sfx::Shutter,
+    Sfx::Amplify,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

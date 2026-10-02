@@ -210,6 +210,21 @@ A round's Shambler has 150 health, 50 more each round to 600 at the tenth, then 
   - Killing one pays 1500 to whoever did it and 500 to everyone else, and fills every gun's spare rounds.
 - **A hound round** is round 5 or 6, then every 4 or 5: no dead, only Hellhounds. 8 in the first, 2 more each time, to 24 (half as many again for two players); 4 up at once (6 for two). The first pack is let off a little: a quarter less health, and bites of 8.5, not 10. The last one dead fills every gun's spare rounds.
 
+### The Amplifier
+
+Down in the bunker's ops room (the signs lead to it from the yard): what's in hand put through it, up to three times, each dearer. Any weapon but bare fists; a blade only hits harder.
+
+| Tier | Cost | Damage | Rounds held | Glow |
+|---|---|---|---|---|
+| I | 5000 | 2× | 1.5× | amber |
+| II | 10000 | 3× | 2× | violet |
+| III | 20000 | 4.5× | 2.5× | pale blue |
+
+- It comes out with its magazine full and its spare rounds topped up to what it now carries (so many magazines of the bigger size). Rounds for it off the wall, and what a hound round or a Juggernaut pays, fill it to the same.
+- Each tier has a name of its own (the pistol: HOT MIC, DEAD AIR, LAST BROADCAST), shown with its tier where the weapon's named.
+- Its shots leave a streak and flash in its glow's colour.
+- Against round 20's Shambler (456 health) a tier-III gun does what the plain one does to round 1's (100).
+
 **Bleeding:** 1 health a second a cut, up to 3 cuts. It never stops on its own; a bandage or a medkit stops it. **Poison:** 3 a second for 10 s; a medkit clears it. Neither lets health come back.
 
 ---

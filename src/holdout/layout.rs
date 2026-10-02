@@ -14,7 +14,7 @@
 
 use lntrn_math::{Vec2, Vec3};
 
-use super::arena::Wares;
+use super::arena::{Wares, Way};
 use crate::loot::tables::Source;
 use crate::map::building::furnish::Furn;
 use crate::map::building::plan::{Kind, STOREY, Use};
@@ -171,6 +171,10 @@ pub struct Yard(pub i32, pub i32, pub i32, pub i32, pub usize);
 /// facing which way (out of the wall), what.
 pub struct BuyAt(pub Line, pub i8, pub Face, pub Wares);
 
+/// A sign to the Amplifier on a wall: where on its line, on which level,
+/// facing which way (out of the wall), pointing which way.
+pub struct SignAt(pub Line, pub i8, pub Face, pub Way);
+
 /// What stands about, on the ground or a building's ground floor: the
 /// radio mast; one of the places' fixtures (where, its front facing a
 /// bearing, degrees clockwise from north); something else set down (and
@@ -198,6 +202,7 @@ pub struct Layout {
     pub runs: &'static [Run],
     pub yards: &'static [Yard],
     pub buys: &'static [BuyAt],
+    pub signs: &'static [SignAt],
     pub floods: &'static [FloodAt],
     pub props: &'static [Prop],
 }

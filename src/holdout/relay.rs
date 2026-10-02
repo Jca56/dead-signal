@@ -37,8 +37,8 @@
 mod core;
 mod wings;
 
-use super::arena::Wares;
-use super::layout::{BuyAt, Build, Face, FloodAt, Gap, Layout, Prop, Run, Yard, ew, ns};
+use super::arena::{Wares, Way};
+use super::layout::{BuyAt, Build, Face, FloodAt, Gap, Layout, Prop, Run, SignAt, Yard, ew, ns};
 use crate::loot::Kind as Item;
 use crate::loot::tables::Source;
 use crate::map::building::furnish::Furn;
@@ -126,6 +126,8 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(19, 36.5), -1, Face::N, Wares::Weapon(Item::Lmg)),
         BuyAt(ew(13, 41.0), -1, Face::N, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-1, 36.5), -1, Face::S, Wares::Kit(Item::Bandage)),
+        // And in the ops room, between its doors: the Amplifier.
+        BuyAt(ew(5, 41.0), -1, Face::S, Wares::Amplifier),
         // Armor: a bike helmet in the control room, a vest on the
         // transmitter's wall on the yard, the army's helmet in its mess
         // hall, and its plate carrier down in the armory; plates to mend
@@ -138,6 +140,10 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ns(-24, 0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(32, 15.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
     ],
+    // The way to the Amplifier: on the station house by its doors on the
+    // yard, in its lobby over the flight down, and at the foot of that by
+    // the blast door.
+    signs: &[SignAt(ns(24, 7.0), 0, Face::W, Way::Right), SignAt(ew(19, 26.0), 0, Face::N, Way::Down), SignAt(ns(32, 11.5), -1, Face::W, Way::Left)],
     // Floods: over the transmitter's doors on the yard, either side of the
     // gate, on the motor pool and the station house where they face the
     // yard, on the barracks' wall, and one each out in the lots.

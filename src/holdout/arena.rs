@@ -23,20 +23,41 @@ const SEED: u32 = 0x5E1A_7;
 const WOODS_BACK: f64 = 6.0;
 
 /// Something for sale on a wall: a weapon (with its rounds), a kit, or
-/// something to wear (armor: put on as it's bought).
+/// something to wear (armor: put on as it's bought). Or, standing against
+/// it, the Amplifier (`machine.rs`): what's in hand made more of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Wares {
     Weapon(Kind),
     Kit(Kind),
     Gear(Kind),
+    Amplifier,
 }
 
 impl Wares {
-    /// The thing itself.
-    pub fn kind(self) -> Kind {
-        let (Wares::Weapon(kind) | Wares::Kit(kind) | Wares::Gear(kind)) = self;
-        kind
+    /// The thing itself, if it's a thing.
+    pub fn kind(self) -> Option<Kind> {
+        match self {
+            Wares::Weapon(kind) | Wares::Kit(kind) | Wares::Gear(kind) => Some(kind),
+            Wares::Amplifier => None,
+        }
     }
+}
+
+/// Which way a sign points, as it's looked at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Way {
+    Left,
+    Right,
+    Down,
+}
+
+/// A sign on a wall, pointing the way to the Amplifier: where (on the
+/// wall's face), the way out of the wall, and which way it points.
+#[derive(Clone, Copy, Debug)]
+pub struct Sign {
+    pub at: Vec3,
+    pub facing: Vec3,
+    pub way: Way,
 }
 
 /// A way in for the dead (a window, a hole in a wall, a breach in a
@@ -113,6 +134,7 @@ pub struct Arena {
     pub doors: Vec<Door>,
     pub buys: Vec<Buy>,
     pub lamps: Vec<LampAt>,
+    pub signs: Vec<Sign>,
 }
 
 /// The arena, as a map (its hill, its buildings and walls, what stands
@@ -151,6 +173,6 @@ pub(super) fn of(plan: &Layout) -> (Map, Arena) {
     };
     let reach = [x0, z0, x1, z1].iter().map(|v| f64::from(v.abs())).fold(0.0, f64::max) + BEYOND;
     let on = |x: i32, z: i32| Vec3::new(f64::from(x) + OFFSET, 0.0, f64::from(z) + OFFSET);
-    let arena = Arena { reach, bounds: (on(x0, z0), on(x1, z1)), zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys, lamps: raised.lamps };
+    let arena = Arena { reach, bounds: (on(x0, z0), on(x1, z1)), zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys, lamps: raised.lamps, signs: raised.signs };
     (map, arena)
 }

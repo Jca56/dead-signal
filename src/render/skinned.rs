@@ -41,6 +41,9 @@ pub struct SkinnedDraw {
     pub model: Mat4,
     /// Each bone's skinning matrix; at most [`MAX_JOINTS`].
     pub joints: Vec<Mat4>,
+    /// The glow on the weapon held (an amplified one's): its colour
+    /// (linear), and how strong it is now, 0–1; none, all zero.
+    pub glow: [f32; 4],
 }
 
 #[repr(C)]
@@ -53,6 +56,7 @@ struct Uniform {
     sun_color: [f32; 4],
     ambient_sky: [f32; 4],
     ambient_ground: [f32; 4],
+    glow: [f32; 4],
     joints: [[[f32; 4]; 4]; MAX_JOINTS],
 }
 // SAFETY: plain `f32`s.
@@ -155,6 +159,7 @@ impl Skinned {
                 sun_color: scaled(color4(air.sun, 1.0), lit.sun, [0.0; 3], 0.0),
                 ambient_sky: scaled(color4(air.ambient_sky, 1.0), lit.sky, lit.glow, 1.0),
                 ambient_ground: scaled(color4(air.ambient_ground, 1.0), lit.sky, lit.glow, 0.6),
+                glow: d.glow,
                 joints,
             };
             gpu.queue.write_buffer(&self.uniforms[i].0, 0, bytes_of(&u));

@@ -107,7 +107,8 @@
   - [x] `app/shots.rs`: the game's own frames drawn off screen to files, to look at lighting away from the window.
   - [ ] Playtest, and what it turns up.
 - [ ] Waves tuning and difficulty (the counts are still the small map's).
-- [ ] Upgradable guns (the bench goes in the bunker's armory).
+- [x] Upgradable guns, the first half: the Amplifier, in the bunker's ops room, signed from the yard. Three tiers (5,000, 10,000, 20,000): more damage, more rounds, a name and a glow for each.
+- [ ] Upgradable guns, the second half: attachments at a workbench (the bench goes in the bunker's armory).
 - [ ] Perks
 - [ ] Mystery box
 

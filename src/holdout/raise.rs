@@ -6,8 +6,9 @@
 
 use lntrn_math::{Vec2, Vec3};
 
-use super::arena::{Buy, Door, LampAt, Window};
-use super::layout::{Build, BuyAt, Gap, House, Layout, Line, Prop, Run, ew, ns, world, yaw};
+use super::arena::{Buy, Door, LampAt, Sign, Wares, Window};
+use super::layout::{Build, BuyAt, Face, Gap, House, Layout, Line, Prop, Run, ew, ns, world, yaw};
+use super::machine;
 use crate::map::dig::Dig;
 use crate::collide::Surface;
 use crate::loot::Dice;
@@ -70,6 +71,7 @@ pub struct Raised {
     pub windows: Vec<Window>,
     pub doors: Vec<Door>,
     pub buys: Vec<Buy>,
+    pub signs: Vec<Sign>,
     pub lamps: Vec<LampAt>,
     pub pieces: Vec<Piece>,
     pub containers: Vec<(Source, Spot)>,
@@ -90,6 +92,10 @@ pub fn raise(layout: &Layout) -> Raised {
     }
     for b in layout.buys {
         buy(layout, b, &mut out);
+    }
+    for s in layout.signs {
+        let (at, facing, _) = on_wall(layout, s.0, s.1, s.2);
+        out.signs.push(machine::placed(at + Vec3::new(0.0, machine::SIGN_UP, 0.0), facing, s.3));
     }
     for f in layout.floods {
         out.lamps.push(LampAt { at: world(Vec2::new(f.0, f.1), f.2), room: None, red: false, start: false });
@@ -390,18 +396,38 @@ fn centre(gap: &Gap) -> f64 {
 /// the floor it's bought from; its zone.
 fn buy(layout: &Layout, b: &BuyAt, out: &mut Raised) {
     let BuyAt(on, level, face, wares) = *b;
+    let (at, facing, zone) = on_wall(layout, on, level, face);
+    // (The Amplifier stands out from its wall: it's used at its front.)
+    let at = if wares == Wares::Amplifier {
+        out.blocks.push(machine::cabinet(at, facing, BUY_HEIGHT));
+        at + facing * machine::DEEP
+    } else {
+        at
+    };
+    out.buys.push(Buy { at, facing, wares, zone });
+}
+
+/// A place on a wall's face, a wall buy's height over the floor it's seen
+/// from: where `on` on `level`, out the way `face` looks; the way out of
+/// the wall; and the zone it's in.
+fn on_wall(layout: &Layout, on: Line, level: i8, face: Face) -> (Vec3, Vec3, usize) {
     let p = on.point();
     let front = p + face.dir() * 0.5;
     // A building's wall, or a run of block.
     let off = if layout.house_at(p + face.dir() * 0.05).is_some() || layout.house_at(p - face.dir() * 0.05).is_some() {
         SKIN
     } else {
-        let run = layout.runs.iter().find(|r| r.along_x == on.along_x && r.at == on.at && on.u >= f64::from(r.from) && on.u <= f64::from(r.to)).unwrap_or_else(|| panic!("a wall buy on no wall at {on:?}"));
+        let run = layout.runs.iter().find(|r| r.along_x == on.along_x && r.at == on.at && on.u >= f64::from(r.from) && on.u <= f64::from(r.to)).unwrap_or_else(|| panic!("nothing on a wall at {on:?}: there's no wall"));
         run.build.size().0 * 0.5
     };
-    let zone = layout.zone_at(front, level).unwrap_or_else(|| panic!("a wall buy in no zone at {on:?}"));
+    let zone = layout.zone_at(front, level).unwrap_or_else(|| panic!("something on a wall in no zone at {on:?}"));
     let at = world(p + face.dir() * (off + 0.01), layout.floor_at(front, level) + BUY_HEIGHT);
-    out.buys.push(Buy { at, facing: Vec3::new(face.dir().x, 0.0, face.dir().y), wares, zone });
+    (at, Vec3::new(face.dir().x, 0.0, face.dir().y), zone)
+}
+
+/// How high over its floor a wall buy is.
+pub(super) const fn buy_height() -> f64 {
+    BUY_HEIGHT
 }
 
 /// Something standing about, set down on `level`'s floor where it is.

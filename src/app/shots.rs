@@ -49,6 +49,14 @@ const SHOTS: &[Shot] = &[
     Shot("window_out", 6.0, -7.5, 0, 0.0, 4.0),
     Shot("window_side", 3.5, -12.3, 0, 100.0, 4.0),
     Shot("window_in_shot", 6.0, -14.5, 0, 180.0, 4.0),
+    // The Amplifier, down in the bunker's ops room, and the signs to it:
+    // on the yard, in the lobby, at the foot of the stairs.
+    Shot("amp", 41.0, 9.5, -1, 0.0, 0.0),
+    Shot("amp_near", 40.4, 7.2, -1, 15.0, -6.0),
+    Shot("amp_shot", 46.0, 10.5, -1, 270.0, 0.0),
+    Shot("sign_yard", 18.5, 6.5, 0, 90.0, 6.0),
+    Shot("sign_lobby", 27.5, 13.5, 0, 180.0, 8.0),
+    Shot("sign_foot", 27.0, 11.0, -1, 90.0, 6.0),
 ];
 
 impl DeadSignal {
@@ -216,6 +224,10 @@ fn shots() {
     crate::throw::pyre(&mut app.game.world, Vec3::new(-4.5, 0.0, 3.5), 0);
     for lamp in app.game.world.query::<&crate::holdout::lamps::Lamp>().iter(&app.game.world).filter(|l| l.mood != crate::holdout::lamps::Mood::Steady) {
         eprintln!("shots: a {:?} lamp at {:.0}, {:.1}, {:.0}", lamp.mood, lamp.light.at.x - 0.5, lamp.light.at.y, lamp.light.at.z - 0.5);
+    }
+    // (What's in hand amplified, asked for: `AMP=1..3`.)
+    if let Ok(tier) = std::env::var("AMP") {
+        app.combat.arms[0].hands.tier = tier.parse().expect("AMP=1..3");
     }
     // (A hound round's air, asked for.)
     if let (Ok(gloom), Some(h)) = (std::env::var("GLOOM"), app.run.holdout.as_mut()) {

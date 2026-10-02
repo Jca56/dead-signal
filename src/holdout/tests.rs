@@ -55,7 +55,7 @@ pub(super) fn open_everything(world: &mut World, h: &mut Holdout) {
     let mut bag = Holdout::loadout();
     for i in 0..h.arena.doors.len() {
         h.wallets[0].points = 1_000_000;
-        h.press(world, 0, Aimed::Door(i), &mut bag);
+        h.press(world, 0, Aimed::Door(i), &mut bag, None);
     }
 }
 
@@ -144,11 +144,11 @@ fn a_door_bought_open_lets_the_player_and_the_dead_through() {
     // Short of points: nothing.
     h.wallets[0].points = door.cost - 1;
     let mut bag = Holdout::loadout();
-    let (_, note, _) = h.press(&mut world, 0, Aimed::Door(i), &mut bag);
+    let (_, note, _) = h.press(&mut world, 0, Aimed::Door(i), &mut bag, None);
     assert_eq!(note, Some("NOT ENOUGH POINTS"));
     assert!(!h.door_open(i));
     h.wallets[0].points = door.cost + 5;
-    h.press(&mut world, 0, Aimed::Door(i), &mut bag);
+    h.press(&mut world, 0, Aimed::Door(i), &mut bag, None);
     assert!(h.door_open(i) && h.wallets[0].points == 5);
     assert!(!solid_at_door(&world), "the door's still solid");
     assert!(world.resource::<Nav>().0.as_ref().unwrap().connects(start, beyond), "no way through the open door");
@@ -196,7 +196,7 @@ fn each_player_earns_and_spends_their_own_points() {
     world.insert_resource(Solid(crate::collide::Solids::default()));
     world.insert_resource(Nav(None));
     h.wallets[1].points = h.arena.doors[0].cost + 5;
-    h.press(&mut world, 1, Aimed::Door(0), &mut Holdout::loadout());
+    h.press(&mut world, 1, Aimed::Door(0), &mut Holdout::loadout(), None);
     assert!(h.door_open(0));
     assert_eq!((h.wallets[0].points, h.wallets[1].points), (START_POINTS + 30, 5));
 }
@@ -207,25 +207,25 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
     let smg = h.arena.buys.iter().position(|b| b.wares == Wares::Weapon(Kind::Smg)).expect("an SMG on a wall");
     let mut bag = Holdout::loadout();
     h.wallets[0].points = price(Kind::Smg);
-    let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(smg), &mut bag);
+    let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(smg), &mut bag, None);
     assert_eq!(took, Some(Slot::Sidearm));
     assert_eq!(h.wallets[0].points, 0);
     let held = bag.slot(Slot::Sidearm).expect("the SMG in hand");
     assert_eq!((held.kind, held.loaded), (Kind::Smg, 30));
-    let (ammo, most) = spare(Kind::Smg).unwrap();
+    let (ammo, most) = spare(Kind::Smg, 0).unwrap();
     assert_eq!(bag.count(ammo), most, "a full carry of its rounds");
     // Full up, more isn't sold.
     h.wallets[0].points = 10_000;
-    let (_, note, _) = h.press(&mut world, 0, Aimed::Buy(smg), &mut bag);
+    let (_, note, _) = h.press(&mut world, 0, Aimed::Buy(smg), &mut bag, None);
     assert_eq!((note, h.wallets[0].points), (Some("AMMO FULL"), 10_000));
     // Some spent: topped up again, for half.
     bag.remove(ammo, 50);
-    h.press(&mut world, 0, Aimed::Buy(smg), &mut bag);
+    h.press(&mut world, 0, Aimed::Buy(smg), &mut bag, None);
     assert_eq!((bag.count(ammo), h.wallets[0].points), (most, 10_000 - price(Kind::Smg) / 2));
-    assert!(h.prompt(Aimed::Buy(smg), &bag).contains("AMMO"));
+    assert!(h.prompt(Aimed::Buy(smg), &bag, None).contains("AMMO"));
     // A kit goes in the bag.
     let medkit = h.arena.buys.iter().position(|b| b.wares == Wares::Kit(Kind::Medkit)).expect("a medkit on a wall");
-    h.press(&mut world, 0, Aimed::Buy(medkit), &mut bag);
+    h.press(&mut world, 0, Aimed::Buy(medkit), &mut bag, None);
     assert_eq!(bag.count(Kind::Medkit), 1);
 }
 
@@ -237,9 +237,9 @@ fn the_heavy_weapons_are_on_the_walls_with_fewer_belts_and_tanks_to_carry() {
         assert_eq!(price(kind), cost);
         let mut bag = Holdout::loadout();
         h.wallets[0].points = cost;
-        let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(i), &mut bag);
+        let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(i), &mut bag, None);
         assert_eq!((took, h.wallets[0].points), (Some(Slot::Primary), 0), "{kind:?}");
-        let (ammo, most) = spare(kind).unwrap();
+        let (ammo, most) = spare(kind, 0).unwrap();
         assert_eq!((most, bag.count(ammo)), (carried, carried), "{kind:?}");
     }
     assert_eq!(h.arena.zones[h.arena.buys.iter().find(|b| b.wares == Wares::Weapon(Kind::Lmg)).unwrap().zone], "THE BUNKER");

@@ -95,9 +95,28 @@ pub struct Rigged<M> {
     pub skin: usize,
 }
 
-/// A viewmodel (the arms and what they hold): drawn in the viewmodel pass.
+/// What marks a viewmodel's weapon (not the arms that hold it) in a
+/// corner's alpha: the Amplifier's glow shows on it.
+pub const WEAPON_ALPHA: f32 = 0.9;
+
+/// Whether a viewmodel's bone is one of the arms' (the rest are the
+/// weapon's: its body, its magazine, its slide).
+fn arm_bone(name: &str) -> bool {
+    name == "root" || ["upper_arm", "forearm", "hand", "fingers", "index", "thumb"].iter().any(|b| name.starts_with(b))
+}
+
+/// A viewmodel (the arms and what they hold): drawn in the viewmodel
+/// pass. Every corner of the weapon is marked as that (by the bone it's
+/// most on), all but its flash.
 pub fn load_viewmodel(renderer: &mut Renderer, name: &str) -> Result<Rigged<SkinnedMeshId>, String> {
-    let (vertices, gltf, skin) = load_skinned(name)?;
+    let (mut vertices, gltf, skin) = load_skinned(name)?;
+    let arms: Vec<bool> = gltf.skins[skin].joints.iter().map(|&j| gltf.nodes[j].name.as_deref().is_none_or(arm_bone)).collect();
+    for v in &mut vertices {
+        let most = (0..4).max_by(|&a, &b| v.weights[a].total_cmp(&v.weights[b])).unwrap_or(0);
+        if v.color[3] > 0.95 && !arms.get(v.joints[most] as usize).copied().unwrap_or(true) {
+            v.color[3] = WEAPON_ALPHA;
+        }
+    }
     Ok(Rigged { mesh: renderer.add_skinned_mesh(&vertices), gltf, skin })
 }
 

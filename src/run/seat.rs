@@ -263,7 +263,7 @@ impl Seat {
         }
         // (The dev's: a magazine that never runs down.)
         if game.world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.ammo) {
-            hands.mag = hands.spec().mag;
+            hands.mag = hands.capacity();
         }
         self.keep_rounds(combat);
     }
@@ -423,9 +423,14 @@ impl Seat {
         // A gun that switches says how it's set.
         let arms = &combat.arms[self.n];
         let hands = &arms.hands;
+        // (An amplified one by the name that gave it, and how far it's been.)
+        let name = match hands.tier {
+            0 => hands.spec().name.to_string(),
+            t => format!("{}  {}", crate::weapon::amp::name(hands.weapon, t), ["I", "II", "III"][usize::from(t.min(3)) - 1]),
+        };
         let weapon = match hands.spec().shot {
-            Some(s) if s.select => format!("{}  ·  {}", hands.spec().name, if hands.full_auto() { "AUTO" } else { "SEMI" }),
-            _ => hands.spec().name.to_string(),
+            Some(s) if s.select => format!("{name}  ·  {}", if hands.full_auto() { "AUTO" } else { "SEMI" }),
+            _ => name,
         };
         hud::draw(
             ui,
