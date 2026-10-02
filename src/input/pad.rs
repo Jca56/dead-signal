@@ -74,7 +74,8 @@ impl Control {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PadBinds {
     actions: [Option<Control>; Action::ALL.len()],
-    /// On to the next weapon carried, and pausing.
+    /// Between the two guns carried (tapped) or to the blade (held), and
+    /// pausing.
     pub next_weapon: Control,
     pub pause: Control,
 }
@@ -92,7 +93,7 @@ impl Default for PadBinds {
             Action::Reload | Action::Interact => b(Button::West),
             Action::Bash => b(Button::RightStick),
             Action::FireMode => b(Button::Up),
-            // (Y goes through them all.)
+            // (Y's for them all: tapped, the other gun; held, the blade.)
             Action::Primary | Action::Sidearm | Action::Melee => None,
             Action::Bandage => b(Button::Left),
             Action::Medkit => b(Button::Right),

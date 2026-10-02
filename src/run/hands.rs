@@ -1,5 +1,6 @@
-//! What's in hand, from the run's side: the slots' keys (or the wheel, or
-//! a pad's Y) to switch between what's carried in the slots, bare fists
+//! What's in hand, from the run's side: the slots' keys (or the wheel; or
+//! a pad's Y, tapped for the other gun and held for the blade) to switch
+//! between what's carried in the slots, bare fists
 //! when there's nothing, and the hands kept in step with the bag: a gun's
 //! rounds go back into it (and rounds loaded into it in the bag come into
 //! the hands), a weapon thrown out of its slot is let go of, one picked up
@@ -9,6 +10,7 @@ use lntrn_ui::Ui;
 
 use super::seat::Seat;
 use crate::combat::Combat;
+use crate::input::Swap;
 use crate::loot::bag::Slot;
 use crate::settings::keys::Action;
 use crate::weapon::Weapon;
@@ -49,8 +51,21 @@ impl Seat {
             self.take_up(combat, self.first_armed());
             return;
         }
-        // Put away: up with what's next (if it's still there).
+        // The gun last in hand: what a pad's Y goes back to from the blade.
+        if let Some(slot) = hands.held.filter(|s| *s != Slot::Melee) {
+            self.gun = Some(slot);
+        }
+        // A pad's Y held on: the blade, whatever it was being put away for.
+        let swap = self.input.swap();
+        if swap == Some(Swap::Blade) && free && self.bag.slot(Slot::Melee).is_some() {
+            combat.arms[self.n].hands.put_away(Some(Slot::Melee));
+        }
+        // Put away: up with what's next (if it's still there). (Not while
+        // Y's down still: it may yet be the blade that's wanted.)
         if let Some(next) = combat.arms[self.n].hands.stowed() {
+            if self.input.swapping() {
+                return;
+            }
             let next = match next {
                 Some(s) if self.bag.slot(s).is_none() => self.first_armed(),
                 next => next,
@@ -70,9 +85,9 @@ impl Seat {
             want = self.step(combat, if self.wheel > 0.0 { -1 } else { 1 }).or(want);
             self.wheel = 0.0;
         }
-        // A pad's Y: on to the next.
-        if self.input.next_weapon() {
-            want = self.step(combat, 1).or(want);
+        // A pad's Y, as it goes down: the other gun.
+        if swap == Some(Swap::Guns) {
+            want = self.other_gun(combat).or(want);
         }
         // Bare fists and something picked up: it's taken up.
         if want.is_none() && combat.arms[self.n].hands.held.is_none() && combat.arms[self.n].hands.switching().is_none() && !combat.arms[self.n].hands.busy() {
@@ -80,6 +95,19 @@ impl Seat {
         }
         if free && let Some(slot) = want {
             combat.arms[self.n].hands.put_away(Some(slot));
+        }
+    }
+
+    /// The gun that isn't in hand (or on its way up): the sidearm for the
+    /// primary and the primary for the sidearm; from the blade (or bare
+    /// fists), the gun last held. None, if there's no other.
+    fn other_gun(&self, combat: &Combat) -> Option<Slot> {
+        let has = |s: &Slot| self.bag.slot(*s).is_some();
+        let hands = &combat.arms[self.n].hands;
+        match hands.switching().unwrap_or(hands.held) {
+            Some(Slot::Primary) => Some(Slot::Sidearm).filter(has),
+            Some(Slot::Sidearm) => Some(Slot::Primary).filter(has),
+            _ => self.gun.filter(has).or_else(|| [Slot::Primary, Slot::Sidearm].into_iter().find(has)),
         }
     }
 
@@ -113,5 +141,38 @@ impl Seat {
         {
             stack.loaded = combat.arms[self.n].hands.mag;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::loot::bag::Bag;
+    use crate::loot::{Kind, Stack};
+
+    #[test]
+    fn a_pad_s_y_goes_between_the_guns_and_back_from_the_blade_to_the_gun_last_held() {
+        let mut combat = Combat::new();
+        let mut seat = Seat::default();
+        seat.bag = Bag::empty();
+        *seat.bag.slot_mut(Slot::Sidearm) = Some(Stack::gun(Kind::Pistol, 12));
+        *seat.bag.slot_mut(Slot::Melee) = Some(Stack::one(Kind::Knife));
+        // One gun: there's no other.
+        combat.take_up(0, Some(Slot::Sidearm), Weapon::Pistol, 12);
+        assert_eq!(seat.other_gun(&combat), None);
+        // Two: each is the other's.
+        *seat.bag.slot_mut(Slot::Primary) = Some(Stack::gun(Kind::Shotgun, 5));
+        assert_eq!(seat.other_gun(&combat), Some(Slot::Primary));
+        combat.take_up(0, Some(Slot::Primary), Weapon::Shotgun, 5);
+        assert_eq!(seat.other_gun(&combat), Some(Slot::Sidearm));
+        // From the blade, back to the gun last in hand (the primary, if
+        // none's been).
+        combat.take_up(0, Some(Slot::Melee), Weapon::Knife, 0);
+        assert_eq!(seat.other_gun(&combat), Some(Slot::Primary));
+        seat.gun = Some(Slot::Sidearm);
+        assert_eq!(seat.other_gun(&combat), Some(Slot::Sidearm));
+        // (Gone from the bag since: the other, then.)
+        *seat.bag.slot_mut(Slot::Sidearm) = None;
+        assert_eq!(seat.other_gun(&combat), Some(Slot::Primary));
     }
 }

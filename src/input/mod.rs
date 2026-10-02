@@ -24,6 +24,15 @@ const MOUSED: f64 = 2.0;
 /// holding).
 const HOLD: f64 = 0.4;
 const USE_HOLD: f64 = 0.22;
+const BLADE_HOLD: f64 = 0.3;
+
+/// What a pad's weapon button asks: the other gun (as it goes down), or
+/// the blade (held on).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Swap {
+    Guns,
+    Blade,
+}
 
 /// What's in front of a player to use, as a pad's X has it (X reloads
 /// too): nothing; something a press uses (X is that press, not a reload);
@@ -116,6 +125,8 @@ pub struct Input {
     /// that reloads and uses: how long each has been down.
     view: Timed,
     using: Timed,
+    /// The weapon button: how long it's been down.
+    swap: Timed,
     /// The map's up: that control puts it away, tapped or held.
     mapped: bool,
     /// The bag's up: their pad's working it ([`Input::steer`]), and none
@@ -153,6 +164,7 @@ impl Input {
             }
             None => self.using = Timed::default(),
         }
+        self.swap.step(&pad, self.binds.next_weapon, BLADE_HOLD, dt);
     }
 
     /// The control that's both the bag and the map, if one is.
@@ -289,9 +301,22 @@ impl Input {
         if self.keys.is_some() { ui.state.wheel.y } else { 0.0 }
     }
 
-    /// Whether they asked for the next weapon on (a pad's Y): taken.
-    pub fn next_weapon(&mut self) -> bool {
-        !self.rummaging && self.pad.take(self.binds.next_weapon)
+    /// What a pad's Y asks this frame (taken): the other gun as it goes
+    /// down, and (still down a moment on) the blade instead.
+    pub fn swap(&mut self) -> Option<Swap> {
+        if self.rummaging {
+            None
+        } else if std::mem::take(&mut self.swap.long) {
+            Some(Swap::Blade)
+        } else {
+            self.pad.take(self.binds.next_weapon).then_some(Swap::Guns)
+        }
+    }
+
+    /// Whether a pad's Y is down and may yet be held for the blade: what
+    /// it's put away for isn't settled.
+    pub fn swapping(&self) -> bool {
+        !self.rummaging && self.swap.since.is_some()
     }
 
     /// `a`'s key or button, as the HUD writes it: the pad's while that's
@@ -389,6 +414,32 @@ mod tests {
     }
 
     #[test]
+    fn y_tapped_is_the_other_gun_and_held_is_the_blade() {
+        let mut h = Harness::new(800.0, 600.0);
+        h.frame(|ui| {
+            let (held, rest) = (pad::frame_holding(&[Button::North]), PadFrame::default());
+            let down = held.merge(pad::frame_with(&[Button::North]));
+            let mut i = Input::default();
+            // Down: the other gun, at once; let go soon, that's all.
+            i.update(ui, None, true, down, 0.016);
+            assert_eq!(i.swap(), Some(Swap::Guns));
+            assert!(i.swapping() && i.swap().is_none(), "down still: it may yet be the blade");
+            i.update(ui, None, true, rest, 0.1);
+            assert!(!i.swapping() && i.swap().is_none());
+            // Held on: the blade, once.
+            i.update(ui, None, true, down, 0.016);
+            assert_eq!(i.swap(), Some(Swap::Guns));
+            i.update(ui, None, true, held, 0.2);
+            assert!(i.swapping() && i.swap().is_none());
+            i.update(ui, None, true, held, 0.2);
+            assert_eq!(i.swap(), Some(Swap::Blade));
+            assert!(!i.swapping());
+            i.update(ui, None, true, held, 0.5);
+            assert!(i.swap().is_none(), "once a hold");
+        });
+    }
+
+    #[test]
     fn view_tapped_is_the_bag_and_held_is_the_map() {
         let mut h = Harness::new(800.0, 600.0);
         h.frame(|ui| {
@@ -430,7 +481,7 @@ mod tests {
             i.set_rummaging(true);
             i.update(ui, None, true, pad, 0.016);
             assert_eq!(i.walk(ui), Vec2::ZERO, "the stick's the cursor's");
-            assert!(!i.pressed(ui, Action::Bandage) && !i.pressed(ui, Action::Jump) && !i.next_weapon());
+            assert!(!i.pressed(ui, Action::Bandage) && !i.pressed(ui, Action::Jump) && i.swap().is_none());
             let steer = i.steer(0.016);
             assert_eq!((steer.step, steer.pick), ((1, 0), true), "they're the bag's");
             assert!(i.pad_pressed(Action::Inventory), "and View still puts it away");

@@ -16,7 +16,7 @@ use crate::combat::Combat;
 use crate::ending::Outcome;
 use crate::hud::{self, Hud};
 use crate::input::{Input, look};
-use crate::loot::bag::Bag;
+use crate::loot::bag::{Bag, Slot};
 use crate::loot::{Dice, Kind};
 use crate::profile::perks::Perks;
 use crate::settings::Settings;
@@ -67,8 +67,10 @@ pub struct Seat {
     pub(super) perks: Perks,
     pub(super) fit: crate::loot::bag::Fit,
     pub(super) unburdened: bool,
-    /// The wheel's turn not yet stepped through the slots, pixels.
+    /// The wheel's turn not yet stepped through the slots, pixels; and the
+    /// gun last in hand (what a pad's Y goes back to from the blade).
     pub(super) wheel: f64,
+    pub(super) gun: Option<Slot>,
     /// Their controls, this frame (the keys and mouse, a pad), and whether
     /// a sprint's been toggled on (sprint set to toggle, or on a pad).
     pub input: Input,
