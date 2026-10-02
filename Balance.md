@@ -157,6 +157,8 @@ Five things worn: head, chest, back, legs, belt. Everything worn is lost on deat
 - **Rounds** go to the bandolier first, and reloading draws from the pockets, the belt and the rig before the pack.
 - **Starting out:** someone new starts wearing a daypack.
 
+**In HOLDOUT** armor is on the walls, and put on as it's bought: BIKE HELMET 300 (the control room), LIGHT VEST 750 (the yard), MILITARY HELMET 1250 (the barracks' mess hall), PLATE CARRIER 2500 (the bunker's armory); 120 points at most. A piece worn and the worse for wear is made whole at its wall for half. ARMOR PLATES are 500 each (by the gate, in the motor pool's bay, in the station's lobby). It weighs nothing there. And in either mode, while there's any armor left, a Hellhound's bite doesn't set you alight.
+
 **Weight** (all that's worn, added up, counted to 6):
 
 | Weight | Sprint speed | Stamina a second sprinting | A sprinting footfall heard |

@@ -67,16 +67,18 @@ pub struct Bag {
 }
 
 /// What the player's perks make of what's worn: more backpack (on any pack
-/// worn), and pockets this big before cargo pants.
+/// worn), and pockets this big before cargo pants. Or (a holdout's) a pack
+/// of a size of its own, whatever's worn: there's no backpack to wear.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fit {
     pub pack_bonus: (u8, u8),
     pub pockets: (u8, u8),
+    pub pack: Option<(u8, u8)>,
 }
 
 impl Default for Fit {
     fn default() -> Self {
-        Self { pack_bonus: (0, 0), pockets: POCKETS }
+        Self { pack_bonus: (0, 0), pockets: POCKETS, pack: None }
     }
 }
 
@@ -119,7 +121,7 @@ impl Bag {
     /// pants'), a rig's, a bandolier's.
     fn sizes(&self, fit: Fit) -> [(u8, u8); 4] {
         let grid = |wear: Wear| self.worn(wear).and_then(|s| s.kind.gear()).and_then(|g| g.grid);
-        let pack = grid(Wear::Back).map_or((0, 0), |(w, h)| (w + fit.pack_bonus.0, h + fit.pack_bonus.1));
+        let pack = fit.pack.unwrap_or_else(|| grid(Wear::Back).map_or((0, 0), |(w, h)| (w + fit.pack_bonus.0, h + fit.pack_bonus.1)));
         let more = self.worn(Wear::Legs).and_then(|s| s.kind.gear()).map_or((0, 0), |g| g.pockets);
         [pack, (fit.pockets.0 + more.0, fit.pockets.1 + more.1), grid(Wear::Chest).unwrap_or((0, 0)), grid(Wear::Belt).unwrap_or((0, 0))]
     }

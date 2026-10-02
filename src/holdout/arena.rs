@@ -22,11 +22,21 @@ const SEED: u32 = 0x5E1A_7;
 /// No tree this near where the dead come from.
 const WOODS_BACK: f64 = 6.0;
 
-/// Something for sale on a wall: a weapon (with its rounds), or a kit.
+/// Something for sale on a wall: a weapon (with its rounds), a kit, or
+/// something to wear (armor: put on as it's bought).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Wares {
     Weapon(Kind),
     Kit(Kind),
+    Gear(Kind),
+}
+
+impl Wares {
+    /// The thing itself.
+    pub fn kind(self) -> Kind {
+        let (Wares::Weapon(kind) | Wares::Kit(kind) | Wares::Gear(kind)) = self;
+        kind
+    }
 }
 
 /// A way in for the dead (a window, a hole in a wall, a breach in a

@@ -103,8 +103,7 @@ pub fn spawn(world: &mut World, arena: &Arena, items: &crate::items::Meshes, mut
     for b in &arena.buys {
         let frame = facing(b.at, b.facing);
         world.spawn((Placed(frame), Model(outline), chalk, OnMap));
-        let (Wares::Weapon(kind) | Wares::Kit(kind)) = b.wares;
-        if let Some(&m) = items.0.get(&kind) {
+        if let Some(&m) = items.0.get(&b.wares.kind()) {
             // Stood up off the floor it lay on, the face that was up turned
             // out of the wall; a gun (made lying the other way up to a
             // kit) turned right way up.

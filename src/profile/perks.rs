@@ -148,7 +148,7 @@ impl Perks {
     /// What these perks make of what's worn: more backpack, bigger
     /// pockets.
     pub fn fit(&self) -> crate::loot::bag::Fit {
-        crate::loot::bag::Fit { pack_bonus: PACK_BONUS[usize::from(self.rank(Perk::PackMule))], pockets: POCKETS[usize::from(self.rank(Perk::DeepPockets))] }
+        crate::loot::bag::Fit { pack_bonus: PACK_BONUS[usize::from(self.rank(Perk::PackMule))], pockets: POCKETS[usize::from(self.rank(Perk::DeepPockets))], pack: None }
     }
 
     /// How fast a reload runs, and a search: multiples of the usual.

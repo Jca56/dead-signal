@@ -28,6 +28,9 @@ impl Run {
         let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
         combat.reset(players);
         self.seats = (0..players).map(|n| Seat::new(n, Holdout::loadout(), Perks::default(), seed, combat)).collect();
+        for seat in &mut self.seats {
+            (seat.fit, seat.unburdened) = (Holdout::fit(), true);
+        }
         game.world.insert_resource(crate::zombie::Stealth(1.0));
         game.world.insert_resource(crate::zombie::Heat::default());
         let mut holdout = Holdout::new(arena, seed.rotate_left(3), self.seats.len());
@@ -159,5 +162,40 @@ impl Seat {
         if alone {
             self.looting(ui, cx, game, combat, icons, dt, loot::Aimed::Nothing);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::loot::gear::Wear;
+    use crate::loot::{Kind, Stack};
+    use crate::throw::{Burning, Felt};
+    use crate::vitals::{Affliction, Vitals};
+    use crate::zombie::brain::Blow;
+
+    #[test]
+    fn armored_a_hounds_bite_does_not_catch_and_in_a_holdout_armor_weighs_nothing() {
+        let mut game = Game::new();
+        game.spawn_player(0, 0.0, 0.0, 0.0);
+        let mut combat = Combat::new();
+        let mut seat = Seat::default();
+        seat.vitals = Vitals::with(&Perks::default());
+        let whole = seat.vitals.hp;
+        let bite = Blow { push: Vec3::ZERO, damage: 10.0, leaves: Some(Affliction::Burn) };
+        let alight = |game: &mut Game| game.world.query::<&Burning>().iter(&game.world).count();
+        // In a vest: it takes the bite, and the fire doesn't catch.
+        *seat.bag.worn_mut(Wear::Chest) = Some(Stack::fresh(Kind::LightVest, 1));
+        assert!(seat.suffer(&mut game, &mut combat, [bite], false, Felt::default(), false).is_none());
+        assert_eq!((alight(&mut game), seat.bag.armor(), seat.vitals.hp), (0, (30, 40), whole));
+        // In nothing: it bites, and they burn.
+        *seat.bag.worn_mut(Wear::Chest) = None;
+        seat.suffer(&mut game, &mut combat, [bite], false, Felt::default(), false);
+        assert_eq!((alight(&mut game), seat.vitals.hp), (1, whole - 10.0));
+        // A plate carrier weighs on a run out in the wilds, not on a holdout.
+        *seat.bag.worn_mut(Wear::Chest) = Some(Stack::fresh(Kind::PlateCarrier, 1));
+        assert_eq!(seat.weight(), 2);
+        (seat.fit, seat.unburdened) = (Holdout::fit(), true);
+        assert_eq!(seat.weight(), 0);
     }
 }

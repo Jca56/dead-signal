@@ -56,7 +56,8 @@ const EYE: f64 = 1.6;
 pub const PACK: (u8, u8) = (8, 8);
 const POCKETS: (u8, u8) = (4, 2);
 
-/// What a weapon off the wall costs; its rounds cost half.
+/// What a weapon off the wall costs; its rounds cost half. Armor the
+/// same: half to make a piece worn whole again.
 pub fn price(kind: Kind) -> u32 {
     match kind {
         Kind::Pistol => 250,
@@ -70,6 +71,11 @@ pub fn price(kind: Kind) -> u32 {
         Kind::Lmg => 3000,
         Kind::Bandage => 200,
         Kind::Medkit => 600,
+        Kind::BikeHelmet => 300,
+        Kind::LightVest => 750,
+        Kind::MilitaryHelmet => 1250,
+        Kind::PlateCarrier => 2500,
+        Kind::ArmorPlate => 500,
         _ => 1000,
     }
 }
@@ -182,6 +188,12 @@ impl Holdout {
         bag
     }
 
+    /// What's made of what a player wears: the pack's its own size, with
+    /// no backpack to wear.
+    pub fn fit() -> crate::loot::bag::Fit {
+        crate::loot::bag::Fit { pack: Some(PACK), pockets: POCKETS, pack_bonus: (0, 0) }
+    }
+
     /// The run begins: the windows' boards up, where the dead know them.
     pub fn begin(&mut self, world: &mut World) {
         let list = self.arena.windows.iter().map(|w| Barrier { outside: w.outside, inside: w.inside, boards: BOARDS }).collect();
@@ -282,6 +294,15 @@ impl Holdout {
                     }
                 }
                 Wares::Kit(kind) => format!("BUY {} [{}]", kind.def().name, price(kind)),
+                Wares::Gear(kind) => {
+                    let name = kind.def().name;
+                    match wearing(bag, kind) {
+                        Wearing::This { whole: true } => format!("{name} · WORN"),
+                        Wearing::This { whole: false } => format!("REPAIR {name} [{}]", price(kind) / 2),
+                        Wearing::Better => format!("{name} · WEARING BETTER"),
+                        Wearing::Less => format!("BUY {name} [{}]", price(kind)),
+                    }
+                }
             },
             Aimed::Door(i) => {
                 let door = &self.arena.doors[i];
@@ -321,6 +342,7 @@ impl Holdout {
                 None => return (None, None, None),
             },
             Wares::Weapon(kind) | Wares::Kit(kind) => (kind, price(kind), false),
+            Wares::Gear(kind) => return self.outfit(kind, seat, bag, free),
         };
         let cost = if free { 0 } else { cost };
         if self.wallets[seat].points < cost {
@@ -347,6 +369,26 @@ impl Holdout {
         }
         self.wallets[seat].points -= cost;
         (Some(if ammo_only || took.is_none() { Sfx::Pickup } else { Sfx::SlideRack }), None, took)
+    }
+
+    /// A piece of armor off the wall: put on, whole (what was worn there,
+    /// if it was less, thrown away); or, already worn and the worse for
+    /// wear, made whole for half.
+    fn outfit(&mut self, kind: Kind, seat: usize, bag: &mut Bag, free: bool) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+        let Some(gear) = kind.gear() else { return (None, None, None) };
+        let cost = match wearing(bag, kind) {
+            Wearing::This { whole: true } => return (None, Some("ARMOR WHOLE"), None),
+            Wearing::Better => return (None, Some("WEARING BETTER"), None),
+            Wearing::This { whole: false } => price(kind) / 2,
+            Wearing::Less => price(kind),
+        };
+        let cost = if free { 0 } else { cost };
+        if self.wallets[seat].points < cost {
+            return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
+        }
+        *bag.worn_mut(gear.wear) = Some(Stack::fresh(kind, 1));
+        self.wallets[seat].points -= cost;
+        (Some(Sfx::Pickup), None, None)
     }
 
     /// Door `i` open: gone from the world, the dead's ways through it
@@ -416,6 +458,24 @@ impl Holdout {
     }
 }
 
+/// How what's worn where `kind` goes stands to it: `kind` itself (whole,
+/// or the worse for wear), something with more armor, or less (or
+/// nothing).
+enum Wearing {
+    This { whole: bool },
+    Better,
+    Less,
+}
+
+fn wearing(bag: &Bag, kind: Kind) -> Wearing {
+    let most = kind.gear().map_or(0, |g| g.armor);
+    match kind.gear().and_then(|g| bag.worn(g.wear)) {
+        Some(worn) if worn.kind == kind => Wearing::This { whole: worn.loaded >= most },
+        Some(worn) if worn.armor().unwrap_or(0) > most => Wearing::Better,
+        _ => Wearing::Less,
+    }
+}
+
 /// Whether `kind` is carried in its slot.
 fn has(bag: &Bag, kind: Kind) -> bool {
     Slot::of(kind).is_some_and(|s| bag.slot(s).is_some_and(|st| st.kind == kind))
@@ -425,6 +485,8 @@ fn flat_dist(a: Vec3, b: Vec3) -> f64 {
     lntrn_math::Vec2::new(a.x - b.x, a.z - b.z).length()
 }
 
+#[cfg(test)]
+mod armor_tests;
 #[cfg(test)]
 mod cellar_tests;
 

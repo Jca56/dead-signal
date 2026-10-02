@@ -61,8 +61,12 @@ pub struct Seat {
     pub(super) note: Option<(&'static str, f64)>,
     /// Luck, for where things thrown down land.
     pub(super) dice: Dice,
-    /// The perks they came in with.
+    /// The perks they came in with, and what they make of what's worn (a
+    /// holdout's pack is its own); and whether what's worn weighs nothing
+    /// (a holdout's armor is only ever a help).
     pub(super) perks: Perks,
+    pub(super) fit: crate::loot::bag::Fit,
+    pub(super) unburdened: bool,
     /// The wheel's turn not yet stepped through the slots, pixels.
     pub(super) wheel: f64,
     /// Their controls, this frame (the keys and mouse, a pad), and whether
@@ -93,12 +97,17 @@ impl Seat {
     /// Player `n`, fresh: whole, carrying `bag`, with `perks`, and what's
     /// in the first slot taken up; their luck from `seed`.
     pub(super) fn new(n: usize, bag: Bag, perks: Perks, seed: u32, combat: &mut Combat) -> Self {
-        let seat = Self { n, bag, perks, vitals: Vitals::with(&perks), dice: Dice(seed.rotate_left(9 + n as u32) | 1), ..Self::default() };
+        let seat = Self { n, bag, perks, fit: perks.fit(), vitals: Vitals::with(&perks), dice: Dice(seed.rotate_left(9 + n as u32) | 1), ..Self::default() };
         let arms = &mut combat.arms[n];
         arms.hands.reload_speed = perks.reload_speed();
         arms.melee = perks.melee();
         seat.take_up(combat, seat.first_armed());
         seat
+    }
+
+    /// What's worn, as it weighs on them.
+    pub(super) fn weight(&self) -> u32 {
+        if self.unburdened { 0 } else { self.bag.weight() }
     }
 
     /// How far the gun is lowered (patching up, rummaging, or picking
@@ -142,7 +151,7 @@ impl Seat {
         self.bag_ui.slot_keys = settings.keys.slot_names();
         // What's worn weighs on the sprint, the breath and the feet; the
         // armor worn has room for a plate or it hasn't.
-        let (fast, breath, _) = crate::loot::gear::burden(self.bag.weight());
+        let (fast, breath, _) = crate::loot::gear::burden(self.weight());
         game.set_load(n, fast);
         self.vitals.breath = breath;
         let (armor, most) = self.bag.armor();
@@ -307,14 +316,16 @@ impl Seat {
                 continue;
             }
             self.stats.times_hit += 1;
-            // Armor takes it first; while there's any, claws don't cut.
+            // Armor takes it first; while there's any, claws don't cut and
+            // a hound's teeth don't catch.
             let (armored, _) = self.bag.armor();
             let damage = (blow.damage - f64::from(self.bag.soak(blow.damage.round() as u32))).max(0.0);
             self.stats.damage_taken += damage.min(self.vitals.hp);
             match blow.leaves {
+                Some(Affliction::Bleed | Affliction::Burn) if armored > 0 => {}
                 Some(Affliction::Burn) => crate::throw::alight(&mut game.world, self.n),
-                Some(a) if !(a == Affliction::Bleed && armored > 0) => self.vitals.afflict(a),
-                _ => {}
+                Some(a) => self.vitals.afflict(a),
+                None => {}
             }
             if self.vitals.hurt(damage) {
                 let side = if self.stats.times_hit.is_multiple_of(2) { 1.0 } else { -1.0 };
@@ -341,7 +352,7 @@ impl Seat {
         let sprinting = game.player(self.n).is_some_and(|(b, _)| b.sprinting && b.speed_flat() > 0.5);
         let change = self.vitals.update(dt, sprinting);
         // Heavy gear, sprinting: footfalls the dead near hear.
-        let (_, _, heard) = crate::loot::gear::burden(self.bag.weight());
+        let (_, _, heard) = crate::loot::gear::burden(self.weight());
         self.footfall_in -= dt;
         if sprinting
             && heard > 0.0

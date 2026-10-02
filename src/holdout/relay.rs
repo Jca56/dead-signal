@@ -126,6 +126,17 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(19, 36.5), -1, Face::N, Wares::Weapon(Item::Lmg)),
         BuyAt(ew(13, 41.0), -1, Face::N, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-1, 36.5), -1, Face::S, Wares::Kit(Item::Bandage)),
+        // Armor: a bike helmet in the control room, a vest on the
+        // transmitter's wall on the yard, the army's helmet in its mess
+        // hall, and its plate carrier down in the armory; plates to mend
+        // them by the gate, in the motor pool's bay and the station's lobby.
+        BuyAt(ns(-2, -12.0), 0, Face::E, Wares::Gear(Item::BikeHelmet)),
+        BuyAt(ew(-11, -8.5), 0, Face::S, Wares::Gear(Item::LightVest)),
+        BuyAt(ew(-19, 23.5), 0, Face::S, Wares::Gear(Item::MilitaryHelmet)),
+        BuyAt(ns(32, 16.0), -1, Face::E, Wares::Gear(Item::PlateCarrier)),
+        BuyAt(ew(19, 9.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
+        BuyAt(ns(-24, 0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
+        BuyAt(ns(32, 15.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
     ],
     props: &[
         Prop::Tower(0.0, 4.0),
