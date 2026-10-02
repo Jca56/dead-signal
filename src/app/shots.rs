@@ -9,10 +9,12 @@
 //! and the arms; none of the HUD) to `<dir>/<name>.png`. With
 //! `WILDS=<seed>` it's an extraction run's map by day instead, looked at
 //! from outside the buildings nearest where the run starts. With
-//! `RADIO=up` the player has the radio out in every view (`RADIO=key`:
-//! keyed, at their mouth).
+//! `RADIO=up` the player has the radio out in every view, its card drawn
+//! over the picture as the window's UI would (`RADIO=dial`: a code half
+//! in; `RADIO=key`: a whole one, the handset at their mouth). `SIZE=1920x1080`
+//! draws them that big (1280x720 if not).
 
-use lntrn_app::lntrn_render::{Gpu, Images, RenderGraph, TexturePool};
+use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
 use lntrn_math::Vec3;
 
@@ -21,7 +23,19 @@ use crate::map::build::{Blueprint, Building};
 use crate::settings::Settings;
 use crate::zombie::{self, kind::Kind, looks::Theme};
 
-const SIZE: [u32; 2] = [1280, 720];
+/// How big the pictures are: `SIZE=<wide>x<high>`, or 1280 by 720.
+fn size() -> [u32; 2] {
+    let asked = std::env::var("SIZE").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?])));
+    asked.unwrap_or([1280, 720])
+}
+
+/// What draws some of the window's UI over a picture: a UI to lay it out
+/// in, and the pass and the glyphs' texture that draw it.
+struct Overlay {
+    ui: lntrn_ui::testing::Harness,
+    pass: Pass2d,
+    atlas: AtlasTexture,
+}
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// A view: its name, where the player's feet are (grid metres, and the
@@ -134,9 +148,12 @@ impl DeadSignal {
     }
 
     /// The frame as the player standing at `feet`, looking along `yaw` and
-    /// `pitch`, sees it at `time`: its pixels, RGBA.
+    /// `pitch`, sees it at `time`: its pixels, RGBA. (With the radio out,
+    /// its card's drawn `over` it.)
     #[allow(clippy::too_many_arguments)]
-    fn frame_off_screen(&mut self, gpu: &Gpu, target: &wgpu::Texture, feet: Vec3, yaw: f64, pitch: f64, time: f64, firing: bool) -> Vec<u8> {
+    fn frame_off_screen(&mut self, gpu: &Gpu, target: &wgpu::Texture, feet: Vec3, yaw: f64, pitch: f64, time: f64, firing: bool, over: (&mut Overlay, &Images)) -> Vec<u8> {
+        #[allow(non_snake_case)]
+        let SIZE = size();
         self.game.teleport(0, feet);
         if let Some(mut view) = self.game.player_view_mut(0) {
             (view.yaw, view.pitch) = (yaw, pitch);
@@ -160,8 +177,9 @@ impl DeadSignal {
             if let (Some(how), Some(seat)) = (&radio, self.run.seats.first_mut()) {
                 let r = seat.radio.get_or_insert_default();
                 r.pull();
-                if how == "key" && k == 64 {
-                    r.key();
+                let code = crate::radio::codes::ENTRIES[0].code;
+                for &arrow in code.iter().take(if how == "key" { code.len() } else { 2 }).filter(|_| (how == "key" && k == 64) || (how == "dial" && k == 88)) {
+                    r.press(arrow);
                 }
                 let hands = &mut self.combat.arms[0].hands;
                 hands.stow();
@@ -180,6 +198,13 @@ impl DeadSignal {
             let mut cx = RenderCx { gpu, graph: &mut graph, backbuffer, depth: None, size: SIZE, window: 0 };
             self.render(&mut cx);
             graph.execute(gpu, &mut pool, &mut encoder);
+        }
+        if let (Some(seat), (over, images)) = (self.run.seats.first().filter(|s| s.radio_out()), over) {
+            over.ui.frame(|ui| {
+                let window = ui.clip();
+                seat.radio_card(ui, window, window);
+            });
+            over.pass.draw(gpu, &mut encoder, &view, SIZE, &over.ui.draw, &mut over.atlas, over.ui.text.atlas_mut(), images, None);
         }
         let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor { label: Some("shot"), size: u64::from(SIZE[0] * SIZE[1] * 4), usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
         encoder.copy_texture_to_buffer(
@@ -207,6 +232,10 @@ fn shots() {
     let mut images = Images::new(&gpu);
     let mut app = DeadSignal::new(Settings::default(), false);
     app.init_gpu(&gpu, FORMAT, &mut images);
+    #[allow(non_snake_case)]
+    let SIZE = size();
+    let ui = lntrn_ui::testing::Harness::new(f64::from(SIZE[0]), f64::from(SIZE[1]));
+    let mut over = Overlay { pass: Pass2d::new(&gpu, FORMAT, &images), atlas: AtlasTexture::new(&gpu, ui.text.atlas()), ui };
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("shot"),
         size: wgpu::Extent3d { width: SIZE[0], height: SIZE[1], depth_or_array_layers: 1 },
@@ -227,7 +256,7 @@ fn shots() {
         app.wilds_off_screen(&gpu, &mut images, seed.parse().expect("WILDS=<seed>"));
         eprintln!("shots: {} panes of glass on the map", app.game.world.resource::<crate::glass::Glazing>().panes.len());
         for (i, (name, feet, yaw)) in app.building_views(4).into_iter().enumerate() {
-            let pixels = app.frame_off_screen(&gpu, &target, feet, yaw, 0.08, 100.0 + i as f64, false);
+            let pixels = app.frame_off_screen(&gpu, &target, feet, yaw, 0.08, 100.0 + i as f64, false, (&mut over, &images));
             write(&name, pixels);
         }
         return;
@@ -263,7 +292,7 @@ fn shots() {
         let about = Vec3::new(x + 0.5, f64::from(*level) * crate::map::building::plan::STOREY + 0.3, z + 0.5);
         let floor = app.game.world.resource::<zombie::Nav>().0.as_ref().and_then(|n| n.height_at(about)).unwrap_or(about.y);
         let feet = Vec3::new(about.x, floor, about.z);
-        let pixels = app.frame_off_screen(&gpu, &target, feet, -bearing.to_radians(), pitch.to_radians(), 100.0 + i as f64, name.ends_with("_shot"));
+        let pixels = app.frame_off_screen(&gpu, &target, feet, -bearing.to_radians(), pitch.to_radians(), 100.0 + i as f64, name.ends_with("_shot"), (&mut over, &images));
         write(name, pixels);
     }
 }

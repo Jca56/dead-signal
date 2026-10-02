@@ -377,6 +377,31 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
                 note(0.0, 1250.0) + note(0.1, 1660.0) + hiss
             })
         }
+        Sfx::DialUp | Sfx::DialRight | Sfx::DialDown | Sfx::DialLeft => {
+            // A key of the handset: two notes at once, as a telephone's
+            // are, each arrow its own pair, through a small speaker.
+            let (low, high) = match sfx {
+                Sfx::DialUp => (852.0, 1477.0),
+                Sfx::DialRight => (770.0, 1336.0),
+                Sfx::DialLeft => (697.0, 1209.0),
+                _ => (620.0, 1075.0),
+            };
+            let mut f = Svf::default();
+            render(0.11, 0.4, move |t, n| {
+                let tone = sine(t, low) + sine(t, high) * 0.8;
+                let shape = (t / 0.004).min(1.0) * (1.0 - ((t - 0.07) / 0.035).clamp(0.0, 1.0));
+                f.run(tone + n.next() * 0.06, 1300.0, 0.9).1 * shape
+            })
+        }
+        Sfx::DialWrong => {
+            // A wrong arrow: the handset's low double buzz.
+            let mut f = Svf::default();
+            render(0.26, 0.42, move |t, n| {
+                let on = f32::from(t < 0.09 || (0.13..0.24).contains(&t));
+                let buzz = pulse(t, 148.0) + pulse(t, 151.0) * 0.6 + n.next() * 0.1;
+                f.run(buzz, 900.0, 0.8).0 * on
+            })
+        }
         Sfx::Static => {
             // A radio opening: a burst of hiss, chirps bleeding through.
             let (mut f, mut g) = (Svf::default(), Svf::default());

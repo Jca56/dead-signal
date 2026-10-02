@@ -166,6 +166,13 @@ fn radio_over(sees: [f64; 2]) -> f64 {
     (RADIO_AT.x + RADIO_REACH - sees[0] * -RADIO_AT.z).max(0.0)
 }
 
+/// Where the radio's near side is across a pane that sees `sees`, from -1
+/// (the pane's left) to 1 (its right): what's drawn beside it keeps to
+/// the left of that.
+pub fn radio_side(sees: [f64; 2]) -> f64 {
+    (RADIO_AT.x - radio_over(sees) - RADIO_REACH * 1.6) / -RADIO_AT.z / sees[0]
+}
+
 /// `clip` of `gltf` at `t` seconds (a looping clip wraps round), over its
 /// rest pose (just the rest pose if there's no such clip).
 fn sample(gltf: &Gltf, clip: &str, t: f64, looping: bool) -> Vec<Transform> {

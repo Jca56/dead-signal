@@ -123,13 +123,14 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - **A real radio in the hands first**, with its panel: "it's like... our whole thing".
 - Call-ins in this order: **ammo drop, medic drop, strafing run**, then the **gunship helicopter** last, with time taken over it.
 - Air support only reaches open sky: nothing comes through a roof.
+- **Codes, not a menu** (Helldivers style): each call-in is a combo of arrows punched in on the radio. A drop is then marked with a thrown flare; a strike with a red zone on the ground, its shape the strike's.
 - The handset: an army walkie-talkie (olive brick, stubby antenna, amber display, talk button on the side), held at the lower right with the menu a big card beside it. Q on the keyboard, hold View on a pad. HOLDOUT only for now.
 
 **Stages**
 - [x] 1. The radio in hand. An army walkie-talkie on the arms rig (`assets/blender/radio.py` → `viewmodel_radio.glb`: an idle, and keyed, brought to the mouth with the thumb on the talk button; raised and lowered as the guns are). Q (hold View on a pad: a holdout has no map) pulls it out and puts it away. The gun's put away while it's out and comes back after; a shot, a blow, another weapon, a kit, a throw, the bag or going down puts the radio away. E (X) keys it. In a side by side pane it's moved over into view.
-- [ ] 2. Its panel. Drawn in the player's own pane (split screen too), big type, worked by the arrows / d-pad and one button: the list of entries, what each costs, the signal there is, and a line of what the entry does. While it's up a pad's controls are the radio's (as they're the bag's with the bag up).
+- [x] 2. Its codes. Helldivers style: every call-in has a code of arrows (`src/radio/codes.rs`), and a card beside the radio (in the player's own pane, split screen too, big type) lists them. With the radio out W/A/S/D punch the arrows in and the feet stand still (a pad: the d-pad, and the stick still walks); the codes that still match stay lit as it's dialled, a wrong arrow starts it over, a whole code keys the radio and it's called in (for now, only its name's flashed: nothing comes of it till the stages below).
 - [ ] 3. Signal. Each player's meter, filled by kills (more for a headshot or a blade), shown on the HUD by the points. Entries greyed out till there's enough.
-- [ ] 4. Where it lands. An entry that comes from the sky is called onto the open ground looked at (a flare of smoke marks it); refused under a roof.
+- [ ] 4. Where it lands. A drop: the code puts a flare in the hand, thrown to where it's to come down. A strike: a red outlined zone on the ground (a strip for a strafing run, a circle for what falls on one spot), moved to where it's wanted and confirmed. Refused under a roof.
 - [ ] 5. Ammo drop and medic drop. A crate comes down on the flare; what's in it lies about it to be taken (the 30 s rule).
 - [ ] 6. Strafing run. A few seconds' warning (engines), then a line raked across the open ground through the flare: the dead in it cut down, glass broken, chips flying.
 - [ ] 7. Power-ups as entries: double points, one-hit kills, max ammo for all; each for a while, with its time shown.

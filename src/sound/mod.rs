@@ -106,6 +106,12 @@ pub enum Sfx {
     RadioOn,
     RadioTalk,
     RadioOver,
+    /// Its dial: each arrow's own tone, and the buzz of a wrong one.
+    DialUp,
+    DialRight,
+    DialDown,
+    DialLeft,
+    DialWrong,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -120,7 +126,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 64] = [
+const ALL: [Sfx; 69] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -177,6 +183,11 @@ const ALL: [Sfx; 64] = [
     Sfx::RadioOn,
     Sfx::RadioTalk,
     Sfx::RadioOver,
+    Sfx::DialUp,
+    Sfx::DialRight,
+    Sfx::DialDown,
+    Sfx::DialLeft,
+    Sfx::DialWrong,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

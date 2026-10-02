@@ -1,14 +1,17 @@
 //! The handheld radio, from the run's side: Q (a pad's View, held) pulls
 //! it out and puts it away; out, the hands are its (what was held is put
-//! away, to come back after) and E keys it. Anything else the hands are
+//! away, to come back after), the feet stand still, and the keys that
+//! walk (a pad's d-pad) punch its code in. Anything else the hands are
 //! wanted for puts it away: a shot or a blow, another weapon, a kit, a
 //! throw, the bag, someone to pick up, going down.
 
+use lntrn_math::Rect;
 use lntrn_ui::Ui;
 
 use super::seat::Seat;
 use crate::combat::Combat;
-use crate::radio::{Cue, Shown};
+use crate::radio::codes::{Arrow, Dialed};
+use crate::radio::{Cue, Shown, card};
 use crate::settings::keys::Action;
 use crate::sound::Sfx;
 
@@ -18,9 +21,10 @@ impl Seat {
         self.radio.is_some_and(|r| r.out())
     }
 
-    /// Whether it's up in the hand, to be keyed.
-    pub(super) fn radio_ready(&self) -> bool {
-        self.radio.is_some_and(|r| r.ready()) && self.reviving.is_none()
+    /// Whether it's in hand (or wanted there): the feet stand still to
+    /// dial.
+    pub(super) fn radio_held(&self) -> bool {
+        self.radio.is_some_and(|r| r.holds())
     }
 
     /// The handset as it's drawn, while it's in view.
@@ -38,22 +42,30 @@ impl Seat {
     }
 
     /// A frame of the radio: pulled out or put away if asked (and the
-    /// hands `free` for it; `cut` short by a shot or a blow), keyed, and
-    /// what's heard of it.
+    /// hands `free` for it; `cut` short by a shot or a blow), its code
+    /// punched in, and what's heard of it.
     pub(super) fn radioing(&mut self, ui: &mut Ui, combat: &mut Combat, free: bool, cut: bool, dt: f64) {
-        let Some(mut radio) = self.radio else { return };
-        if radio.out() {
+        let Some(out) = self.radio.map(|r| r.out()) else { return };
+        if out {
             if !free || cut || self.input.pressed(ui, Action::Radio) {
                 self.radio_away(combat);
-            } else if self.radio_ready() && self.input.pressed(ui, Action::Interact) {
-                radio.key();
-                self.radio = Some(radio);
             }
         } else if free && self.input.pressed(ui, Action::Radio) {
-            radio.pull();
-            self.radio = Some(radio);
+            self.radio.iter_mut().for_each(|r| r.pull());
+            // (At once: the first arrow may come with the very next frame.)
+            self.input.set_dialing(true);
         }
+        let arrow = self.input.dial(ui);
         let Some(radio) = &mut self.radio else { return };
+        if let Some((arrow, dialed)) = arrow.and_then(|a| radio.press(a).map(|d| (a, d))) {
+            let tone = match arrow {
+                Arrow::Up => Sfx::DialUp,
+                Arrow::Right => Sfx::DialRight,
+                Arrow::Down => Sfx::DialDown,
+                Arrow::Left => Sfx::DialLeft,
+            };
+            combat.play(if dialed == Dialed::Wrong { Sfx::DialWrong } else { tone }, 0.7);
+        }
         // Wanted or in hand, the hands are its: what's held goes away.
         let hands = &mut combat.arms[self.n].hands;
         if radio.holds() {
@@ -63,10 +75,31 @@ impl Seat {
             let (sfx, gain) = match cue {
                 Cue::On => (Sfx::RadioOn, 0.8),
                 Cue::Talk => (Sfx::RadioTalk, 0.8),
-                Cue::Over => (Sfx::RadioOver, 0.7),
+                // (What it's called for comes of it from here, in time:
+                // for now, its name's flashed.)
+                Cue::Over(call) => {
+                    self.note = Some((call.entry().name, super::loot::NOTE_FOR));
+                    (Sfx::RadioOver, 0.7)
+                }
             };
             combat.play(sfx, gain);
         }
+    }
+
+    /// The radio's card, beside it over their `pane` of the `window`,
+    /// while it's out.
+    pub fn radio_card(&self, ui: &mut Ui, pane: Rect, window: Rect) {
+        let Some(radio) = self.radio.filter(|r| r.card() > 0.0) else { return };
+        let on_pad = self.input.on_pad || !self.input.has_keys();
+        // What dials: the keys that walk, written together if each is a
+        // letter ("WASD").
+        let keys = [Action::Forward, Action::Left, Action::Back, Action::Right].map(|a| self.input.name(a));
+        let dial = match on_pad {
+            true => "D-PAD".to_string(),
+            false if keys.iter().all(|k| k.chars().count() == 1) => keys.concat(),
+            false => keys.join(" "),
+        };
+        card::draw(ui, pane, window, &radio, &card::Hints { dial, away: self.input.name(Action::Radio), held: on_pad });
     }
 }
 
@@ -76,6 +109,7 @@ mod tests {
     use crate::loot::bag::{Bag, Slot};
     use crate::loot::{Kind, Stack};
     use crate::radio::Radio;
+    use crate::radio::codes::Call;
     use crate::weapon::{Trigger, Weapon};
     use lntrn_ui::Key;
     use lntrn_ui::testing::Harness;
@@ -102,6 +136,7 @@ mod tests {
         for k in 0..frames {
             h.frame(|ui| {
                 seat.input.update(ui, Some(Default::default()), true, Default::default(), DT);
+                seat.input.set_dialing(seat.radio_held());
                 seat.radioing(ui, combat, true, fire && k == 0, DT);
                 seat.switch_hands(ui, combat, true);
                 combat.arms[0].hands.update(Trigger::default(), DT);
@@ -121,13 +156,18 @@ mod tests {
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 2);
         assert!(seat.radio_out() && seat.radio_shown().is_none(), "the gun's not away yet");
         run(&mut h, &mut seat, &mut combat, None, false, 90);
-        assert!(seat.radio_ready() && combat.arms[0].hands.stowed() == Some(Some(Slot::Sidearm)));
+        assert!(seat.radio_held() && combat.arms[0].hands.stowed() == Some(Some(Slot::Sidearm)));
         assert_eq!(seat.radio_shown().map(|s| (s.clip, s.stowed)), Some(("Idle", 0.0)));
-        // E keys it; and it's ready again after.
-        run(&mut h, &mut seat, &mut combat, Some(Key::Char('e')), false, 2);
+        // W, D, D: a strafing run's code. It's keyed, its name's flashed
+        // as it goes out, and the dial's clear for the next.
+        for key in ['w', 'd', 'd'] {
+            run(&mut h, &mut seat, &mut combat, Some(Key::Char(key)), false, 2);
+        }
+        assert_eq!(seat.radio.and_then(|r| r.calling()), Some(Call::StrafingRun));
         assert_eq!(seat.radio_shown().map(|s| s.clip), Some("Key"));
         run(&mut h, &mut seat, &mut combat, None, false, 90);
-        assert!(seat.radio_ready());
+        assert_eq!(seat.note.map(|(n, _)| n), Some("STRAFING RUN"));
+        assert!(seat.radio.is_some_and(|r| r.dialing() && r.dial().len() == 0));
         // Q again: down it goes, and the pistol's back in hand.
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 90);
         let hands = &combat.arms[0].hands;
@@ -142,7 +182,7 @@ mod tests {
         let mut seat = seat(&mut combat);
         // The trigger: the radio down, the pistol back up.
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 90);
-        assert!(seat.radio_ready());
+        assert!(seat.radio_held());
         run(&mut h, &mut seat, &mut combat, None, true, 90);
         assert!(!seat.radio_out() && combat.arms[0].hands.held == Some(Slot::Sidearm) && !combat.arms[0].hands.busy());
         // The blade's key: the radio down, and it's the blade that comes up.
@@ -152,7 +192,7 @@ mod tests {
         // The hands wanted for something else (not `free`): away at once.
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 90);
         h.frame(|ui| seat.radioing(ui, &mut combat, false, false, DT));
-        assert!(seat.radio_shown().is_some_and(|s| s.stowed >= 0.0) && !seat.radio_ready());
+        assert!(seat.radio_shown().is_some_and(|s| s.stowed >= 0.0) && !seat.radio_held());
         run(&mut h, &mut seat, &mut combat, None, false, 90);
         assert!(!seat.radio_out() && combat.arms[0].hands.held == Some(Slot::Melee));
     }

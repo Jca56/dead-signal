@@ -157,8 +157,10 @@ impl Seat {
         }
         let open = self.open.is_some();
         let down = self.down.is_some();
-        // (The bag up, their pad's the bag's.)
+        // (The bag up, their pad's the bag's; the radio out, the keys that
+        // walk are its dial.)
         self.input.set_rummaging(open);
+        self.input.set_dialing(self.radio_held());
         let settings = game.world.get_resource::<Settings>().cloned().unwrap_or_default();
         self.bag_ui.slot_keys = settings.keys.slot_names();
         // What's worn weighs on the sprint, the breath and the feet; the

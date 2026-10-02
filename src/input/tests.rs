@@ -1,5 +1,4 @@
 use super::*;
-use lntrn_sys::gamepad::Button;
 use lntrn_ui::testing::Harness;
 
 #[test]
@@ -176,5 +175,32 @@ fn view_held_is_the_radio_where_that_s_what_s_asked_for_and_q_is_on_the_keys() {
         // On the keys it's Q.
         i.update(ui, Some(Keys::default()), true, PadFrame::default(), 0.016);
         assert!(i.pressed(ui, Action::Radio) && !i.pressed(ui, Action::Radio));
+    });
+}
+
+#[test]
+fn the_radio_out_the_keys_that_walk_and_the_d_pad_dial_and_only_the_stick_walks() {
+    let mut h = Harness::new(800.0, 600.0);
+    h.event(lntrn_ui::Event::Key { key: lntrn_ui::Key::Char('w'), pressed: true, repeat: false, mods: Default::default() });
+    h.frame(|ui| {
+        let mut i = Input::default();
+        // Not dialling: W (down, and held) walks, and nothing's dialled.
+        i.update(ui, Some(Keys::default()), true, PadFrame::default(), 0.016);
+        assert!(i.dial(ui).is_none() && i.walk(ui).y > 0.9);
+        // Dialling: W is up, once, and the feet stand still.
+        i.set_dialing(true);
+        assert_eq!((i.dial(ui), i.dial(ui)), (Some(Arrow::Up), None));
+        assert_eq!(i.walk(ui), Vec2::ZERO);
+        // On a pad the d-pad dials (no bandage's put on), the stick walks,
+        // and the rest is the game's still.
+        let mut pad = pad::frame_with(&[Button::Left, Button::South]);
+        pad.left = Vec2::new(0.0, 1.0);
+        i.update(ui, None, true, pad, 0.016);
+        assert!(!i.pressed(ui, Action::Bandage) && i.pressed(ui, Action::Jump));
+        assert_eq!((i.dial(ui), i.dial(ui)), (Some(Arrow::Left), None));
+        assert!(i.walk(ui).y > 0.9);
+        i.set_dialing(false);
+        i.update(ui, None, true, pad, 0.016);
+        assert!(i.pressed(ui, Action::Bandage) && i.dial(ui).is_none());
     });
 }

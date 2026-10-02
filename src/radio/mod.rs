@@ -1,10 +1,18 @@
 //! The handheld radio every player carries in a holdout: pulled out, the
 //! gun's put away and the handset comes up in the right hand in its
-//! place; keyed, it's brought to the mouth and the talk button pressed;
-//! put away, it goes down and the gun comes back. A machine of states,
-//! like the hands (`weapon`): it knows nothing of the world, and says
-//! what's to be heard at the moments its clips show them. How it's drawn
-//! is the viewmodel's (`viewmodel`), in the weapon's place.
+//! place; a code of arrows is punched in on it (`codes.rs`: what there is
+//! to call for, and each one's code; `card.rs`: the card of them drawn
+//! beside it); a whole code keys it, brought to the mouth with the talk
+//! button pressed, and what was called for goes out as the button's let
+//! go; put away, it goes down and the gun comes back. A machine of
+//! states, like the hands (`weapon`): it knows nothing of the world, and
+//! says what's to be heard at the moments its clips show them. How it's
+//! drawn is the viewmodel's (`viewmodel`), in the weapon's place.
+
+pub mod card;
+pub mod codes;
+
+use codes::{Arrow, Call, Dial, Dialed};
 
 /// How long it takes to come up and to go down, and how long keying it
 /// takes, seconds.
@@ -14,6 +22,9 @@ pub const KEY: f64 = 1.0;
 /// Into keying it, when the talk button goes down and when it's let go.
 const TALK_AT: f64 = 0.3;
 const OVER_AT: f64 = 0.8;
+/// How long its card takes to come up, and a wrong arrow shows on it.
+const CARD_IN: f64 = 0.12;
+pub const WRONG_FOR: f64 = 0.35;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 enum State {
@@ -33,9 +44,9 @@ enum State {
 pub enum Cue {
     /// It's switched on, coming up.
     On,
-    /// The talk button down; and let go, the message sent.
+    /// The talk button down; and let go, what was called for sent.
     Talk,
-    Over,
+    Over(Call),
 }
 
 /// The handset as it's drawn: which of its clips, how far into it (an
@@ -51,8 +62,15 @@ pub struct Shown {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Radio {
     state: State,
-    /// Seconds into the state.
+    /// Seconds into the state, and since it was pulled out.
     t: f64,
+    since: f64,
+    /// The code being punched in; what it came to, to be called in (it's
+    /// keyed once it's up), or being called in now; and how long since a
+    /// wrong arrow.
+    dial: Dial,
+    calling: Option<Call>,
+    wrong: Option<f64>,
 }
 
 impl Radio {
@@ -63,14 +81,39 @@ impl Radio {
     }
 
     /// Wanted or in hand (not on its way down): what was held stays put
-    /// away.
+    /// away, and the feet stand still to dial.
     pub fn holds(&self) -> bool {
         !matches!(self.state, State::Away | State::Lower)
     }
 
-    /// Up in the hand, ready to be keyed.
-    pub fn ready(&self) -> bool {
-        self.state == State::Up
+    /// Whether arrows are being taken: from the moment it's pulled out
+    /// (the fingers needn't wait for it to come up), till a code's in.
+    pub fn dialing(&self) -> bool {
+        matches!(self.state, State::Wanted | State::Raise | State::Up) && self.calling.is_none()
+    }
+
+    /// What's punched in so far; what's being called in (or about to be);
+    /// and how long since a wrong arrow, while that shows.
+    pub fn dial(&self) -> &Dial {
+        &self.dial
+    }
+
+    pub fn calling(&self) -> Option<Call> {
+        self.calling
+    }
+
+    pub fn wrong(&self) -> Option<f64> {
+        self.wrong.filter(|&t| t < WRONG_FOR)
+    }
+
+    /// How much its card shows, 0–1: up as soon as it's pulled out, gone
+    /// as it goes down.
+    pub fn card(&self) -> f64 {
+        match self.state {
+            State::Away => 0.0,
+            State::Lower => 1.0 - (self.t / LOWER).min(1.0),
+            _ => (self.since / CARD_IN).min(1.0),
+        }
     }
 
     fn start(&mut self, state: State) {
@@ -80,17 +123,18 @@ impl Radio {
     /// Pull it out (once the gun's away).
     pub fn pull(&mut self) {
         if self.state == State::Away {
-            self.start(State::Wanted);
+            *self = Self { state: State::Wanted, ..Self::default() };
         }
     }
 
-    /// Put it away, from wherever it's got to. Whether it was in view,
-    /// and is on its way down now.
+    /// Put it away, from wherever it's got to (a code half in is
+    /// forgotten; one not yet sent isn't). Whether it was in view, and is
+    /// on its way down now.
     pub fn put_away(&mut self) -> bool {
         match self.state {
             State::Away | State::Lower => return false,
             State::Wanted => {
-                self.start(State::Away);
+                *self = Self::default();
                 return false;
             }
             // (Half up, it goes down from there.)
@@ -101,17 +145,24 @@ impl Radio {
             }
             State::Up | State::Key => self.start(State::Lower),
         }
+        self.dial.clear();
+        self.calling = None;
         true
     }
 
-    /// Key it: brought to the mouth, the talk button pressed. Whether it
-    /// was (it's up, and not being keyed already).
-    pub fn key(&mut self) -> bool {
-        let ready = self.ready();
-        if ready {
-            self.start(State::Key);
+    /// Punch `arrow` in, if arrows are being taken; what it came to. A
+    /// whole code's called in: it's keyed, as soon as it's up.
+    pub fn press(&mut self, arrow: Arrow) -> Option<Dialed> {
+        if !self.dialing() {
+            return None;
         }
-        ready
+        let dialed = self.dial.press(arrow);
+        match dialed {
+            Dialed::On => {}
+            Dialed::Wrong => self.wrong = Some(0.0),
+            Dialed::Called(call) => self.calling = Some(call),
+        }
+        Some(dialed)
     }
 
     /// Move on by `dt`, the hands `empty` (the gun put away) or not; what's
@@ -120,6 +171,8 @@ impl Radio {
         let mut cues = Vec::new();
         let before = self.t;
         self.t += dt;
+        self.since += dt;
+        self.wrong = self.wrong.map(|t| t + dt);
         let crossed = |at: f64| before < at && self.t >= at;
         match self.state {
             State::Away => {}
@@ -129,14 +182,19 @@ impl Radio {
             }
             State::Wanted => {}
             State::Raise if self.t >= RAISE => self.start(State::Up),
+            // A code's in: brought to the mouth, the talk button pressed.
+            State::Up if self.calling.is_some() => self.start(State::Key),
             State::Key => {
-                for (at, cue) in [(TALK_AT, Cue::Talk), (OVER_AT, Cue::Over)] {
-                    if crossed(at) {
-                        cues.push(cue);
-                    }
+                if crossed(TALK_AT) {
+                    cues.push(Cue::Talk);
+                }
+                if let Some(call) = self.calling.filter(|_| crossed(OVER_AT)) {
+                    cues.push(Cue::Over(call));
                 }
                 if self.t >= KEY {
                     self.start(State::Up);
+                    self.dial.clear();
+                    self.calling = None;
                 }
             }
             State::Lower if self.t >= LOWER => self.start(State::Away),
@@ -159,67 +217,4 @@ impl Radio {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const DT: f64 = 1.0 / 60.0;
-
-    /// `radio` run on for `seconds`, the hands empty: everything heard.
-    fn run(radio: &mut Radio, seconds: f64) -> Vec<Cue> {
-        (0..(seconds / DT).round() as u32).flat_map(|_| radio.update(true, DT)).collect()
-    }
-
-    #[test]
-    fn it_waits_for_the_gun_to_be_put_away_then_comes_up() {
-        let mut r = Radio::default();
-        assert!(!r.out() && r.shown().is_none());
-        r.pull();
-        assert!(r.out() && r.shown().is_none(), "wanted, not yet in view");
-        assert!(r.update(false, 1.0).is_empty() && r.shown().is_none(), "the gun's still in hand");
-        assert_eq!(r.update(true, DT), [Cue::On]);
-        assert_eq!(r.shown().map(|s| s.stowed), Some(1.0), "from out of view");
-        run(&mut r, RAISE * 0.5);
-        assert!(r.shown().is_some_and(|s| s.stowed > 0.3 && s.stowed < 0.7));
-        run(&mut r, RAISE);
-        assert!(r.ready());
-        assert_eq!(r.shown(), Some(Shown { clip: "Idle", t: None, stowed: 0.0 }));
-    }
-
-    #[test]
-    fn keyed_it_talks_and_is_ready_again() {
-        let mut r = Radio::default();
-        assert!(!r.key(), "not while it's away");
-        r.pull();
-        run(&mut r, RAISE + 0.1);
-        assert!(r.key() && !r.key(), "once at a time");
-        assert_eq!(r.shown().map(|s| s.clip), Some("Key"));
-        assert_eq!(run(&mut r, KEY + 0.1), [Cue::Talk, Cue::Over]);
-        assert!(r.ready());
-    }
-
-    #[test]
-    fn put_away_it_goes_down_from_where_it_is_and_the_hands_are_free() {
-        let mut r = Radio::default();
-        // Wanted and not yet up: just not wanted.
-        r.pull();
-        r.put_away();
-        assert!(!r.out());
-        // Half up: down from half way, in half the time.
-        r.pull();
-        run(&mut r, DT + RAISE * 0.5);
-        let half = r.shown().map(|s| s.stowed).unwrap();
-        r.put_away();
-        assert!(r.out() && (r.shown().unwrap().stowed - half).abs() < 0.05);
-        run(&mut r, LOWER * 0.5 + 2.0 * DT);
-        assert!(!r.out() && r.shown().is_none());
-        // Up, and mid-word: down all the way.
-        r.pull();
-        run(&mut r, RAISE + 0.1);
-        r.key();
-        run(&mut r, 0.4);
-        r.put_away();
-        assert_eq!(r.shown().map(|s| s.stowed), Some(0.0));
-        assert!(run(&mut r, LOWER + DT).is_empty(), "cut short: nothing more's heard");
-        assert!(!r.out());
-    }
-}
+mod tests;

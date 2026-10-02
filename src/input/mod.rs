@@ -4,7 +4,8 @@
 //! keys always were: held, or pressed this frame (a press taken, so
 //! nothing else acts on it too). How a stick turns the view, and aim
 //! assist's drag on it, is in `look.rs`; a pad at a screen of cells (the
-//! bag), in `steer.rs`.
+//! bag), in `steer.rs`. With the radio out the keys that walk (a pad's
+//! d-pad) punch its code in instead ([`Input::dial`]).
 
 pub mod look;
 pub mod pad;
@@ -13,6 +14,9 @@ pub mod steer;
 use lntrn_math::Vec2;
 use lntrn_ui::Ui;
 
+use lntrn_sys::gamepad::Button;
+
+use crate::radio::codes::Arrow;
 use crate::settings::keys::{Action, Bind, Keys};
 use pad::{Control, PadBinds, PadFrame};
 
@@ -25,6 +29,9 @@ const MOUSED: f64 = 2.0;
 const HOLD: f64 = 0.4;
 const USE_HOLD: f64 = 0.22;
 const BLADE_HOLD: f64 = 0.3;
+/// The radio's dial: each arrow's button of a pad's d-pad, and the key
+/// that's it (the one that walks that way).
+const DIAL: [(Arrow, Button, Action); 4] = [(Arrow::Up, Button::Up, Action::Forward), (Arrow::Right, Button::Right, Action::Right), (Arrow::Down, Button::Down, Action::Back), (Arrow::Left, Button::Left, Action::Left)];
 
 /// What a pad's weapon button asks: the other gun (as it goes down), or
 /// the blade (held on).
@@ -133,6 +140,9 @@ pub struct Input {
     /// of its controls are the game's.
     rummaging: bool,
     steering: steer::Repeat,
+    /// The radio's out: the keys that walk, and their pad's d-pad, are
+    /// its dial ([`Input::dial`]).
+    dialing: bool,
 }
 
 impl Input {
@@ -195,6 +205,27 @@ impl Input {
         self.rummaging = rummaging;
     }
 
+    /// The radio's out (or away): out, the keys that walk and a pad's
+    /// d-pad punch its code in, and do nothing else.
+    pub fn set_dialing(&mut self, dialing: bool) {
+        self.dialing = dialing;
+    }
+
+    /// The arrow punched in this frame, the radio out (a press taken): one
+    /// of the keys that walk (forward is up), or of a pad's d-pad.
+    pub fn dial(&mut self, ui: &mut Ui) -> Option<Arrow> {
+        if !self.dialing {
+            return None;
+        }
+        for (arrow, button, action) in DIAL {
+            let key = self.keys.is_some_and(|k| matches!(k.get(action), Bind::Key(_)) && k.pressed(ui, action));
+            if self.pad.take(Control::Button(button)) || key {
+                return Some(arrow);
+            }
+        }
+        None
+    }
+
     /// What their pad asks of the bag this frame (`dt` on from the last).
     pub fn steer(&mut self, dt: f64) -> steer::Steer {
         self.steering.read(&mut self.pad, dt)
@@ -218,6 +249,8 @@ impl Input {
     fn control(&self, a: Action) -> Option<Control> {
         match a {
             _ if self.rummaging => None,
+            // (The d-pad's the radio's dial, while that's out.)
+            _ if self.dialing && self.binds.get(a).is_some_and(|c| DIAL.iter().any(|d| Control::Button(d.1) == c)) => None,
             Action::Inventory if self.two_way().is_some() => None,
             _ if self.on_hold(a) => None,
             Action::Reload | Action::Interact if self.shared().is_some() => None,
@@ -289,7 +322,9 @@ impl Input {
     pub fn walk(&self, ui: &Ui) -> Vec2 {
         let axis = |neg, pos| f64::from(i8::from(self.held(ui, pos)) - i8::from(self.held(ui, neg)));
         let stick = if self.rummaging { Vec2::ZERO } else { self.pad.left };
-        let w = Vec2::new(axis(Action::Left, Action::Right), axis(Action::Back, Action::Forward)) + stick;
+        // (Dialling, the keys that walk are the dial: only the stick walks.)
+        let keys = if self.dialing { Vec2::ZERO } else { Vec2::new(axis(Action::Left, Action::Right), axis(Action::Back, Action::Forward)) };
+        let w = keys + stick;
         Vec2::new(w.x.clamp(-1.0, 1.0), w.y.clamp(-1.0, 1.0))
     }
 
