@@ -7,14 +7,15 @@ use std::ops::Range;
 
 use lntrn_math::{Vec2, Vec3};
 
-use super::layout::OFFSET;
+use super::layout::{Layout, OFFSET};
 use super::{land, raise, relay};
 use crate::loot::Kind;
 use crate::map::Map;
 use crate::zombie::nav::Gate;
 
-/// How far the dead's walking grid reaches from the middle, each way.
-const REACH: f64 = 40.0;
+/// How far the dead's walking grid reaches past the compound's farthest
+/// wall (from the map's middle, each way): out to where they come from.
+const BEYOND: f64 = 16.0;
 /// The luck the land and its woods are made by (the same every time: the
 /// arena's made by hand).
 const SEED: u32 = 0x5E1A_7;
@@ -28,10 +29,11 @@ pub enum Wares {
     Kit(Kind),
 }
 
-/// A way in for the dead (a window, a hole in a wall): its middle (on its
-/// sill), which way is in, how wide and from how high to how high; where
-/// they stand outside it, where they land inside, and where they come
-/// from; the zone it lets into.
+/// A way in for the dead (a window, a hole in a wall, a breach in a
+/// cellar's from a tunnel): its middle (on its sill), which way is in, how
+/// wide and from how high to how high; where they stand outside it, where
+/// they land inside, where they come from and how far about that they
+/// start; the zone it lets into.
 #[derive(Clone, Debug)]
 pub struct Window {
     pub zone: usize,
@@ -43,6 +45,7 @@ pub struct Window {
     pub outside: Vec3,
     pub inside: Vec3,
     pub from: Vec3,
+    pub spread: f64,
 }
 
 impl Window {
@@ -91,7 +94,11 @@ pub struct Arena {
 /// The arena, as a map (its hill, its buildings and walls, what stands
 /// about) and what it holds.
 pub fn generate() -> (Map, Arena) {
-    let plan = &relay::RELAY_STATION;
+    of(&relay::RELAY_STATION)
+}
+
+/// An arena laid out as `plan` has it.
+pub(super) fn of(plan: &Layout) -> (Map, Arena) {
     let raised = raise::raise(plan);
     let (x0, z0, x1, z1) = plan.bounds;
     let corner = |x: i32, z: i32| Vec2::new(f64::from(x) + OFFSET, f64::from(z) + OFFSET);
@@ -116,7 +123,9 @@ pub fn generate() -> (Map, Arena) {
         forest: land.forest,
         landmarks: Vec::new(),
         blocks: raised.blocks,
+        digs: raised.digs,
     };
-    let arena = Arena { reach: REACH, zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys };
+    let reach = [x0, z0, x1, z1].iter().map(|v| f64::from(v.abs())).fold(0.0, f64::max) + BEYOND;
+    let arena = Arena { reach, zones: plan.zones.to_vec(), start: raised.start_zone, windows: raised.windows, doors: raised.doors, buys: raised.buys };
     (map, arena)
 }

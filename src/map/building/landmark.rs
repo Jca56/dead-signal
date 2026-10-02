@@ -75,7 +75,7 @@ const HIGH_WINDOW: (f64, f64, f64) = (1.2, 1.8, 2.5);
 
 /// A plan of `kind`, `w` by `d`, of `storeys`, a flat roof, with `rooms`.
 fn empty(kind: Kind, w: i32, d: i32, storeys: u8, rooms: Vec<Room>) -> Plan {
-    Plan { kind, w, d, storeys, rooms, walls: Vec::new(), openings: Vec::new(), stair: None, flat_roof: true, ridge_along_x: true, ridge: plan::RIDGE, bars: Vec::new() }
+    Plan { kind, w, d, storeys, cellars: 0, rooms, walls: Vec::new(), openings: Vec::new(), stairs: Vec::new(), flat_roof: true, ridge_along_x: true, ridge: plan::RIDGE, bars: Vec::new() }
 }
 
 fn room(x0: i32, z0: i32, x1: i32, z1: i32, use_: Use) -> Room {
@@ -293,7 +293,7 @@ pub fn school(dice: &mut Dice, w: i32, d: i32) -> Plan {
         cuts.push((r.storey, Cut { along_x: true, at, door: along(dice, r.x0, r.x1) }));
     }
     let mut plan = empty(Kind::School, w, d, 2, rooms);
-    plan.stair = Some(plan::Stair { x: 0, z0: f64::from(c1) + 1.0 });
+    plan.stairs = vec![plan::Stair { storey: 0, x: 0, z0: f64::from(c1) + 1.0 }];
     doors(dice, &mut plan, &cuts, Use::Hall, Some(Use::Kitchen));
     // The gym's own doors out, at its front.
     if let Some(g) = find(&plan, Use::Gym) {
@@ -321,7 +321,7 @@ mod tests {
                     todo.extend(s.iter().flatten().copied());
                 }
             }
-            if plan.stair.is_some() && plan.rooms[r].use_ == Use::Hall {
+            if !plan.stairs.is_empty() && plan.rooms[r].use_ == Use::Hall {
                 todo.extend((0..plan.rooms.len()).filter(|&k| plan.rooms[k].use_ == Use::Hall));
             }
         }
@@ -358,7 +358,7 @@ mod tests {
             assert_eq!(f.openings.iter().filter(|o| o.door && o.width >= BAY_DOOR.0).count(), 2, "seed {seed}");
             // The school has its stairs, and its six classrooms upstairs.
             let sc = Landmark::School.plan(&mut Dice(seed));
-            assert!(sc.stair.is_some() && sc.storeys == 2);
+            assert!(sc.stairs.len() == 1 && sc.storeys == 2);
             assert_eq!(sc.rooms.iter().filter(|r| r.use_ == Use::Classroom && r.storey == 1).count(), 6);
         }
     }

@@ -149,7 +149,11 @@ pub fn build(seed: u32, kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
 /// Make the holdout's arena real, saying how far along it is.
 pub fn build_holdout(kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
     stage(Stage::Land);
-    let (map, arena) = crate::holdout::arena::generate();
+    build_arena(crate::holdout::arena::generate(), kit, stage)
+}
+
+/// Make an arena real, on its map.
+pub fn build_arena((map, arena): (Map, crate::holdout::arena::Arena), kit: &Kit, stage: &dyn Fn(Stage)) -> Built {
     make(map, Some(arena), kit, stage)
 }
 
@@ -183,15 +187,26 @@ fn make(map: Map, mut arena: Option<crate::holdout::arena::Arena>, kit: &Kit, st
         for i in 0..map.field.n - 1 {
             for (k, tri) in map.field.cell(i, j).into_iter().enumerate() {
                 let colour = ground_colour(&map, &network, tri, hash(seed, i, j, 10 + k as u32));
-                bucket(tri, colour);
-                let mid = (tri[0] + tri[1] + tri[2]) * (1.0 / 3.0);
-                if mid.x.abs().max(mid.z.abs()) < SOLID_REACH {
-                    ground.push(tri);
+                let mut lay = |tri: [Vec3; 3]| {
+                    bucket(tri, colour);
+                    let mid = (tri[0] + tri[1] + tri[2]) * (1.0 / 3.0);
+                    if mid.x.abs().max(mid.z.abs()) < SOLID_REACH {
+                        ground.push(tri);
+                    }
+                };
+                // (Where it's dug out for a cellar, only what's left.)
+                if map.digs.is_empty() {
+                    lay(tri);
+                } else {
+                    super::dig::cut(&map.digs, tri).into_iter().for_each(lay);
                 }
             }
         }
     }
     solids.add_as(&ground, Surface::Dirt);
+    // (Over a tunnel the ground's left, and given an underside.)
+    let crust: Vec<[Vec3; 3]> = map.digs.iter().filter_map(|d| d.underside()).flatten().collect();
+    solids.add_as(&crust, Surface::Dirt);
     // The roads over it.
     for (r, road) in map.roads.iter().enumerate() {
         let (tops, rest) = ribbon(road, seed ^ r as u32);

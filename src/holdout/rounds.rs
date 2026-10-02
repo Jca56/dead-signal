@@ -24,8 +24,6 @@ const SPAWN_EVERY: (f64, f64) = (2.0, 0.5);
 /// Of the open windows, the dead come in by one of this many nearest a
 /// player.
 const NEAREST: usize = 4;
-/// How far about a window's spot outside they start.
-const SCATTER: f64 = 2.0;
 
 /// How many of the dead a round brings.
 pub fn count(round: u32) -> u32 {
@@ -138,7 +136,7 @@ impl Rounds {
         windows.truncate(NEAREST);
         let (i, _) = windows[self.dice.next() as usize % windows.len()];
         let w = &arena.windows[i];
-        let jitter = w.across() * ((self.dice.unit() - 0.5) * 2.0 * SCATTER) - w.inward * (self.dice.unit() * SCATTER);
+        let jitter = w.across() * ((self.dice.unit() - 0.5) * 2.0 * w.spread) - w.inward * (self.dice.unit() * w.spread);
         let at = w.from + jitter;
         let yaw = (-w.inward.x).atan2(-w.inward.z);
         let e = zombie::spawn_kind(world, at, yaw, Kind::Shambler, Theme::Drifter);

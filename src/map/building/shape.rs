@@ -2,14 +2,17 @@
 //! its ground floor): each wall two skins (the room's paint one side, the
 //! next room's or the siding the other), cut round its doorways and
 //! windows; a foundation and a step up to each door; each room's floor;
-//! the floors between storeys with the stairwell left open and railed; the
-//! stairs; a roof. Empty windows get a barrier only bodies meet; boarded
-//! ones get planks. A barn is boarded up and down in red, a cabin laid in
-//! logs (bare wood inside too) with a porch at its front.
+//! the floors between storeys with each stairwell left open and railed;
+//! the stairs; a roof. Empty windows get a barrier only bodies meet;
+//! boarded ones get planks. A barn is boarded up and down in red, a cabin
+//! laid in logs (bare wood inside too) with a porch at its front. Cellars
+//! are storeys like any other, under the ground (the building's frame
+//! starts at the lowest of them); a tall room has a void over it, walled
+//! and floorless.
 
 use lntrn_math::Vec3;
 
-use super::plan::{self, CEILING, Kind, Plan, STEPS, STOREY, TREAD, Use};
+use super::plan::{self, CEILING, Kind, Plan, STEPS, STOREY, Stair, TREAD, Use};
 use crate::collide::Surface;
 use crate::loot::Dice;
 
@@ -68,6 +71,7 @@ const CONCRETE: Rgb = [0.46, 0.45, 0.42];
 const PLANKS: Rgb = [0.42, 0.33, 0.22];
 const PLANKS_DARK: Rgb = [0.32, 0.25, 0.17];
 const STAIRS: Rgb = [0.40, 0.30, 0.20];
+const STEEL_STAIRS: Rgb = [0.30, 0.31, 0.32];
 const CEILING_WHITE: Rgb = [0.78, 0.77, 0.73];
 const BARN_RED: [Rgb; 2] = [[0.50, 0.18, 0.14], [0.42, 0.15, 0.12]];
 const LOGS: [Rgb; 2] = [[0.42, 0.29, 0.18], [0.33, 0.22, 0.13]];
@@ -110,7 +114,19 @@ fn floor_of(use_: Use, dice: &mut Dice) -> Rgb {
         Use::Nurse => [0.70, 0.72, 0.70],
         Use::Gym => [0.62, 0.46, 0.28],
         Use::Bunks => [0.44, 0.34, 0.24],
+        Use::Mess => [0.58, 0.56, 0.50],
+        Use::Booth | Use::Studio => [0.30, 0.32, 0.36],
+        Use::Servers => [0.50, 0.52, 0.54],
+        Use::Ops | Use::Plant => [0.44, 0.43, 0.40],
+        Use::Void => [0.0; 3],
     }
+}
+
+/// A flight's well, in the plan's frame: from x to x, from z to z (hard
+/// against the wall it climbs along).
+pub(super) fn well(st: &Stair) -> (f64, f64, f64, f64) {
+    let x0 = if st.x == 0 { SKIN } else { f64::from(st.x) - SKIN };
+    (x0, x0 + 1.0, st.z0, st.z1())
 }
 
 fn pick<const N: usize>(dice: &mut Dice, from: [Rgb; N]) -> Rgb {
@@ -143,6 +159,8 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         .rooms
         .iter()
         .map(|r| match (plan.kind, r.use_) {
+            // A cellar's walls are bare.
+            _ if r.storey < plan.cellars => CONCRETE,
             (Kind::Cabin | Kind::Barn, _) => LOG_INSIDE,
             (Kind::Garage | Kind::Armory, _) | (Kind::Police, Use::CellBlock | Use::Cell | Use::Armory) | (_, Use::Bay) => CONCRETE,
             (Kind::Police | Kind::FireStation, _) => STATION_INSIDE,
@@ -153,32 +171,35 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
             _ => pick(dice, PAINTS),
         })
         .collect();
+    // (A void is painted as the room it's the top of.)
+    let paints: Vec<Rgb> = plan.rooms.iter().enumerate().map(|(i, r)| if r.use_ == Use::Void { under(plan, i).map_or(paints[i], |u| paints[u]) } else { paints[i] }).collect();
     let floors: Vec<Rgb> = plan.rooms.iter().map(|r| floor_of(r.use_, dice)).collect();
     let wall_stuff = Stuff::Solid(if matches!(plan.kind, Kind::Store | Kind::Garage | Kind::Armory | Kind::GunStore | Kind::Police | Kind::FireStation | Kind::School | Kind::Relay) { Surface::Stone } else { Surface::Wood });
     let mut blocks = Vec::new();
     let mut add = |lo: Vec3, hi: Vec3, colour: Rgb, stuff: Stuff| blocks.push(Block { lo: lo.min(hi), hi: lo.max(hi), colour, stuff });
     let (w, d) = (f64::from(plan.w), f64::from(plan.d));
     let top = f64::from(plan.storeys) * STOREY;
+    // The ground floor's height: over the cellars, if there are any.
+    let ground = f64::from(plan.cellars) * STOREY;
 
-    // The foundation, each room's floor on it, and a step up to each door.
+    // The foundation, each room's floor on it (a cellar's is bare
+    // concrete), and a step up to each door.
     add(Vec3::new(-SKIN, -RAISED - FOUNDATION, -SKIN), Vec3::new(w + SKIN, -0.02, d + SKIN), CONCRETE, Stuff::Solid(Surface::Stone));
     for (i, r) in plan.rooms.iter().enumerate().filter(|(_, r)| r.storey == 0) {
-        add(Vec3::new(f64::from(r.x0), -0.02 - 2.0 * TUCK, f64::from(r.z0)), Vec3::new(f64::from(r.x1), 0.0, f64::from(r.z1)), floors[i], Stuff::Solid(Surface::Wood));
+        let (colour, stuff) = if plan.cellars > 0 { (CONCRETE, Surface::Stone) } else { (floors[i], Surface::Wood) };
+        add(Vec3::new(f64::from(r.x0), -0.02 - 2.0 * TUCK, f64::from(r.z0)), Vec3::new(f64::from(r.x1), 0.0, f64::from(r.z1)), colour, Stuff::Solid(stuff));
     }
     for o in plan.openings.iter().filter(|o| o.door && !o.boarded) {
         let wall = plan.walls[o.wall];
-        if !wall.outside() || wall.storey != 0 {
+        if !wall.outside() || wall.storey != plan.cellars {
             continue;
         }
         let at = f64::from(wall.at);
         let out = if wall.sides[0].is_none() { -1.0 } else { 1.0 };
         let (a, b) = (at + out * SKIN, at + out * (SKIN + 0.7));
         let half = o.width * 0.5 + 0.2;
-        let (lo, hi) = if wall.along_x {
-            (Vec3::new(o.centre - half, -RAISED - 0.3, a), Vec3::new(o.centre + half, -0.13, b))
-        } else {
-            (Vec3::new(a, -RAISED - 0.3, o.centre - half), Vec3::new(b, -0.13, o.centre + half))
-        };
+        let (y0, y1) = (ground - RAISED - 0.3, ground - 0.13);
+        let (lo, hi) = if wall.along_x { (Vec3::new(o.centre - half, y0, a), Vec3::new(o.centre + half, y1, b)) } else { (Vec3::new(a, y0, o.centre - half), Vec3::new(b, y1, o.centre + half)) };
         add(lo, hi, CONCRETE, Stuff::Solid(Surface::Stone));
     }
 
@@ -189,6 +210,9 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         // Outside walls along x reach over the corners.
         let reach = if wall.outside() && wall.along_x { SKIN } else { 0.0 };
         let (from, to) = (f64::from(wall.from) - reach, f64::from(wall.to) + reach);
+        // Round a void there's no floor to stand the wall on: it reaches
+        // down to the wall under it.
+        let foot = if wall.storey > 0 && wall.sides.iter().flatten().any(|&r| plan.rooms[r].use_ == Use::Void) { STOREY - CEILING + TUCK } else { TUCK };
         let mut gaps: Vec<_> = plan.openings.iter().filter(|o| o.wall == wi).collect();
         gaps.sort_by(|a, b| a.centre.total_cmp(&b.centre));
         if plan.bars.contains(&wi) {
@@ -218,7 +242,7 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
                     return;
                 }
                 // Tucked into the floor under it and the ceiling over it.
-                let y0 = if y0 <= 0.0 { -TUCK } else { y0 };
+                let y0 = if y0 <= 0.0 { -foot } else { y0 };
                 let y1 = if y1 >= CEILING { CEILING + TUCK } else { y1 };
                 let mut strip = |a: f64, b: f64, y0: f64, y1: f64, colour: Rgb| {
                     let (lo, hi) = if wall.along_x { (Vec3::new(a, base + y0, t0), Vec3::new(b, base + y1, t1)) } else { (Vec3::new(t0, base + y0, a), Vec3::new(t1, base + y1, b)) };
@@ -285,37 +309,56 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         }
     }
 
-    // The floors between storeys (the stairwell left open, a rail round
-    // it), and the ceiling under the roof.
-    let well = plan.stair.map(|st| {
-        let x0 = if st.x == 0 { SKIN } else { f64::from(st.x) - SKIN };
-        (x0, x0 + 1.0, st.z0, st.z1())
-    });
-    for (i, r) in plan.rooms.iter().enumerate().filter(|(_, r)| r.storey > 0) {
+    // The floors between storeys (each stairwell up through one left
+    // open, a rail round it; none under a void), and the ceiling under the
+    // roof.
+    for (i, r) in plan.rooms.iter().enumerate().filter(|(_, r)| r.storey > 0 && r.use_ != Use::Void) {
         let y = f64::from(r.storey) * STOREY;
         let (x0, z0, x1, z1) = (f64::from(r.x0), f64::from(r.z0), f64::from(r.x1), f64::from(r.z1));
         let mut rects = vec![(x0, z0, x1, z1)];
-        if let Some((wx0, wx1, wz0, wz1)) = well
-            && r.use_ == Use::Hall
-        {
-            rects = vec![(x0, z0, x1, wz0), (x0, wz1, x1, z1), (x0, wz0, wx0, wz1), (wx1, wz0, x1, wz1)];
+        for (wx0, wx1, wz0, wz1) in plan.stairs.iter().filter(|st| st.storey + 1 == r.storey).map(well) {
+            if wx0 >= x1 || wx1 <= x0 || wz0 >= z1 || wz1 <= z0 {
+                continue;
+            }
+            rects = rects.into_iter().flat_map(|(a, b, c, e)| if wx0 >= c || wx1 <= a || wz0 >= e || wz1 <= b { vec![(a, b, c, e)] } else { vec![(a, b, c, wz0), (a, wz1, c, e), (a, wz0.max(b), wx0, wz1.min(e)), (wx1, wz0.max(b), c, wz1.min(e))] }).collect();
             let open_side = if wx0 <= x0 + SKIN + 1e-9 { wx1 } else { wx0 };
             add(Vec3::new(open_side - 0.02, y, wz0), Vec3::new(open_side + 0.02, y + RAIL, wz1), STAIRS, Stuff::Solid(Surface::Wood));
             add(Vec3::new(wx0, y, wz0 - 0.04), Vec3::new(wx1, y + RAIL, wz0), STAIRS, Stuff::Solid(Surface::Wood));
         }
+        // (Over a cellar, the floor's laid on a slab of concrete: that's
+        // the cellar's ceiling.)
+        let slab = r.storey == plan.cellars;
         for (a, b, c, e) in rects {
             if c - a > 1e-6 && e - b > 1e-6 {
-                add(Vec3::new(a, y - (STOREY - CEILING), b), Vec3::new(c, y, e), floors[i], Stuff::Solid(Surface::Wood));
+                let under = y - (STOREY - CEILING);
+                if slab {
+                    add(Vec3::new(a, under, b), Vec3::new(c, y - 0.04, e), CONCRETE, Stuff::Solid(Surface::Stone));
+                    add(Vec3::new(a, y - 0.04 - TUCK, b), Vec3::new(c, y, e), floors[i], Stuff::Solid(Surface::Wood));
+                } else {
+                    add(Vec3::new(a, under, b), Vec3::new(c, y, e), floors[i], Stuff::Solid(Surface::Wood));
+                }
             }
         }
     }
     add(Vec3::new(-SKIN, top - (STOREY - CEILING), -SKIN), Vec3::new(w + SKIN, top, d + SKIN), CEILING_WHITE, Stuff::Solid(Surface::Wood));
 
-    // The stairs: each step a block down to the floor.
-    if let (Some(st), Some((wx0, wx1, _, _))) = (plan.stair, well) {
+    // The stairs: each step a block down to the floor its flight starts
+    // on.
+    for st in &plan.stairs {
+        let (wx0, wx1, _, _) = well(st);
+        let base = f64::from(st.storey) * STOREY;
         let rise = STOREY / STEPS as f64;
+        // (Up out of a cellar they're poured concrete; in a garage,
+        // steel.)
+        let (colour, stuff) = if st.storey < plan.cellars {
+            (CONCRETE, Surface::Stone)
+        } else if plan.kind == Kind::Garage {
+            (STEEL_STAIRS, Surface::Metal)
+        } else {
+            (STAIRS, Surface::Wood)
+        };
         for k in 0..STEPS {
-            add(Vec3::new(wx0, -TUCK, st.z0 + k as f64 * TREAD), Vec3::new(wx1, (k + 1) as f64 * rise, st.z1()), STAIRS, Stuff::Solid(Surface::Wood));
+            add(Vec3::new(wx0, base - TUCK, st.z0 + k as f64 * TREAD), Vec3::new(wx1, base + (k + 1) as f64 * rise, st.z1()), colour, Stuff::Solid(stuff));
         }
     }
 
@@ -342,6 +385,14 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
         add(Vec3::new(-SKIN - 0.2, PORCH_ROOF, -SKIN - PORCH - 0.3), Vec3::new(w + SKIN + 0.2, PORCH_ROOF + 0.12, -SKIN), roof_colour, Stuff::Solid(Surface::Wood));
     }
     Shape { blocks, roof }
+}
+
+/// The room a void is the top of: the one on the storey under it that
+/// holds its middle.
+fn under(plan: &Plan, void: usize) -> Option<usize> {
+    let v = plan.rooms[void];
+    let (x, z) = (v.x0 + v.x1, v.z0 + v.z1);
+    plan.rooms.iter().position(|r| r.storey + 1 == v.storey && 2 * r.x0 <= x && x <= 2 * r.x1 && 2 * r.z0 <= z && z <= 2 * r.z1)
 }
 
 /// A gable roof over the plan: a closed prism, the ridge along its longer

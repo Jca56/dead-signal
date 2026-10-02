@@ -66,9 +66,10 @@ impl Space {
             let (a, c) = (o.centre - 0.95, o.centre + 0.95);
             clear.push(if w.along_x { Rect { lo: Vec2::new(a, at - 1.8), hi: Vec2::new(c, at + 1.8) } } else { Rect { lo: Vec2::new(at - 1.8, a), hi: Vec2::new(at + 1.8, c) } });
         }
-        if let Some(st) = plan.stair {
+        // A flight's own floor, and the one its well opens in.
+        for st in plan.stairs.iter().filter(|st| room.storey == st.storey || room.storey == st.storey + 1) {
             let x = f64::from(st.x);
-            clear.push(Rect { lo: Vec2::new(x - 1.2, 0.0), hi: Vec2::new(x + 2.2, st.z1() + 1.0) });
+            clear.push(Rect { lo: Vec2::new(x - 1.2, st.z0 - 1.0), hi: Vec2::new(x + 2.2, st.z1() + 1.0) });
         }
         let windows: Vec<Rect> = plan
             .openings
@@ -239,7 +240,7 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
             }
         }
         // Now and then something left lying about.
-        if dice.unit() < 0.35 && room.use_ != Use::Hall {
+        if dice.unit() < 0.35 && !matches!(room.use_, Use::Hall | Use::Void) {
             let p = Vec2::new(inner.lo.x + 0.8 + dice.unit() * (inner.hi.x - inner.lo.x - 1.6).max(0.0), inner.lo.y + 0.8 + dice.unit() * (inner.hi.y - inner.lo.y - 1.6).max(0.0));
             let at = b.world(Vec3::new(p.x, space.floor, p.y));
             let roll = dice.unit();
@@ -249,7 +250,7 @@ pub fn furnish(b: &Building, dice: &mut Dice) -> Furnished {
     }
     // What's needed and found no wall in its own room: in the biggest
     // other room it fits (never a hall or a bathroom).
-    let mut by_size: Vec<usize> = (0..plan.rooms.len()).filter(|&i| !matches!(plan.rooms[i].use_, Use::Hall | Use::Bath)).collect();
+    let mut by_size: Vec<usize> = (0..plan.rooms.len()).filter(|&i| !matches!(plan.rooms[i].use_, Use::Hall | Use::Bath | Use::Void)).collect();
     by_size.sort_by_key(|&i| (-plan.rooms[i].area(), i));
     for thing in homeless {
         by_size.iter().any(|&i| against_wall(b, &mut spaces[i], thing, dice, &mut out));

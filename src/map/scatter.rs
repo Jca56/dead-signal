@@ -68,6 +68,7 @@ impl Scenery {
             Scenery::Rock(_) => Surface::Stone,
             Scenery::Tower | Scenery::Beacon => Surface::Metal,
             Scenery::Furn(Furn::Bathtub | Furn::Toilet | Furn::Basin | Furn::Stove) => Surface::Stone,
+            Scenery::Furn(Furn::Bunk | Furn::ServerRack | Furn::Console) => Surface::Metal,
             Scenery::Fixture(f) => f.surface(),
             _ => Surface::Wood,
         }

@@ -17,6 +17,8 @@ its back against a wall at -Y and its front (what faces the room) at +Y:
     FURN_HayStack   bales stacked three high against a wall
     FURN_WoodStove  a squat cast-iron stove, its pipe up to the ceiling
     FURN_Workbench  a heavy workbench, a vise, tools on a pegboard
+    FURN_Bunk, FURN_ServerRack, FURN_Console
+                    the relay station's (`relay_furniture.py`)
 
 and what the game bumps into for each (FURN_*_Hull): plain boxes.
 
@@ -28,10 +30,14 @@ Writes assets/models/furniture.glb.
 
 import os
 import random
+import sys
 
 import bmesh
 import bpy
 from mathutils import Matrix, Vector
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import relay_furniture  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "models", "furniture.glb")
@@ -340,6 +346,7 @@ def main():
     hay_stack()
     wood_stove()
     workbench()
+    relay_furniture.make(piece)
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     tris = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH")
     print(f"furniture: {len(bpy.data.objects)} objects, {tris} faces -> {os.path.abspath(OUT)}")

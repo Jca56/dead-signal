@@ -112,7 +112,7 @@ fn a_house_is_walked_into_and_up_its_stairs() {
         let (solids, b) = house(true, seed);
         let nav = NavGrid::build(&solids, capsule(false), 20.0);
         let outside = Vec3::new(0.0, 0.0, -12.0);
-        let st = b.plan.stair.expect("stairs");
+        let st = *b.plan.stairs.first().expect("stairs");
         let x = if st.x == 0 { 0.5 } else { f64::from(st.x) + 0.5 };
         // Up the flight, step to step.
         let mut prev: Option<u32> = None;

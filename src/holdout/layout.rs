@@ -5,6 +5,9 @@
 //! yards (zones out in the open), what's on the walls to buy, and what
 //! stands about.
 //!
+//! Floors are told by their level: 0 the ground's, 1 the one over it, -1
+//! a cellar's.
+//!
 //! It's all drawn on a grid of whole metres, walls standing on its lines:
 //! the grid is the map's shifted half a metre, so the walls fall between
 //! the dead's walking grid's points and every doorway's middle is on one.
@@ -75,34 +78,52 @@ impl Line {
     }
 }
 
-/// A room: its storey, its corners (in its building's metres), what it's
-/// for, and its zone.
-pub struct RoomAt(pub u8, pub i32, pub i32, pub i32, pub i32, pub Use, pub usize);
+/// A room: its level, its corners (in its building's metres), what it's
+/// for (`Use::Void`: the air over a tall room under it), and its zone.
+pub struct RoomAt(pub i8, pub i32, pub i32, pub i32, pub i32, pub Use, pub usize);
 
-/// A doorway on a line (in its building's metres), on a storey, how wide;
+/// A doorway on a line (in its building's metres), on a level, how wide;
 /// a door in it to buy open for so much (none: open).
-pub struct DoorAt(pub Line, pub u8, pub f64, pub Option<u32>);
+pub struct DoorAt(pub Line, pub i8, pub f64, pub Option<u32>);
 
-/// A window on an outside wall's line, on a storey: one the dead come in
+/// A window on an outside wall's line, on a level: one the dead come in
 /// by (boarded), or only to look out of.
-pub struct WindowAt(pub Line, pub u8, pub bool);
+pub struct WindowAt(pub Line, pub i8, pub bool);
+
+/// A rail on a wall's line, on a level, how long: the wall waist high and
+/// open over it (a mezzanine's edge on the room it looks down into). Seen
+/// and shot over, never climbed.
+pub struct RailAt(pub Line, pub i8, pub f64);
+
+/// A flight of stairs up from a level to the next: against the wall at x,
+/// climbing from z towards +z.
+pub struct StairAt(pub i8, pub i32, pub f64);
 
 /// A building: where its corner is on the grid, what it's built as, how
-/// big, how many storeys, its roof flat or not, its rooms and doorways and
-/// windows, its stairs (against the wall at x, from z up), and the luck its
-/// colours and furniture are drawn by.
+/// big, how many storeys over the ground and how many cellars under it,
+/// its roof flat or not, its rooms and doorways and windows, its rails and
+/// stairs, and the luck its colours and furniture are drawn by.
 pub struct House {
     pub name: &'static str,
     pub at: (i32, i32),
     pub kind: Kind,
     pub size: (i32, i32),
     pub storeys: u8,
+    pub cellars: u8,
     pub flat_roof: bool,
     pub rooms: &'static [RoomAt],
     pub doors: &'static [DoorAt],
     pub windows: &'static [WindowAt],
-    pub stair: Option<(i32, f64)>,
+    pub rails: &'static [RailAt],
+    pub stairs: &'static [StairAt],
     pub seed: u32,
+}
+
+impl House {
+    /// The storey of its plan (counted from its lowest cellar) a level is.
+    pub(super) fn storey(&self, level: i8) -> u8 {
+        u8::try_from(i16::from(level) + i16::from(self.cellars)).unwrap_or_else(|_| panic!("{}: no level {level}", self.name))
+    }
 }
 
 /// What a run of wall is: the compound's own, tall and wired along its
@@ -146,20 +167,22 @@ pub struct Run {
 /// point has it, after the buildings).
 pub struct Yard(pub i32, pub i32, pub i32, pub i32, pub usize);
 
-/// Something for sale on a wall: where on its line, on which storey,
+/// Something for sale on a wall: where on its line, on which level,
 /// facing which way (out of the wall), what.
-pub struct BuyAt(pub Line, pub u8, pub Face, pub Wares);
+pub struct BuyAt(pub Line, pub i8, pub Face, pub Wares);
 
-/// What stands about: the radio mast; one of the places' fixtures (where,
-/// its front facing a bearing, degrees clockwise from north); something
-/// else set down (and from how high it's dropped, to stack it on what's
-/// under); a piece of furniture; the generator (long along x, or not).
+/// What stands about, on the ground or a building's ground floor: the
+/// radio mast; one of the places' fixtures (where, its front facing a
+/// bearing, degrees clockwise from north); something else set down (and
+/// from how high over its floor it's dropped, to stack it on what's
+/// under); a piece of furniture. Or one of those on another level of the
+/// building it's in.
 pub enum Prop {
     Tower(f64, f64),
     Fixture(Fixture, f64, f64, f64),
     Thing(Source, f64, f64, f64, f64),
     Furn(Furn, f64, f64, f64),
-    Generator(f64, f64, bool),
+    On(i8, &'static Prop),
 }
 
 pub struct Layout {
@@ -186,8 +209,9 @@ pub(super) fn yaw(bearing: f64) -> f64 {
 }
 
 impl Layout {
-    /// The zone a grid point on `storey` is in; none outside.
-    pub fn zone_at(&self, p: Vec2, storey: u8) -> Option<usize> {
+    /// The zone a grid point on `level` is in; none outside. (Out in the
+    /// open there's only the ground.)
+    pub fn zone_at(&self, p: Vec2, level: i8) -> Option<usize> {
         let (x0, z0, x1, z1) = self.bounds;
         if p.x <= f64::from(x0) || p.x >= f64::from(x1) || p.y <= f64::from(z0) || p.y >= f64::from(z1) {
             return None;
@@ -195,8 +219,11 @@ impl Layout {
         for h in self.houses {
             let l = p - Vec2::new(f64::from(h.at.0), f64::from(h.at.1));
             if l.x > 0.0 && l.y > 0.0 && l.x < f64::from(h.size.0) && l.y < f64::from(h.size.1) {
-                return h.rooms.iter().find(|r| r.0 == storey && l.x > f64::from(r.1) && l.y > f64::from(r.2) && l.x < f64::from(r.3) && l.y < f64::from(r.4)).map(|r| r.6);
+                return h.rooms.iter().find(|r| r.0 == level && l.x > f64::from(r.1) && l.y > f64::from(r.2) && l.x < f64::from(r.3) && l.y < f64::from(r.4)).map(|r| r.6);
             }
+        }
+        if level != 0 {
+            return None;
         }
         self.yards.iter().find(|y| p.x > f64::from(y.0) && p.y > f64::from(y.1) && p.x < f64::from(y.2) && p.y < f64::from(y.3)).map(|y| y.4)
     }
@@ -221,8 +248,8 @@ impl Layout {
         })
     }
 
-    /// The floor's height at a grid point on `storey`.
-    pub(super) fn floor_at(&self, p: Vec2, storey: u8) -> f64 {
-        self.house_at(p).map_or(0.0, |_| RAISED + f64::from(storey) * STOREY)
+    /// The floor's height at a grid point on `level`.
+    pub(super) fn floor_at(&self, p: Vec2, level: i8) -> f64 {
+        self.house_at(p).map_or(0.0, |_| RAISED + f64::from(level) * STOREY)
     }
 }

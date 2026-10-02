@@ -17,7 +17,7 @@ fn built() -> Built {
 
 /// The arena made real in a world of its own, the player standing at its
 /// start.
-fn world_of(built: Built) -> (World, Holdout) {
+pub(super) fn world_of(built: Built) -> (World, Holdout) {
     let Built { map, solids, nav, arena, .. } = built;
     let mut world = World::new();
     world.insert_resource(Solid(solids));
@@ -51,7 +51,7 @@ fn the_dead_get_to_every_window_and_in_only_by_the_windows() {
 }
 
 /// Every door bought open.
-fn open_everything(world: &mut World, h: &mut Holdout) {
+pub(super) fn open_everything(world: &mut World, h: &mut Holdout) {
     let mut bag = Holdout::loadout();
     for i in 0..h.arena.doors.len() {
         h.wallets[0].points = 1_000_000;
@@ -60,7 +60,7 @@ fn open_everything(world: &mut World, h: &mut Holdout) {
 }
 
 /// Where a wall buy is stood at to use it (on its floor).
-fn stand_at(b: &arena::Buy) -> Vec3 {
+pub(super) fn stand_at(b: &arena::Buy) -> Vec3 {
     b.at + b.facing * 0.6 - Vec3::new(0.0, 1.45, 0.0)
 }
 
@@ -100,9 +100,12 @@ fn every_zone_opens_from_the_start_a_door_at_a_time_and_the_dead_have_a_way_into
             break;
         }
     }
+    let ways_in = |z: usize| arena.windows.iter().any(|w| w.zone == z);
     for (z, name) in arena.zones.iter().enumerate() {
         assert!(open[z], "{name} can't be opened from the start");
-        assert!(arena.windows.iter().any(|w| w.zone == z), "no way in for the dead to {name}");
+        // (Upstairs they come up from the floor below: its ways in.)
+        let from_next = arena.doors.iter().any(|d| (d.zones.0 == z && ways_in(d.zones.1)) || (d.zones.1 == z && ways_in(d.zones.0)));
+        assert!(ways_in(z) || from_next, "no way in for the dead to {name}");
     }
     assert!(arena.buys.iter().all(|b| b.zone < arena.zones.len()));
 }
@@ -314,6 +317,54 @@ fn out_in_the_yard_by_the_mast_they_come_for_the_player_round_everything_in_it()
 fn up_in_the_bunkhouse_dorm_they_come_for_the_player_up_the_stairs() {
     let got = reach_the_player_at(Vec3::new(20.5, 0.25 + crate::map::building::plan::STOREY, -12.5), 60.0);
     assert!(got >= 2, "only {got} got up to the dorm");
+}
+
+/// A spot in the relay station (on its grid) on a building's `level`.
+fn indoors(x: f64, z: f64, level: i8) -> Vec3 {
+    Vec3::new(x + 0.5, 0.25 + f64::from(level) * crate::map::building::plan::STOREY, z + 0.5)
+}
+
+#[test]
+fn up_on_the_motor_pools_mezzanine_they_come_for_the_player_up_its_stairs() {
+    let got = reach_the_player_at(indoors(-37.0, 15.0, 1), 90.0);
+    assert!(got >= 2, "only {got} got up to the mezzanine");
+}
+
+#[test]
+fn up_in_the_stations_studio_they_come_for_the_player() {
+    let got = reach_the_player_at(indoors(41.0, 15.0, 1), 90.0);
+    assert!(got >= 2, "only {got} got up to the studio");
+}
+
+#[test]
+fn down_in_the_bunker_they_come_for_the_player_by_the_stairs_and_the_tunnel() {
+    let got = reach_the_player_at(indoors(41.0, 9.0, -1), 90.0);
+    assert!(got >= 2, "only {got} got down to the ops room");
+    // In the stores, by its breach: its boards torn off from the tunnel.
+    let (mut world, mut h) = world_of(built());
+    open_everything(&mut world, &mut h);
+    let breach = h.arena.windows.iter().position(|w| w.centre.y < -1.0).expect("a way in under the ground");
+    assert_eq!(h.arena.zones[h.arena.windows[breach].zone], "THE BUNKER");
+    let at = indoors(45.0, 15.0, -1);
+    for mut b in world.query_filtered::<&mut Body, With<Player>>().iter_mut(&mut world) {
+        *b = Body::at(at);
+    }
+    let mut think = zombie::stepper();
+    let mut least = BOARDS;
+    for _ in 0..(90.0 / STEP) as usize {
+        h.update(&mut world, &[at], STEP);
+        think.run(&mut world);
+        least = least.min(world.resource::<Barriers>().0[breach].boards);
+    }
+    assert!(least < BOARDS, "none of the dead came along the tunnel");
+}
+
+#[test]
+fn out_in_the_lots_either_side_they_come_for_the_player() {
+    for (what, at) in [("the west lot", Vec3::new(-36.5, 0.0, -10.5)), ("the east court", Vec3::new(45.5, 0.0, -11.5))] {
+        let got = reach_the_player_at(at, 60.0);
+        assert!(got >= 2, "only {got} got to the player in {what}");
+    }
 }
 
 #[test]

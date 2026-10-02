@@ -377,4 +377,8 @@ fn flat_dist(a: Vec3, b: Vec3) -> f64 {
 }
 
 #[cfg(test)]
+mod cellar_tests;
+#[cfg(test)]
+mod dump;
+#[cfg(test)]
 mod tests;

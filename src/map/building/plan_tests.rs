@@ -60,7 +60,7 @@ fn every_room_is_somewhere_and_can_be_got_to() {
             }
         }
         if plan.storeys == 2 {
-            let st = plan.stair.expect("stairs");
+            let st = *plan.stairs.first().expect("stairs");
             assert!(st.z1() <= f64::from(d) - 1.0, "seed {seed}: the stairs run out of the house");
         }
     }

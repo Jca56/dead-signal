@@ -23,10 +23,15 @@ pub enum Furn {
     HayStack,
     WoodStove,
     Workbench,
+    /// The relay station's: a bunk bed, a rack of servers, a radio
+    /// console.
+    Bunk,
+    ServerRack,
+    Console,
 }
 
 impl Furn {
-    pub const ALL: [Furn; 15] = [Furn::Bed, Furn::Sofa, Furn::Armchair, Furn::Table, Furn::Counter, Furn::Stove, Furn::Bathtub, Furn::Toilet, Furn::Basin, Furn::Bookcase, Furn::Tv, Furn::HayBale, Furn::HayStack, Furn::WoodStove, Furn::Workbench];
+    pub const ALL: [Furn; 18] = [Furn::Bed, Furn::Sofa, Furn::Armchair, Furn::Table, Furn::Counter, Furn::Stove, Furn::Bathtub, Furn::Toilet, Furn::Basin, Furn::Bookcase, Furn::Tv, Furn::HayBale, Furn::HayStack, Furn::WoodStove, Furn::Workbench, Furn::Bunk, Furn::ServerRack, Furn::Console];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -45,6 +50,9 @@ impl Furn {
             Furn::HayStack => "FURN_HayStack",
             Furn::WoodStove => "FURN_WoodStove",
             Furn::Workbench => "FURN_Workbench",
+            Furn::Bunk => "FURN_Bunk",
+            Furn::ServerRack => "FURN_ServerRack",
+            Furn::Console => "FURN_Console",
         }
     }
 }
@@ -77,6 +85,9 @@ impl Thing {
                 Furn::HayStack => (1.1, 1.0, true),
                 Furn::WoodStove => (0.6, 0.55, true),
                 Furn::Workbench => (1.8, 0.7, false),
+                Furn::Bunk => (2.0, 0.95, true),
+                Furn::ServerRack => (0.7, 0.9, true),
+                Furn::Console => (1.8, 0.9, true),
             },
             Thing::Box(s) => match s {
                 Source::Fridge => (0.75, 0.7, true),
@@ -126,7 +137,7 @@ pub(super) fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
         Use::Office if kind == Kind::School => vec![b(Source::Desk, 1.0), b(Source::Desk, 0.7), b(Source::Cabinet, 0.7), f(Bookcase, 0.6)],
         Use::Office if kind == Kind::Police => vec![b(Source::Desk, 1.0), b(Source::Desk, 1.0), b(Source::Desk, 0.8), b(Source::Cabinet, 0.6), b(Source::Desk, 0.6), f(Bookcase, 0.5)],
         // The relay's control room: its consoles.
-        Use::Office if kind == Kind::Relay => vec![b(Source::Desk, 1.0), b(Source::Desk, 1.0), b(Source::Desk, 0.8), b(Source::Cabinet, 0.7), f(Bookcase, 0.6), b(Source::Locker, 0.5)],
+        Use::Office if kind == Kind::Relay => vec![f(Console, 1.0), b(Source::Desk, 1.0), b(Source::Desk, 1.0), f(Console, 0.6), b(Source::Desk, 0.8), b(Source::Cabinet, 0.7), f(Bookcase, 0.6), b(Source::Locker, 0.5)],
         Use::Office => vec![b(Source::Desk, 1.0), b(Source::Locker, 0.9), b(Source::Cabinet, 0.5), f(Bookcase, 0.4)],
         // The cage first: it has the pick of the walls.
         Use::Armory if kind == Kind::Police => vec![b(Source::PoliceArmory, 1.0), b(Source::PoliceLocker, 0.8), b(Source::Crate, 0.5)],
@@ -137,7 +148,11 @@ pub(super) fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
         Use::CellBlock => Vec::new(),
         Use::Cell => vec![f(Bed, 1.0), f(Toilet, 0.8)],
         Use::LockerRoom => {
-            let locker = if kind == Kind::FireStation { Source::FireLocker } else { Source::PoliceLocker };
+            let locker = match kind {
+                Kind::FireStation => Source::FireLocker,
+                Kind::Police => Source::PoliceLocker,
+                _ => Source::Locker,
+            };
             vec![b(locker, 1.0), b(locker, 1.0), b(locker, 0.9), b(locker, 0.7), f(Table, 0.5)]
         }
         // The engine is parked in the bay first (`furnish`).
@@ -146,7 +161,14 @@ pub(super) fn program(use_: Use, room: &Room, kind: Kind) -> Vec<(Thing, f64)> {
         Use::Corridor => vec![b(Source::SchoolLocker, 0.9), b(Source::SchoolLocker, 0.9), b(Source::SchoolLocker, 0.8), b(Source::SchoolLocker, 0.7)],
         Use::Nurse => vec![b(Source::MedCabinet, 1.0), f(Bed, 1.0), b(Source::Desk, 0.7), b(Source::Cabinet, 0.5)],
         Use::Gym => vec![b(Source::SchoolLocker, 1.0), b(Source::SchoolLocker, 1.0), b(Source::SchoolLocker, 0.8), b(Source::Crate, 0.8), b(Source::Crate, 0.5)],
-        Use::Bunks => vec![f(Bed, 1.0), f(Bed, 1.0), f(Bed, 1.0), f(Bed, 0.9), b(Source::Locker, 1.0), b(Source::Locker, 0.9), b(Source::Locker, 0.6), f(Table, 0.5)],
+        Use::Void => Vec::new(),
+        Use::Mess => vec![f(Table, 1.0), f(Table, 1.0), f(Table, 1.0), f(Table, 0.9), f(Table, 0.8), f(Counter, 0.9), b(Source::Cabinet, 0.6)],
+        Use::Booth => vec![f(Console, 1.0), f(Console, 1.0), f(Console, 0.9), b(Source::Desk, 0.9), b(Source::Cabinet, 0.7), b(Source::Locker, 0.5)],
+        Use::Servers => vec![f(ServerRack, 1.0), f(ServerRack, 1.0), f(ServerRack, 1.0), f(ServerRack, 0.9), f(ServerRack, 0.8), b(Source::Desk, 0.8), b(Source::Cabinet, 0.6)],
+        Use::Studio => vec![f(Console, 1.0), f(Console, 1.0), f(Table, 0.9), f(Armchair, 0.9), f(Armchair, 0.8), b(Source::Desk, 0.8), f(Bookcase, 0.6), b(Source::Cabinet, 0.5)],
+        Use::Ops => vec![f(Console, 1.0), f(Console, 1.0), f(Table, 1.0), f(Table, 0.9), b(Source::Desk, 1.0), b(Source::Desk, 0.8), b(Source::Cabinet, 0.7), b(Source::Locker, 0.6)],
+        Use::Plant => vec![f(Workbench, 1.0), b(Source::ToolLocker, 1.0), b(Source::Crate, 0.8), b(Source::Crate, 0.5)],
+        Use::Bunks => vec![f(Bunk, 1.0), f(Bunk, 1.0), f(Bunk, 1.0), f(Bunk, 1.0), f(Bunk, 0.9), f(Bunk, 0.8), b(Source::Locker, 1.0), b(Source::Locker, 0.9), b(Source::Locker, 0.6), f(Table, 0.5)],
         Use::Barn => vec![f(HayStack, 1.0), b(Source::Crate, 1.0), f(HayStack, 0.8), f(HayBale, 1.0), b(Source::ToolLocker, 1.0), b(Source::Crate, 0.6), f(HayBale, 0.7), f(HayBale, 0.5)],
     }
 }

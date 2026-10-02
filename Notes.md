@@ -75,6 +75,17 @@
   - [x] Co-op rules: press to join, per-player points, zombies pick a target, waves scaled for 2, downed and revive, game over when both are down.
   - [ ] Survivor figure: a body for your buddy on the shambler rig, holding what they hold.
 
+## Phase 11: HOLDOUT, bigger 📻
+- [ ] Relay Station, expanded (plan: `plans/relay-station-expanded-v2.png`)
+  - [x] Under the ground and two storeys tall: digs in the land, cellars, stairs between any floors, tall rooms with a rail to shoot over.
+  - [x] The map: motor pool, west lot, barracks, east court, station house, broadcast floor, the bunker and its escape tunnel. 11 zones, 24 ways in, 18 doors, 27 wall buys.
+  - [x] New models: army truck, generator, bunk bed, server rack, radio console.
+  - [ ] Playtest, and what it turns up.
+- [ ] Waves tuning and difficulty (the counts are still the small map's).
+- [ ] Upgradable guns (the bench goes in the bunker's armory).
+- [ ] Perks
+- [ ] Mystery box
+
 ---
 
 # Random

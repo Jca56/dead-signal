@@ -6,6 +6,7 @@
 
 pub mod build;
 pub mod building;
+pub mod dig;
 pub mod homestead;
 pub mod outposts;
 pub mod noise;
@@ -62,6 +63,8 @@ pub struct Map {
     /// Blocks laid straight on the map, square to it (a holdout's walls,
     /// its gate, what's built in its yards).
     pub blocks: Vec<building::shape::Block>,
+    /// Where the ground's dug out for what's built down into it.
+    pub digs: Vec<dig::Dig>,
 }
 
 impl Map {
@@ -251,7 +254,7 @@ pub fn generate(seed: u32) -> Map {
     keep_out.extend(things.containers.iter().map(|(_, (x, z, _, _))| (Vec2::new(*x, *z), 4.0)));
     scenery.extend(scatter::forest(seed, &forest, &field, &network, &plots, &plan.fields, &keep_out));
     scenery.extend(scatter::poles(&field, &network, &plots));
-    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings, targets: fitted.targets, forest, landmarks: town.landmarks, blocks: Vec::new() }
+    Map { seed, field, roads: network.roads, sites: plan.sites, fields: plan.fields, spawn, exits, containers: things.containers, pickups: things.pickups, scenery, buildings, targets: fitted.targets, forest, landmarks: town.landmarks, blocks: Vec::new(), digs: Vec::new() }
 }
 
 /// Where a road to `p` best leaves `roads` from (flat; only where `may`

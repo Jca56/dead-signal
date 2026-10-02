@@ -50,10 +50,13 @@ pub enum Fixture {
     SignPolice,
     SignFire,
     SignSchool,
+    /// The relay station's: an army truck, a generator set.
+    ArmyTruck,
+    Generator,
 }
 
 impl Fixture {
-    pub const ALL: [Fixture; 21] = [
+    pub const ALL: [Fixture; 23] = [
         Fixture::Canopy,
         Fixture::Pumps,
         Fixture::GasSign,
@@ -75,6 +78,8 @@ impl Fixture {
         Fixture::SignPolice,
         Fixture::SignFire,
         Fixture::SignSchool,
+        Fixture::ArmyTruck,
+        Fixture::Generator,
     ];
 
     pub fn name(self) -> &'static str {
@@ -100,6 +105,8 @@ impl Fixture {
             Fixture::SignPolice => "SITE_SignPolice",
             Fixture::SignFire => "SITE_SignFire",
             Fixture::SignSchool => "SITE_SignSchool",
+            Fixture::ArmyTruck => "SITE_ArmyTruck",
+            Fixture::Generator => "SITE_Generator",
         }
     }
 
