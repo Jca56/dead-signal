@@ -15,6 +15,7 @@ use crate::perf::Phase;
 use crate::camera::Frustum;
 use crate::render::{Draw, FigureDraw, Pane, Renderer};
 use crate::style;
+use crate::survivor;
 use crate::viewmodel::Viewmodel;
 use crate::player::Player;
 use crate::weapon::Weapon;
@@ -41,6 +42,10 @@ impl AppHost for DeadSignal {
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
             Ok(model) => self.game.world.insert_resource(model),
             Err(e) => log_error!("shambler: {e}"),
+        }
+        match assets::load_figure(&mut renderer, "survivor").and_then(survivor::Rig::new) {
+            Ok(rig) => self.game.world.insert_resource(rig),
+            Err(e) => log_error!("survivor: {e}"),
         }
         let mut rigs = std::collections::HashMap::new();
         for weapon in Weapon::ALL {
@@ -100,6 +105,7 @@ impl AppHost for DeadSignal {
                 }
             }
             self.combat.draw(renderer);
+            survivor::draw(&mut self.game.world, renderer, &self.eyes);
             let alpha = self.game.alpha();
             zombie::spit::draw(&mut self.game.world, renderer, alpha);
             crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
@@ -107,9 +113,9 @@ impl AppHost for DeadSignal {
         // The figures: the dead, and (playing together) the players, each
         // left out of the panes that look through their own eyes.
         let plain = zombie::looks::Looks::default().palette();
-        for (f, looks, player) in self.game.world.query::<(&Figure, Option<&zombie::looks::Looks>, Option<&Player>)>().iter(&self.game.world) {
+        for (f, looks, outfit, player) in self.game.world.query::<(&Figure, Option<&zombie::looks::Looks>, Option<&survivor::Outfit>, Option<&Player>)>().iter(&self.game.world) {
             if !f.joints.is_empty() {
-                let palette = looks.map_or(plain, |l| l.palette());
+                let palette = looks.map(|l| l.palette()).or(outfit.map(|o| o.palette())).unwrap_or(plain);
                 let hidden = player.map_or(0, |p| self.eyes.iter().enumerate().filter(|&(_, &seat)| seat == p.0).fold(0, |bits, (pane, _)| bits | 1 << pane));
                 renderer.draw_figure(FigureDraw { parts: f.parts.clone(), model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3], palette, hidden });
             }

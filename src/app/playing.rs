@@ -128,6 +128,9 @@ impl DeadSignal {
         let panes: Vec<Rect> = self.shares.iter().map(|&share| super::panes::in_rect(share, area)).collect();
         let feeds = self.feeds();
         self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons, &feeds, &panes);
+        // Each player's figure, as they are now (for the others to see).
+        let now = self.game.clock().time;
+        crate::survivor::pose(&mut self.game.world, &self.run.doing(&self.combat, now));
         self.draw_marks(ui, &panes);
         self.shake_pads();
         self.map_screen(ui, active);

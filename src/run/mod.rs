@@ -99,6 +99,24 @@ impl Run {
         self.seats.iter().all(Seat::wants_lock)
     }
 
+    /// What each player's doing, for their figure (`now`: the game's
+    /// clock).
+    pub fn doing<'a>(&'a self, combat: &'a Combat, now: f64) -> Vec<crate::survivor::Doing<'a>> {
+        self.seats
+            .iter()
+            .map(|s| crate::survivor::Doing {
+                seat: s.n,
+                hands: &combat.arms[s.n].hands,
+                winding: s.winding(),
+                threw: s.threw.map(|(what, at)| (what, now - at)),
+                lowered: s.lowered(),
+                reviving: s.reviving.is_some_and(|(_, p)| p > 0.0),
+                down: s.down.is_some(),
+                out: s.out,
+            })
+            .collect()
+    }
+
     /// The dev's: the dead surge now.
     pub fn dev_surge(&mut self) {
         self.out.surging = true;

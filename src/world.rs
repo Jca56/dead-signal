@@ -163,7 +163,6 @@ impl Game {
         frame.add_systems(blink);
         player::install(&mut fixed);
         head::install(&mut frame);
-        crate::survivor::install(&mut frame);
         targets::install(&mut frame);
         zombie::install(&mut fixed, &mut frame);
         Self { world, frame, fixed, owed: 0.0, simulating: false }

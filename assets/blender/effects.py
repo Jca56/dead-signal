@@ -6,6 +6,9 @@
     Dot     a small ball, 6 cm across, white: the throw's arc, dot by dot
     Ring    a thin ring 1 m across, flat on the ground at its middle: where
             the throw lands
+    Flash   a shot's muzzle flash, 0.3 m long out along +X from the
+            muzzle: a yellow tongue, a white core, four spikes round it;
+            drawn aglow at a buddy's gun as it fires
 
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/effects.py
@@ -87,12 +90,25 @@ def ring(mat):
     finish("Ring", bm, mat)
 
 
+def flash(mat):
+    bm = bmesh.new()
+    col = bm.loops.layers.color.new("Col")
+    along = Matrix.Rotation(math.pi / 2, 4, "Y")
+    paint(bm, col, bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.055, radius2=0.0, depth=0.3, matrix=Matrix.Translation((0.15, 0, 0)) @ along)["verts"], YELLOW)
+    paint(bm, col, bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.03, radius2=0.0, depth=0.16, matrix=Matrix.Translation((0.08, 0, 0)) @ along)["verts"], WHITE)
+    for k in range(4):
+        spike = Matrix.Rotation(k * math.pi / 2 + math.pi / 4, 4, "X") @ Matrix.Translation((0.03, 0, 0.07)) @ Matrix.Rotation(-0.5, 4, "Y")
+        paint(bm, col, bmesh.ops.create_cone(bm, cap_ends=True, segments=4, radius1=0.018, radius2=0.0, depth=0.12, matrix=spike)["verts"], ORANGE)
+    finish("Flash", bm, mat)
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mat = material()
     flame(mat)
     dot(mat)
     ring(mat)
+    flash(mat)
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"effects: {len(bpy.data.objects)} objects -> {os.path.abspath(OUT)}")
 

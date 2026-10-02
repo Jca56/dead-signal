@@ -35,104 +35,28 @@ import os
 import sys
 
 import bpy
-from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from kit import Builder  # noqa: E402
 import shambler_body  # noqa: E402
 import shambler_extras  # noqa: E402
 import shambler_specials  # noqa: E402
+from rig_kit import Actions, blend, export, flat_material, part, rig, stash, with_  # noqa: E402
 from shambler_kit import BONES  # noqa: E402
 
 MODELS = os.path.join(HERE, "..", "models")
 FPS = 30
 
 
-def rig():
-    """The skeleton, from its rest (`BONES`)."""
-    data = bpy.data.armatures.new("ShamblerRig")
-    obj = bpy.data.objects.new("ShamblerRig", data)
-    bpy.context.scene.collection.objects.link(obj)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    root = data.edit_bones.new("root")
-    root.head, root.tail = (0, 0, 0), (0, 0.15, 0)
-    made = {"root": root}
-    pending = dict(BONES)
-    while pending:
-        for name, (head, tail, parent) in list(pending.items()):
-            if parent in made:
-                e = data.edit_bones.new(name)
-                e.head, e.tail, e.parent = head, tail, made[parent]
-                made[name] = e
-                del pending[name]
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return obj
-
-
-def part(name, make, armature, material):
-    """One part, built by `make(b)`, skinned on `armature`."""
-    b = Builder()
-    make(b)
-    mesh = bpy.data.meshes.new(name)
-    b.bm.to_mesh(mesh)
-    b.bm.free()
-    attrs = mesh.color_attributes
-    attrs.active_color = attrs["Col"]
-    attrs.render_color_index = attrs.find("Col")
-    mesh.materials.append(material)
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    for group in b.groups:
-        obj.vertex_groups.new(name=group)
-    obj.parent = armature
-    obj.modifiers.new("Rig", "ARMATURE").object = armature
-    return obj
-
-
 def build():
     """The rig, and every part on it."""
-    armature = rig()
-    material = bpy.data.materials.new("Flat")
-    material.use_nodes = True
-    nodes = material.node_tree.nodes
-    vc = nodes.new("ShaderNodeVertexColor")
-    vc.layer_name = "Col"
-    material.node_tree.links.new(vc.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
+    armature = rig("ShamblerRig", BONES)
+    material = flat_material()
     made = [part(name, make, armature, material) for name, make in {**shambler_body.parts(), **shambler_extras.parts(), **shambler_specials.parts()}.items()]
     return armature, made
 
 
 # ---- animation ---------------------------------------------------------------------
-
-def turn(rig, bone, x=0.0, y=0.0, z=0.0):
-    """A bone's rotation, given as turns about the rig's own X, Y and Z (as
-    the bone lies at rest), degrees: +X swings a hanging limb forward and
-    tips an upright one back."""
-    m = rig.data.bones[bone].matrix_local.to_3x3()
-    r = Matrix.Rotation(math.radians(z), 3, "Z") @ Matrix.Rotation(math.radians(y), 3, "Y") @ Matrix.Rotation(math.radians(x), 3, "X")
-    return (m.inverted() @ r @ m).to_quaternion()
-
-
-def moved(rig, bone, dx=0.0, dy=0.0, dz=0.0):
-    """A bone's offset, given in the rig's own axes."""
-    m = rig.data.bones[bone].matrix_local.to_3x3()
-    return m.inverted() @ Vector((dx, dy, dz))
-
-
-def key(rig, frame, pose):
-    """Key every bone at `frame`: those in `pose` ({bone: (x, y, z) turns,
-    or with a fourth item an (dx, dy, dz) offset}) as given, the rest at
-    rest, so each action says everything."""
-    for pb in rig.pose.bones:
-        pb.rotation_mode = "QUATERNION"
-        spec = pose.get(pb.name, (0.0, 0.0, 0.0))
-        pb.rotation_quaternion = turn(rig, pb.name, *spec[:3])
-        pb.location = moved(rig, pb.name, *spec[3]) if len(spec) > 3 else Vector()
-        pb.keyframe_insert("rotation_quaternion", frame=frame)
-        pb.keyframe_insert("location", frame=frame)
-
 
 def walk_pose(p):
     """The shamble at phase `p` (0–1 of a stride): the left leg swings
@@ -204,41 +128,11 @@ def stand(sway=0.0):
     }
 
 
-def blend(a, b, t):
-    out = {}
-    for name in set(a) | set(b):
-        pa = a.get(name, (0.0, 0.0, 0.0))
-        pb = b.get(name, (0.0, 0.0, 0.0))
-        rot = tuple(pa[i] + (pb[i] - pa[i]) * t for i in range(3))
-        off_a = pa[3] if len(pa) > 3 else (0.0, 0.0, 0.0)
-        off_b = pb[3] if len(pb) > 3 else (0.0, 0.0, 0.0)
-        out[name] = rot + (tuple(off_a[i] + (off_b[i] - off_a[i]) * t for i in range(3)),)
-    return out
-
-
-def with_(base, **changes):
-    out = dict(base)
-    for name, spec in changes.items():
-        out[name.replace("__", ".")] = spec
-    return out
-
-
 def actions(rig):
     """Each animation keyed on its own stretch of timeline, then cut into
     an action of its own."""
-    bpy.context.view_layer.objects.active = rig
-    bpy.ops.object.mode_set(mode="POSE")
-    made = []
-
-    def action(name, keys):
-        act = bpy.data.actions.new(name)
-        rig.animation_data_create()
-        rig.animation_data.action = act
-        for frame, pose in keys:
-            key(rig, frame, pose)
-        rig.animation_data.action = None
-        made.append(act)
-
+    acts = Actions(rig)
+    action = acts.action
     action("Walk", [(f, walk_pose(f / 24)) for f in range(0, 25, 2)])
     action("Idle", [(f, stand(math.sin(f / 90 * math.tau))) for f in range(0, 91, 10)])
     rest = stand()
@@ -270,15 +164,7 @@ def actions(rig):
     overhead = with_(rest, upper_arm__R=(170, 0, -15), upper_arm__L=(170, 0, 15), forearm__R=(20, 0, 0), forearm__L=(20, 0, 0), chest=(15, 0, 0), spine=(8, 0, 0), head=(10, 0, 0))
     slammed = with_(rest, upper_arm__R=(70, 0, 10), upper_arm__L=(70, 0, -10), forearm__R=(5, 0, 0), forearm__L=(5, 0, 0), chest=(-35, 0, 0), spine=(-20, 0, 0), hips=(0, 0, 0, (0, 0.15, -0.12)), thigh__R=(35, 0, 0), shin__R=(-40, 0, 0), thigh__L=(25, 0, 0), shin__L=(-30, 0, 0))
     action("Smash", [(0, rest), (12, overhead), (16, overhead), (20, slammed), (28, slammed), (39, rest)])
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return made
-
-
-def stash(rig, acts):
-    for act in acts:
-        track = rig.animation_data.nla_tracks.new()
-        track.name = act.name
-        track.strips.new(act.name, int(act.frame_range[0]), act)
+    return acts.done()
 
 
 def main():
@@ -288,18 +174,7 @@ def main():
     armature, made = build()
     stash(armature, actions(armature))
     out = os.path.abspath(os.path.join(MODELS, "shambler.glb"))
-    bpy.ops.export_scene.gltf(
-        filepath=out,
-        export_format="GLB",
-        export_yup=True,
-        export_apply=False,
-        export_animations=True,
-        export_animation_mode="ACTIONS",
-        export_anim_slide_to_zero=True,
-        export_skins=True,
-        export_vertex_color="ACTIVE",
-        export_normals=True,
-    )
+    export(out)
     faces = sum(len(o.data.polygons) for o in made)
     print(f"shambler: {len(made)} parts, {faces} faces, {len(armature.data.bones)} bones -> {out}")
 

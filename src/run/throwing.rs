@@ -80,9 +80,15 @@ impl Seat {
         {
             self.bag.remove(what.kind(), 1);
             throw::throw(&mut game.world, what, from, vel, self.n);
+            self.threw = Some((what, game.clock().time));
             combat.play(Sfx::Whoosh, 0.9);
         }
         false
+    }
+
+    /// What's being wound up to throw, if anything (not thought better of).
+    pub fn winding(&self) -> Option<Throwable> {
+        self.throw_arc().and(self.throwable)
     }
 
     /// The arc of a throw being aimed, to draw: its dots and where it lands.

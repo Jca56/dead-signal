@@ -71,9 +71,11 @@ pub struct Seat {
     sprinting: bool,
     /// Till a heavy sprint's next footfall is heard.
     footfall_in: f64,
-    /// The throwable picked, and a throw being aimed.
+    /// The throwable picked, a throw being aimed, and the last one let go
+    /// (and when, the game's clock).
     pub(super) throwable: Option<Throwable>,
     pub(super) aiming: Option<Aiming>,
+    pub(super) threw: Option<(Throwable, f64)>,
     /// Playing together: down (bleeding out, crawling), or out (bled out,
     /// watching); and picking someone downed up (their place in the seats,
     /// and how far along, 0–1).

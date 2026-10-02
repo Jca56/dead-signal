@@ -12,13 +12,15 @@ use super::{Burning, Fire, Thrown};
 use crate::player::Body;
 use crate::render::{Draw, MeshId, Renderer};
 
-/// What flames, the arc's dots and the landing ring look like
+/// What flames, the arc's dots and the landing ring look like, and a
+/// shot's muzzle flash (a buddy's gun, as the others see it)
 /// (`effects.glb`).
 #[derive(Resource, Clone, Copy)]
 pub struct Meshes {
     flame: MeshId,
     dot: MeshId,
     ring: MeshId,
+    pub flash: MeshId,
 }
 
 /// Load what they look like, for `world`'s runs.
@@ -26,11 +28,11 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
     match crate::assets::load(renderer, "effects") {
         Ok(props) => {
             let find = |n: &str| props.iter().find(|p| p.name == n).and_then(|p| p.mesh);
-            match (find("Flame"), find("Dot"), find("Ring")) {
-                (Some(flame), Some(dot), Some(ring)) => {
-                    world.insert_resource(Meshes { flame, dot, ring });
+            match (find("Flame"), find("Dot"), find("Ring"), find("Flash")) {
+                (Some(flame), Some(dot), Some(ring), Some(flash)) => {
+                    world.insert_resource(Meshes { flame, dot, ring, flash });
                 }
-                _ => log_error!("effects: no Flame, Dot or Ring"),
+                _ => log_error!("effects: no Flame, Dot, Ring or Flash"),
             }
         }
         Err(e) => log_error!("effects: {e}"),
