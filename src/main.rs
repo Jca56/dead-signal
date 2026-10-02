@@ -35,6 +35,7 @@ mod player;
 mod profile;
 mod render;
 mod run;
+mod screenshot;
 mod settings;
 mod slots_ui;
 mod sound;

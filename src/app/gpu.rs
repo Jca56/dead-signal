@@ -28,6 +28,12 @@ use crate::zombie::{self, figure::Figure};
 const SCOPE_HIDES: f64 = 0.35;
 
 impl AppHost for DeadSignal {
+    /// A frame F12 asked for: off to its file, with a shutter's click.
+    fn screenshot(&mut self, image: lntrn_image::Image, _window: u32) {
+        self.combat.play(crate::sound::Sfx::Shutter, 0.8);
+        self.screenshots.save(image);
+    }
+
     /// (No pointer while a pad's what's being played with.)
     fn cursor(&self, wanted: CursorIcon) -> CursorIcon {
         if self.pointer_away { CursorIcon::Hidden } else { wanted }

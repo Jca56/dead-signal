@@ -277,6 +277,18 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
             let mut f = Svf::default();
             render(0.08, 0.4, |t, n| sine(t, 1150.0) * env(t, 0.0008, 0.018) * 0.8 + sine(t, 380.0) * env(t, 0.001, 0.025) * 0.5 + f.run(n.next(), 3200.0, 0.6).1 * env(t, 0.0002, 0.005) * 0.6)
         }
+        Sfx::Shutter => {
+            // A camera's shutter: the blade snapped open, and shut a
+            // moment after, a little lower.
+            let (mut open, mut shut) = (Svf::default(), Svf::default());
+            render(0.17, 0.45, move |t, n| {
+                let x = n.next();
+                let after = (t - 0.07).max(0.0);
+                let opened = open.run(x, 3600.0, 0.6).1 * env(t, 0.0004, 0.010) + sine(t, 1500.0) * env(t, 0.0005, 0.012) * 0.4;
+                let closed = shut.run(x, 2300.0, 0.6).1 * env(after, 0.0004, 0.015) + sine(after, 950.0) * env(after, 0.0005, 0.018) * 0.5;
+                opened + closed * f32::from(t >= 0.07)
+            })
+        }
         Sfx::Pickup => {
             let mut f = Svf::default();
             render(0.18, 0.5, |t, n| f.run(n.next(), 1800.0, 0.9).1 * env(t, 0.004, 0.04) + sine(t, 520.0) * env(t, 0.002, 0.05) * 0.3)

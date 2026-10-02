@@ -203,6 +203,8 @@ pub struct DeadSignal {
     /// last stirred. And where the pointer was last frame.
     pointer_away: bool,
     pointer_was: Vec2,
+    /// F12's pictures, on their way to their files.
+    screenshots: crate::screenshot::Screenshots,
 }
 
 impl DeadSignal {
@@ -270,6 +272,7 @@ impl DeadSignal {
             last_device: Device::Keys,
             pointer_away: false,
             pointer_was: Vec2::ZERO,
+            screenshots: Default::default(),
         }
     }
 }
@@ -326,6 +329,11 @@ impl Host for DeadSignal {
             let mut s = self.game.world.resource_mut::<Settings>();
             s.fullscreen = self.fullscreen;
             settings::store(&s);
+        }
+        // F12: this frame, as it goes to the screen, kept as a picture.
+        if ui.state.take_key(|k| !k.repeat && k.key == Key::F(12)).is_some() {
+            self.screenshots.about_to();
+            cx.request(ShellRequest::Screenshot);
         }
         // The music, in the menus (and in a run, if the player wants it).
         let in_run = self.screen == Screen::Run;
@@ -434,6 +442,7 @@ impl Host for DeadSignal {
             let screen = ui.clip();
             ui.draw.rect(screen, Color::rgba(0.0, 0.0, 0.0, self.black));
         }
+        self.screenshots.frame(ui);
         // A game draws every frame; vsync paces it.
         ui.state.request_redraw_after(0.0);
         false
