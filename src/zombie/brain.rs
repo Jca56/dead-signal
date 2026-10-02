@@ -178,6 +178,8 @@ pub struct Zombie {
     /// has yet to get in by.
     pub relentless: bool,
     pub barrier: Option<u8>,
+    /// How hard it hits, as a share of its kind's.
+    pub might: f64,
     /// The player who last hurt it (their seat): what it takes with it,
     /// dying (a Spitter's burst), is theirs.
     pub by: Option<usize>,
@@ -209,7 +211,7 @@ impl Zombie {
     /// One of `kind` facing `yaw`, its own ways from `seed`.
     pub fn of(kind: Kind, yaw: f64, seed: u32) -> Self {
         let t = kind.traits();
-        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, relentless: false, barrier: None, by: None, quarry: None, heard: 0, spit_in: 0.0, charge_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
+        let mut z = Self { kind, hp: t.hp, state: State::Wander { goal: None, rest: 1.0 }, yaw, gait: Gait { walk: 0.0, sprint: 0.0, crouch: 0.0 }, path: Vec::new(), path_goal: Vec3::ZERO, leg_from: Vec3::ZERO, look_in: 0.0, in_sight: false, cut_off: false, repath: 0.0, last_seen: None, unseen: 0.0, cooldown: 0.0, relentless: false, barrier: None, might: 1.0, by: None, quarry: None, heard: 0, spit_in: 0.0, charge_in: 0.0, groan: 0.0, shuffle: 0.0, walked: 0.0, clip_t: 0.0, moving: false, seed: seed | 1 };
         z.groan = 2.0 + 5.0 * z.rand();
         let (lo, hi, lunge) = if z.rand() < t.fast_share { t.fast } else { t.pace };
         let walk = lo + (hi - lo) * z.rand();
@@ -386,7 +388,7 @@ impl Zombie {
                         let facing = Vec3::new(-self.yaw.sin(), 0.0, -self.yaw.cos());
                         if d <= swipe.reach && level(body.pos, p) && (d < 1e-6 || facing.dot(to * (1.0 / d)) > 0.5) {
                             let push = if d > 1e-6 { to * (1.0 / d) } else { facing };
-                            out.hit = Some(Blow { push, damage: swipe.damage, leaves: swipe.leaves });
+                            out.hit = Some(Blow { push, damage: swipe.damage * self.might, leaves: swipe.leaves });
                         }
                     }
                 }

@@ -25,12 +25,14 @@ const CRAMPED: (f64, f64) = (3.0, 7.0);
 const CLEAR_CRAMPED: f64 = 2.5;
 
 /// A tear in the air at `at`, `t` seconds open; the hound that comes of
-/// it is this tough, and faces this way.
+/// it is this tough, bites this hard (a share of a hound's bite), and
+/// faces this way.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Rift {
     pub at: Vec3,
     pub t: f64,
     hp: f64,
+    might: f64,
     yaw: f64,
 }
 
@@ -49,10 +51,11 @@ pub fn spot(world: &World, feet: Vec3, others: &[Vec3], mut roll: impl FnMut() -
     })
 }
 
-/// Open a rift at `at` for a hound with `hp`, to come out facing `toward`.
-pub fn open(world: &mut World, at: Vec3, toward: Vec3, hp: f64) {
+/// Open a rift at `at` for a hound with `hp`, biting `might` as hard as
+/// a hound does, to come out facing `toward`.
+pub fn open(world: &mut World, at: Vec3, toward: Vec3, hp: f64, might: f64) {
     let yaw = (-(toward.x - at.x)).atan2(-(toward.z - at.z));
-    world.spawn(Rift { at, t: 0.0, hp, yaw });
+    world.spawn(Rift { at, t: 0.0, hp, might, yaw });
     world.resource_mut::<Horde>().sounds.push((Sfx::Static, at + Vec3::new(0.0, 1.0, 0.0), 1.0));
 }
 
@@ -85,6 +88,7 @@ pub(super) fn step(world: &mut World) {
         let hound = super::spawn_kind(world, r.at, r.yaw, Kind::Hound, Theme::Drifter);
         if let Some(mut z) = world.get_mut::<Zombie>(hound) {
             z.hp = r.hp;
+            z.might = r.might;
             z.relentless = true;
             z.state = State::Hunt;
         }
@@ -136,7 +140,7 @@ mod tests {
     fn a_rift_crackles_open_and_a_hound_comes_of_it_hunting() {
         let mut world = World::new();
         world.insert_resource(Horde::default());
-        open(&mut world, Vec3::new(4.0, 0.0, 0.0), Vec3::ZERO, 140.0);
+        open(&mut world, Vec3::new(4.0, 0.0, 0.0), Vec3::ZERO, 140.0, 1.0);
         assert_eq!((pending(&mut world), super::super::alive(&mut world)), (1, 0));
         let steps = (OPENS_IN / STEP) as usize;
         for _ in 0..steps - 2 {

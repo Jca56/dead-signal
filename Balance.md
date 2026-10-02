@@ -208,7 +208,7 @@ A round's Shambler has 150 health, 50 more each round to 600 at the tenth, then 
 - **A Juggernaut** comes with round 10 (or 11), then no sooner than every 5 rounds; two from round 20. It comes in by the widest ways in, and tears boards off 2.5× as fast.
   - It's no part of the round's count: the round ends when the rest are dead, and it stays, through hound rounds too, till it's killed. The next comes on time whether it's dead or not.
   - Killing one pays 1500 to whoever did it and 500 to everyone else, and fills every gun's spare rounds.
-- **A hound round** is round 5 or 6, then every 4 or 5: no dead, only Hellhounds. 8 in the first, 2 more each time, to 24 (half as many again for two players); 4 up at once (6 for two). The last one dead fills every gun's spare rounds.
+- **A hound round** is round 5 or 6, then every 4 or 5: no dead, only Hellhounds. 8 in the first, 2 more each time, to 24 (half as many again for two players); 4 up at once (6 for two). The first pack is let off a little: a quarter less health, and bites of 8.5, not 10. The last one dead fills every gun's spare rounds.
 
 **Bleeding:** 1 health a second a cut, up to 3 cuts. It never stops on its own; a bandage or a medkit stops it. **Poison:** 3 a second for 10 s; a medkit clears it. Neither lets health come back.
 

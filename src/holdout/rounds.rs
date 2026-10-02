@@ -48,6 +48,9 @@ const HOUNDS_EVERY: u32 = 4;
 /// rifts, early on, less each hound round, and at the quickest.
 const HOUNDS: (u32, u32, u32) = (8, 2, 24);
 const HOUNDS_UP: (usize, usize) = (4, 2);
+/// The first hound round's are let off a little: this share as tough as
+/// a hound of their round, and biting this share as hard.
+pub const FIRST_PACK: (f64, f64) = (0.75, 0.85);
 const RIFT_EVERY: (f64, f64, f64) = (1.6, 0.15, 0.8);
 /// How fast the air goes bad as a hound round begins, and clears after,
 /// a second.
@@ -322,11 +325,19 @@ impl Rounds {
         None
     }
 
+    /// A hound of this round: how tough, and how hard it bites (a share
+    /// of a hound's bite). The first pack's are the gentler.
+    fn hound(&self) -> (f64, f64) {
+        let (tough, might) = if self.packs <= 1 { FIRST_PACK } else { (1.0, 1.0) };
+        (toughness(self.round) * hardiness(Kind::Hound) * tough, might)
+    }
+
     /// A rift opened for a hound near the player at `near` (no one of
     /// `feet` too close to it). Whether there was anywhere for it.
     fn tear(&mut self, world: &mut World, near: Vec3, feet: &[Vec3]) -> bool {
         let Some(at) = rift::spot(world, near, feet, || self.dice.unit()) else { return false };
-        rift::open(world, at, near, toughness(self.round) * hardiness(Kind::Hound));
+        let (hp, might) = self.hound();
+        rift::open(world, at, near, hp, might);
         self.spawn_in = (RIFT_EVERY.0 - RIFT_EVERY.1 * f64::from(self.packs.saturating_sub(1))).max(RIFT_EVERY.2);
         true
     }
@@ -353,8 +364,12 @@ impl Rounds {
         let yaw = (-w.inward.x).atan2(-w.inward.z);
         let e = zombie::spawn_kind(world, at, yaw, kind, Theme::Drifter);
         let (roll, pick) = (self.dice.unit(), self.dice.unit());
+        let hound = self.hound();
         if let Some(mut z) = world.get_mut::<Zombie>(e) {
             ready(&mut z, self.round, i as u8, pace(self.round, roll, pick));
+            if kind == Kind::Hound {
+                (z.hp, z.might) = hound;
+            }
         }
         if kind == Kind::Juggernaut {
             self.bosses.push(e);

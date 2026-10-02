@@ -58,9 +58,12 @@ fn a_hound_round_tears_them_in_near_the_player_and_they_come() {
     }
     assert!(nearest < 2.5, "none got to the player: {nearest:.1} m");
     assert!(h.rounds.gloom > 0.9 && h.rounds.warning().is_none());
-    // As tough as the round makes them; no boards touched.
-    let hp = world.query::<&Zombie>().iter(&world).map(|z| z.hp).next();
-    assert_eq!(hp, Some(rounds::toughness(1) * rounds::hardiness(Dead::Hound)));
+    // As tough as the round makes them, less what the first pack's let
+    // off (in health, and in how hard they bite); no boards touched.
+    let (tough, might) = rounds::FIRST_PACK;
+    let first = world.query::<&Zombie>().iter(&world).map(|z| (z.hp, z.might)).next();
+    assert_eq!(first, Some((rounds::toughness(1) * rounds::hardiness(Dead::Hound) * tough, might)));
+    assert!(tough < 1.0 && might < 1.0);
     assert!(world.resource::<Barriers>().0.iter().all(|b| b.boards == BOARDS));
 }
 
@@ -90,6 +93,10 @@ fn shut_in_the_start_room_the_hounds_still_come_and_the_round_ends_with_full_gun
     assert!(bag.count(ammo) < most);
     Holdout::max_ammo(&mut bag);
     assert_eq!(bag.count(ammo), most);
+    // The next pack (the breather over) is let off nothing.
+    hound_round(&mut world, &mut h, 16.0);
+    let second = world.query::<&Zombie>().iter(&world).filter(|z| !z.dead()).map(|z| (z.hp, z.might)).next();
+    assert_eq!(second, Some((rounds::toughness(2) * rounds::hardiness(Dead::Hound), 1.0)));
 }
 
 #[test]
