@@ -15,7 +15,8 @@
 //! in; `RADIO=key`: a whole one, the handset at their mouth). `SIZE=1920x1080`
 //! draws them that big (1280x720 if not). `RADIO=flare`: a drop's flare in
 //! their left hand. `DROP=1`: a crate coming down on its flare in the
-//! yard, and another down and open, what it held about it.
+//! yard, and another down and open, what it held about it. `BOOSTS=1`:
+//! both boosts up.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -167,6 +168,13 @@ impl DeadSignal {
         self.game.simulating = true;
         let view = target.create_view(&Default::default());
         let radio = std::env::var("RADIO").ok();
+        // (The boosts up, asked for.)
+        if let (Ok(_), Some(h)) = (std::env::var("BOOSTS"), self.run.holdout.as_mut()) {
+            h.boosts = Default::default();
+            h.boosts.start(crate::radio::codes::Call::DoublePoints);
+            h.boosts.start(crate::radio::codes::Call::Instakill);
+            h.boosts.update(11.0);
+        }
         // (Drops in the yard, asked for: one on its way down, one landed.)
         if std::env::var("DROP").is_ok() {
             use crate::radio::codes::Call;
@@ -223,6 +231,7 @@ impl DeadSignal {
         }
         if let (Some(seat), (over, images)) = (self.run.seats.first().filter(|s| s.radio_out()), over) {
             let holdout = self.run.holdout.as_ref();
+            // (Its dial worked by the keys, as far as its card's told.)
             over.ui.frame(|ui| {
                 let window = ui.clip();
                 if let Some(h) = holdout {

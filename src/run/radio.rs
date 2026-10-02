@@ -115,7 +115,7 @@ impl Seat {
                 Cue::On => (Sfx::RadioOn, 0.8),
                 Cue::Talk => (Sfx::RadioTalk, 0.8),
                 Cue::Over(call) => {
-                    self.sent(call);
+                    self.sent(game, call);
                     (Sfx::RadioOver, 0.7)
                 }
                 Cue::Lit => (Sfx::Ignite, 0.5),
@@ -131,9 +131,8 @@ impl Seat {
     }
 
     /// `call`'s gone out: its signal's spent. A drop's flare is theirs to
-    /// throw. (What else is called for comes of it in time: for now, its
-    /// name's flashed.)
-    fn sent(&mut self, call: Call) {
+    /// throw; anything else is the run's to begin.
+    fn sent(&mut self, game: &mut Game, call: Call) {
         let Some(radio) = &mut self.radio else { return };
         if !radio.signal.spend(call.entry().cost) {
             return;
@@ -141,7 +140,7 @@ impl Seat {
         if call.dropped() {
             radio.give_flare(call);
         } else {
-            self.note = Some((call.entry().name, super::loot::NOTE_FOR));
+            crate::support::called(&mut game.world, call, self.n);
         }
     }
 
@@ -243,9 +242,8 @@ mod tests {
         assert_eq!(seat.radio.and_then(|r| r.calling()), Some(Call::StrafingRun));
         assert_eq!(seat.radio_shown().map(|s| s.clip), Some("Key"));
         run(&mut h, &mut seat, &mut combat, None, false, 90);
-        assert_eq!(seat.note.map(|(n, _)| n), Some("STRAFING RUN"));
         assert!(seat.radio.is_some_and(|r| r.dialing() && r.dial().len() == 0));
-        assert_eq!(seat.radio.map(|r| r.signal.bars()), Some(3.0), "two of its five bars spent");
+        assert_eq!(seat.radio.map(|r| r.signal.bars()), Some(2.0), "three of its five bars spent");
         // Q again: down it goes, and the pistol's back in hand.
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 90);
         let hands = &combat.arms[0].hands;
@@ -289,24 +287,30 @@ mod tests {
         assert_eq!(seat.note.map(|(n, _)| n), Some("NOT ENOUGH SIGNAL"));
         assert!(seat.radio.is_some_and(|r| r.calling().is_none() && r.dial().len() == 0 && r.wrong().is_some()));
         assert_eq!(seat.radio_shown().map(|s| s.clip), Some("Idle"));
-        // Ten kills: a bar, and now it goes out, and the bar with it.
+        // Ten kills, a bar: still not the two it costs. Twenty: now it goes
+        // out, and the bars with it.
         seat.stats.gun_kills = 10;
         for key in ['s', 's', 'w', 'd'] {
             run(&mut h, &mut seat, &mut combat, Some(Key::Char(key)), false, 2);
         }
-        assert_eq!(seat.radio.map(|r| (r.calling(), r.signal.bars())), Some((Some(Call::AmmoDrop), 1.0)), "not spent till it's sent");
+        assert!(seat.radio.is_some_and(|r| r.calling().is_none() && r.signal.bars() == 1.0));
+        seat.stats.gun_kills = 20;
+        for key in ['s', 's', 'w', 'd'] {
+            run(&mut h, &mut seat, &mut combat, Some(Key::Char(key)), false, 2);
+        }
+        assert_eq!(seat.radio.map(|r| (r.calling(), r.signal.bars())), Some((Some(Call::AmmoDrop), 2.0)), "not spent till it's sent");
         run(&mut h, &mut seat, &mut combat, None, false, 90);
         assert_eq!(seat.radio.map(|r| (r.flare(), r.signal.bars())), Some((Some(Call::AmmoDrop), 0.0)), "spent, and its flare's theirs");
         // Put away mid-word, before it's sent: nothing's spent.
         let mut seat = self::seat(&mut combat);
         seat.radio = Some(Radio::default());
-        seat.stats.gun_kills = 10;
+        seat.stats.gun_kills = 20;
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 90);
         for key in ['s', 's', 'w', 'd'] {
             run(&mut h, &mut seat, &mut combat, Some(Key::Char(key)), false, 2);
         }
         run(&mut h, &mut seat, &mut combat, Some(Key::Char('q')), false, 90);
-        assert_eq!(seat.radio.map(|r| (r.out(), r.flare(), r.signal.bars())), Some((false, None, 1.0)));
+        assert_eq!(seat.radio.map(|r| (r.out(), r.flare(), r.signal.bars())), Some((false, None, 2.0)));
     }
 
     #[test]

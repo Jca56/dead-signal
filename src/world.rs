@@ -161,6 +161,7 @@ impl Game {
         world.insert_resource(crate::items::Ground::default());
         world.insert_resource(zombie::Stealth::default());
         world.insert_resource(zombie::Horde::default());
+        world.insert_resource(zombie::Instakill::default());
         let mut frame = Schedule::default();
         let mut fixed = Schedule::default();
         frame.add_systems((blink, crate::holdout::lamps::flicker));

@@ -3,9 +3,11 @@
 //! dead (`rounds.rs`) coming in by its windows. Hits and kills earn points;
 //! points buy guns and kits off the walls and open the doors to more of
 //! the arena. Boards torn off the windows can be nailed back, for a few
-//! points more. It lasts as long as the player does.
+//! points more. The radio's boosts (`boosts.rs`) double what's earned, or
+//! make any hit a kill, for a while. It lasts as long as the player does.
 
 pub mod arena;
+pub mod boosts;
 pub mod drops;
 mod buy;
 #[cfg(test)]
@@ -134,6 +136,8 @@ pub struct Holdout {
     /// What a purchase put out of a player's hands with no room for it in
     /// their pack (whose, and what): to be set down at their feet.
     pub spilled: Vec<(usize, Stack)>,
+    /// The radio's boosts, as long as each has left.
+    pub boosts: boosts::Boosts,
 }
 
 impl Holdout {
@@ -144,7 +148,7 @@ impl Holdout {
         open[arena.start] = true;
         let opened = vec![false; arena.doors.len()];
         let players = players.max(1);
-        Self { arena, rounds: Rounds::new(seed, players), open, opened, wallets: vec![Wallet::new(); players], spilled: Vec::new() }
+        Self { arena, rounds: Rounds::new(seed, players), open, opened, wallets: vec![Wallet::new(); players], spilled: Vec::new(), boosts: boosts::Boosts::default() }
     }
 
     /// Player `seat`'s wallet.
@@ -191,7 +195,7 @@ impl Holdout {
         let heads = now.headshot_kills - was.headshot_kills;
         let bodies = (now.kills - was.kills).saturating_sub(heads);
         let earned = PER_HIT * (now.hits - was.hits + now.blows - was.blows) + PER_KILL * (bodies + now.blasts - was.blasts) + PER_HEADSHOT_KILL * heads + PER_MELEE_KILL * (now.melee_kills - was.melee_kills);
-        wallet.earn(earned);
+        wallet.earn(earned * self.boosts.points());
     }
 
     /// A step of the holdout, the players' feet at `feet`: the rounds on
@@ -205,10 +209,14 @@ impl Holdout {
             }
             w.pops.retain(|p| p.1 < hud::POP_FOR);
         }
+        // The boosts run down; while any hit's a kill, the dead are told.
+        self.boosts.update(dt);
+        world.insert_resource(crate::zombie::Instakill(self.boosts.instakill()));
+        let worth = self.boosts.points();
         let mut events = Vec::new();
         for by in self.rounds.fallen(world) {
             for (seat, w) in self.wallets.iter_mut().enumerate() {
-                w.earn(if by == Some(seat) { PER_JUGGERNAUT.0 } else { PER_JUGGERNAUT.1 });
+                w.earn(worth * if by == Some(seat) { PER_JUGGERNAUT.0 } else { PER_JUGGERNAUT.1 });
             }
             events.push(rounds::Event::Felled(by));
         }
@@ -300,7 +308,7 @@ impl Holdout {
         b.boards += 1;
         if wallet.nailed < PAID_BOARDS {
             wallet.nailed += 1;
-            wallet.earn(PER_BOARD);
+            wallet.earn(PER_BOARD * self.boosts.points());
         }
         Some(Sfx::HitWood)
     }

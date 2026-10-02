@@ -101,6 +101,9 @@ fn balance_md_matches_the_game() {
     use crate::radio::signal;
     assert!(text.contains(&format!("a meter of **{} bars**", signal::BARS)));
     assert_eq!((signal::KILL * 10, signal::KEEN * 20), (signal::BAR, signal::BAR * 3), "a tenth of a bar a kill, half again to the head");
+    // Its boosts.
+    use crate::holdout::boosts::{JUGGERNAUT, LASTS};
+    assert!(text.contains(&format!("for everyone the moment they're sent, for **{LASTS} s**")) && text.contains(&format!("which takes **{JUGGERNAUT}×** the damage")));
     // What it calls down.
     use crate::support::{COMES_IN, FALLS, FROM};
     assert!(text.contains(&format!("let go over it **{COMES_IN} s** later and comes down under a parachute in **{} s**", FROM / FALLS)));

@@ -128,4 +128,37 @@ mod tests {
         }
         assert_eq!(at(&mut world, 12.0), full - 60.0, "down to what it has, and no further");
     }
+
+    #[test]
+    fn with_instakill_up_any_hit_kills_but_a_juggernaut_which_it_hits_three_times_as_hard() {
+        use crate::zombie::Instakill;
+        use crate::zombie::kind::Kind;
+        let mut world = World::new();
+        world.insert_resource(Horde::default());
+        world.insert_resource(Clock { time: 10.0, dt: 0.0 });
+        let (dir, from) = (Vec3::new(0.0, 0.0, -1.0), Vec3::new(0.0, 1.6, 2.0));
+        let told = |world: &mut World| std::mem::take(&mut world.resource_mut::<Horde>().harms);
+        let shambler = |world: &mut World| world.spawn((Zombie::new(0.0, 5), Body::at(Vec3::ZERO))).id();
+        // Without it, a graze is a graze.
+        let e = shambler(&mut world);
+        assert!(!zombie::hurt(&mut world, e, dir, from, shot(1.0, false)));
+        // With it: dead of the same, and seen to take all it had.
+        world.insert_resource(Instakill(true));
+        let e = shambler(&mut world);
+        let full = world.get::<Zombie>(e).unwrap().hp;
+        told(&mut world);
+        assert!(zombie::hurt(&mut world, e, dir, from, shot(1.0, false)));
+        let h = told(&mut world)[0];
+        assert!(h.killed && h.amount == full, "{h:?}");
+        // A Juggernaut only takes three times what it would.
+        let mut boss = Zombie::new(0.0, 5);
+        (boss.kind, boss.hp) = (Kind::Juggernaut, 5000.0);
+        let e = world.spawn((boss, Body::at(Vec3::ZERO))).id();
+        assert!(!zombie::hurt(&mut world, e, dir, from, shot(10.0, false)));
+        let with = told(&mut world)[0].amount;
+        world.insert_resource(Instakill(false));
+        zombie::hurt(&mut world, e, dir, from, shot(10.0, false));
+        let without = told(&mut world)[0].amount;
+        assert!(without > 0.0 && (with - without * crate::holdout::boosts::JUGGERNAUT).abs() < 1e-9, "{with} with, {without} without");
+    }
 }

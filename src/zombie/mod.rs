@@ -327,10 +327,18 @@ pub fn blow_shove(times: f64) -> f64 {
     BLOW_SHOVE * times
 }
 
+/// Whether any hit kills (the radio's INSTAKILL, in a holdout): all of
+/// the dead but a Juggernaut, which is hit so many times as hard.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct Instakill(pub bool);
+
 /// Hurt the Shambler `e` with `hit` along `dir` from `from`. Whether it
 /// died.
 pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) -> bool {
-    let one_shot = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.one_shot);
+    let instakill = world.get_resource::<Instakill>().is_some_and(|i| i.0);
+    let boss = world.get::<Zombie>(e).is_some_and(|z| z.kind == Kind::Juggernaut);
+    let one_shot = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.one_shot) || (instakill && !boss);
+    let hit = if instakill && boss { Impact { damage: hit.damage * crate::holdout::boosts::JUGGERNAUT, ..hit } } else { hit };
     let now = world.get_resource::<crate::world::Clock>().map_or(0.0, |c| c.time);
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
     if z.dead() {

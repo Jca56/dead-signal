@@ -89,6 +89,14 @@ impl Run {
         let feet: Vec<Vec3> = self.seats.iter().filter(|s| s.standing()).filter_map(|s| game.player(s.n).map(|(body, _)| body.pos)).collect();
         self.supported(game, combat);
         let Some(h) = &mut self.holdout else { return };
+        // (While any hit's a kill, what's killed charges no signal.)
+        if h.boosts.instakill() {
+            for seat in &mut self.seats {
+                if let Some(radio) = &mut seat.radio {
+                    radio.signal.skip(&seat.stats);
+                }
+            }
+        }
         let alive = crate::zombie::alive(&mut game.world) as u32;
         for seat in &mut self.seats {
             h.score(seat.n, &seat.stats);

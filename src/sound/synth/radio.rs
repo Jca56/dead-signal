@@ -1,7 +1,7 @@
 //! The handheld radio, and what it calls down: the handset switched on,
 //! its talk button pressed and let go, the tones of its dial and the buzz
 //! of a wrong arrow; a plane going over, high up, and a crate coming to
-//! ground.
+//! ground; a boost coming on.
 
 use super::{Svf, env, pulse, render, sine};
 use crate::sound::{RATE, Sfx};
@@ -92,6 +92,15 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
                 let knock = f.run(x, 520.0, 0.35).1 * env(t, 0.001, 0.035) * 0.8;
                 let dust = g.run(x, 1800.0, 0.9).1 * env((t - 0.03).max(0.0), 0.02, 0.16) * 0.25;
                 boom * 1.2 + knock + dust
+            })
+        }
+        Sfx::Boost => {
+            // A boost coming on: three notes climbing fast, the last rung
+            // out, with a shimmer over it.
+            render(0.75, 0.5, |t, n| {
+                let note = |from: f32, hz: f32, rings: f32| if t >= from { (sine(t - from, hz) + sine(t - from, hz * 2.0) * 0.3) * env(t - from, 0.004, rings) } else { 0.0 };
+                let shimmer = sine(t, 3136.0) * env((t - 0.2).max(0.0), 0.05, 0.2) * f32::from(t >= 0.2) * 0.12;
+                note(0.0, 784.0, 0.06) + note(0.09, 988.0, 0.06) + note(0.18, 1175.0, 0.22) + shimmer + n.next() * 0.01
             })
         }
         _ => Vec::new(),

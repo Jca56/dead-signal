@@ -116,6 +116,8 @@ pub enum Sfx {
     /// coming to ground.
     Flyover,
     Thud,
+    /// A boost coming on.
+    Boost,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -130,7 +132,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 71] = [
+const ALL: [Sfx; 72] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -194,6 +196,7 @@ const ALL: [Sfx; 71] = [
     Sfx::DialWrong,
     Sfx::Flyover,
     Sfx::Thud,
+    Sfx::Boost,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

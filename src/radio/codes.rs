@@ -37,11 +37,11 @@ use Arrow::{Down as D, Left as L, Right as R, Up as U};
 
 /// Everything on the card, in its order.
 pub const ENTRIES: [Entry; 6] = [
-    Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 1 },
-    Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 1 },
-    Entry { call: Call::DoublePoints, name: "DOUBLE POINTS", code: &[L, R, L, R], cost: 2 },
-    Entry { call: Call::Instakill, name: "INSTAKILL", code: &[R, U, D, D, L], cost: 3 },
-    Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 2 },
+    Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 2 },
+    Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 2 },
+    Entry { call: Call::DoublePoints, name: "2X POINTS", code: &[L, R, L, R], cost: 3 },
+    Entry { call: Call::Instakill, name: "INSTAKILL", code: &[R, U, D, D, L], cost: 4 },
+    Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 3 },
     Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U], cost: 5 },
 ];
 
@@ -157,6 +157,7 @@ mod tests {
         assert_eq!(d.so_far().collect::<Vec<_>>(), [L]);
         assert_eq!([R, L].map(|a| d.press(a)), [Dialed::On; 2]);
         assert_eq!(d.press(R), Dialed::Called(Call::DoublePoints));
+        assert_eq!(Call::DoublePoints.entry().name, "2X POINTS");
         // Every code can be punched in from nothing.
         for e in &ENTRIES {
             d.clear();

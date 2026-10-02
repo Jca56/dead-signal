@@ -4,7 +4,8 @@
 //! open sky over it, a crate that comes down on it under a parachute and
 //! opens; under a roof the flare gutters out and nothing comes. What it
 //! means to the players (what the crate held, the signal back for a flare
-//! that guttered) is the run's: it's told through [`Support`]. What's
+//! that guttered) is the run's: it's told through [`Support`], as is
+//! what's called for that needs no marking (a boost). What's
 //! seen of it is in `draw.rs`.
 
 pub mod draw;
@@ -80,6 +81,9 @@ pub struct Drop {
 /// What came of it, for the run.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
+    /// Something that needs no marking was called for, by player `by`:
+    /// it's the run's to begin (a boost).
+    Called { call: Call, by: usize },
     /// A flare guttered out with nothing sent (a roof over it, or it was
     /// lost): what was called for can't come.
     Guttered { call: Call, by: usize },
@@ -91,6 +95,11 @@ pub enum Event {
 #[derive(Resource, Default)]
 pub struct Support {
     pub events: Vec<Event>,
+}
+
+/// Player `by` called for `call`, which needs no marking.
+pub fn called(world: &mut World, call: Call, by: usize) {
+    world.resource_mut::<Support>().events.push(Event::Called { call, by });
 }
 
 /// Player `by` throws a flare for `call` from `from` along the arc `vel`.

@@ -42,6 +42,12 @@ impl Signal {
         self.add(KILL * (new[0] - keen) + KEEN * keen);
     }
 
+    /// What's been killed since last asked charges nothing (any hit was a
+    /// kill: INSTAKILL's up).
+    pub fn skip(&mut self, stats: &Stats) {
+        self.seen = [stats.kills(), stats.headshot_kills, stats.melee_kills];
+    }
+
     /// A Juggernaut killed: a bar at once.
     pub fn juggernaut(&mut self) {
         self.add(JUGGERNAUT);
@@ -102,6 +108,18 @@ mod tests {
         stats.gun_kills += 500;
         s.charge(&stats);
         assert!(s.bars() == f64::from(BARS) && s.has(BARS) && !s.has(BARS + 1));
+    }
+
+    #[test]
+    fn kills_skipped_charge_nothing_then_or_after() {
+        let mut s = Signal::default();
+        let mut stats = Stats { gun_kills: 40, headshot_kills: 10, ..Stats::default() };
+        s.skip(&stats);
+        s.charge(&stats);
+        assert_eq!(s.bars(), 0.0);
+        stats.gun_kills = 50;
+        s.charge(&stats);
+        assert_eq!(s.bars(), 1.0, "and what's killed after counts as it did");
     }
 
     #[test]

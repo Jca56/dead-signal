@@ -2,7 +2,7 @@
 //! it holds is spilled about it to be taken (an ammo drop: what everyone's
 //! guns lack of a full carry; a medic drop: something to mend each of them
 //! with); a flare that guttered out with nothing sent, its signal's given
-//! back.
+//! back; a boost called for, it's begun, for everyone.
 
 use lntrn_math::Vec3;
 
@@ -38,6 +38,18 @@ impl Run {
         let events = std::mem::take(&mut game.world.resource_mut::<Support>().events);
         for event in events {
             match event {
+                // A boost: on, for everyone, and everyone's told. (What
+                // else is called for comes of it in time: for now, its
+                // name's flashed.)
+                Event::Called { call, by } => {
+                    let name = Some((call.entry().name, super::loot::NOTE_FOR));
+                    if self.holdout.as_mut().is_some_and(|h| h.boosts.start(call)) {
+                        combat.play(Sfx::Boost, 0.9);
+                        self.seats.iter_mut().for_each(|s| s.note = name);
+                    } else if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
+                        seat.note = name;
+                    }
+                }
                 // Nothing could come: the signal it cost, back.
                 Event::Guttered { call, by } => {
                     let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) else { continue };
@@ -111,12 +123,46 @@ mod tests {
         assert!(run.held_by(Call::Gunship).is_empty());
     }
 
+    /// `seat`'s signal charged by what they've killed, as their frame does.
+    fn charge(seat: &mut Seat) {
+        if let Some(radio) = &mut seat.radio {
+            radio.signal.charge(&seat.stats);
+        }
+    }
+
+    #[test]
+    fn a_boost_called_for_is_on_for_everyone_and_instakill_s_kills_charge_no_signal() {
+        let (mut run, mut game, mut combat) = run(2);
+        let arena = crate::holdout::arena::Arena { reach: 20.0, bounds: (Vec3::splat(-20.0), Vec3::splat(20.0)), zones: vec!["YARD"], start: 0, spawn: Vec3::ZERO, windows: Vec::new(), doors: Vec::new(), buys: Vec::new(), lamps: Vec::new(), signs: Vec::new() };
+        let mut holdout = Holdout::new(arena, 1, 2);
+        holdout.begin(&mut game.world);
+        run.holdout = Some(holdout);
+        crate::support::called(&mut game.world, Call::Instakill, 1);
+        crate::support::called(&mut game.world, Call::StrafingRun, 0);
+        run.holdout_step(&mut game, &mut combat, 0.016);
+        let h = run.holdout.as_ref().unwrap();
+        assert!(h.boosts.instakill() && h.boosts.points() == 1);
+        assert!(game.world.resource::<crate::zombie::Instakill>().0, "the dead are told");
+        assert_eq!(run.seats.iter().map(|s| s.note.map(|(n, _)| n)).collect::<Vec<_>>(), [Some("STRAFING RUN"), Some("INSTAKILL")], "everyone's told of a boost (the first was then told of their own)");
+        // What's killed while it's up charges nothing; after, it does.
+        run.seats[0].stats.gun_kills = 30;
+        run.holdout_step(&mut game, &mut combat, 0.016);
+        charge(&mut run.seats[0]);
+        assert_eq!(run.seats[0].radio.map(|r| r.signal.bars()), Some(0.0));
+        run.holdout_step(&mut game, &mut combat, crate::holdout::boosts::LASTS);
+        assert!(!run.holdout.as_ref().unwrap().boosts.instakill() && !game.world.resource::<crate::zombie::Instakill>().0);
+        run.seats[0].stats.gun_kills = 40;
+        run.holdout_step(&mut game, &mut combat, 0.016);
+        charge(&mut run.seats[0]);
+        assert_eq!(run.seats[0].radio.map(|r| r.signal.bars()), Some(1.0));
+    }
+
     #[test]
     fn a_flare_that_guttered_gives_its_signal_back_to_whoever_threw_it() {
         let (mut run, mut game, mut combat) = run(2);
         game.world.resource_mut::<Support>().events.push(Event::Guttered { call: Call::MedicDrop, by: 1 });
         run.supported(&mut game, &mut combat);
-        assert_eq!(run.seats.iter().map(|s| s.radio.map(|r| r.signal.bars())).collect::<Vec<_>>(), [Some(0.0), Some(1.0)]);
+        assert_eq!(run.seats.iter().map(|s| s.radio.map(|r| r.signal.bars())).collect::<Vec<_>>(), [Some(0.0), Some(2.0)]);
         assert!(run.seats[1].note.is_some() && run.seats[0].note.is_none());
         assert!(game.world.resource::<Support>().events.is_empty());
     }

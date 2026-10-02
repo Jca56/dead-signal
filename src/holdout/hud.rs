@@ -2,13 +2,15 @@
 //! blood (tally marks for the first five, then its number), flaring as a
 //! new one begins and dim between; under it the points, and what was just
 //! earned rising off them; under them the radio's signal, with the key
-//! that pulls it out; and in a breather, what the radio says is coming.
+//! that pulls it out; in a breather, what the radio says is coming; and,
+//! top middle, the boosts that are up, each with how long it has left.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
 use super::Holdout;
+use crate::radio::codes::Call;
 use crate::radio::signal::Signal;
 use super::rounds::Wave;
 use crate::style;
@@ -20,13 +22,16 @@ const BLOOD: Color = Color::rgb(0.66, 0.08, 0.06);
 const FLARE: Color = Color::rgb(0.95, 0.85, 0.75);
 const FLARE_FOR: f64 = 2.5;
 
-/// The radio's signal's amber.
+/// The radio's signal's amber; and its boosts' colours.
 const AMBER: Color = Color::rgb(0.98, 0.66, 0.18);
+const DOUBLE: Color = Color::rgb(1.0, 0.82, 0.25);
+const INSTAKILL: Color = Color::rgb(1.0, 0.30, 0.22);
 
 /// The round and player `seat`'s points (and the others', smaller), over
 /// `screen`: their own part of the window; and their radio's `signal`,
 /// with what pulls the radio out.
 pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize, signal: Option<(&Signal, &str)>) {
+    boosts(ui, screen, h);
     let s = ui.m.scale;
     let left = screen.min.x + 60.0 * s;
     let top = screen.min.y + 50.0 * s;
@@ -101,6 +106,29 @@ pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize, signal: Option<
     } else if h.rounds.wave == Wave::Hounds {
         let ww = ui.measure("HELLHOUNDS", &small);
         ui.text_at("HELLHOUNDS", &small, Vec2::new(left, y + 56.0 * s), ww + 8.0, style::SIGNAL);
+    }
+}
+
+/// The boosts that are up, across the top middle of `screen`: each its
+/// name, the seconds it has left, and a bar running down under it;
+/// blinking as it runs out.
+fn boosts(ui: &mut Ui, screen: Rect, h: &Holdout) {
+    use super::boosts::{ENDING, LASTS};
+    let s = ui.m.scale;
+    let name = TextStyle::new((38.0 * s) as f32).bold().family(style::FONT);
+    let up: Vec<(String, f64, Color)> = h.boosts.up().map(|(n, left, call)| (format!("{n}  {}", left.ceil() as u32), left, if call == Call::Instakill { INSTAKILL } else { DOUBLE })).collect();
+    let (wide, gap) = (330.0 * s, 40.0 * s);
+    let all = up.len() as f64 * wide + (up.len() as f64 - 1.0).max(0.0) * gap;
+    let top = screen.min.y + 44.0 * s;
+    for (i, (words, left, colour)) in up.into_iter().enumerate() {
+        let x = screen.center().x - all * 0.5 + i as f64 * (wide + gap);
+        let shows = if left < ENDING { 0.4 + 0.6 * (left * 7.0).sin().abs() } else { 1.0 };
+        let c = Color::rgba(colour.r, colour.g, colour.b, shows);
+        let w = ui.measure(&words, &name);
+        ui.text_at(&words, &name, Vec2::new(x + (wide - w) * 0.5, top), w + 8.0, c);
+        let under = top + f64::from(name.line_height()) + 6.0 * s;
+        ui.draw.rect(Rect::from_min_size(Vec2::new(x, under), Vec2::new(wide, 8.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.55));
+        ui.draw.rect(Rect::from_min_size(Vec2::new(x, under), Vec2::new(wide * (left / LASTS).min(1.0), 8.0 * s)), c);
     }
 }
 
