@@ -15,6 +15,8 @@ The tables of stats (guns, melee, the dead) are checked by the test `balance_md_
 | HUNTING RIFLE | Primary | .308 | 160 | 1 | 5 | 1.1 s (bolt) | semi | 0.6 s a round | 120 m | 2 more (70%, 40%) |
 | SMG | Primary | 9mm | 20 | 1 | 30 | 0.075 s (800/min) | auto | 2.0 s | 60 m | no |
 | ASSAULT RIFLE | Primary | 5.56 | 42 | 1 | 30 | 0.1 s (600/min) | auto / semi (B) | 2.3 s | 90 m | 1 more (50%) |
+| LMG | Primary | 7.62 belt | 55 | 1 | 100 | 0.11 s (550/min) | auto | 5.0 s | 110 m | 2 more (60%, 30%) |
+| FLAMETHROWER | Primary | flame fuel | 8 | 1 | 200 | 0.05 s (20 puffs a second) | auto | 3.0 s | 35 m | all in its cone |
 
 Headshots do **3×**. Shots under a roof are heard **60%** as far.
 
@@ -22,6 +24,8 @@ Headshots do **3×**. Shots under a roof are heard **60%** as far.
 - **Shotgun:** full to 12 m, down to 40% by 32 m.
 - **SMG:** full to 20 m, down to 60% by 60 m.
 - **The rest:** none.
+
+**The flamethrower** shoots no rounds: each puff scorches everything in a 22° cone out to 9 m that isn't behind a wall (8 a puff, so 160 a second to each), and sets it burning (30 a second, for 3 s after the stream's off it). Where the stream ends, on the ground or run down a wall, it leaves a fire 1.1 m across for 4 s. It burns another player the same way (15 a second while alight), and anyone who stands in its fires. A tank is 10 s of stream. Its hits pay no points in HOLDOUT; its kills do.
 
 **Spread** (degrees, standing still / moving / in the air):
 
@@ -32,6 +36,8 @@ Headshots do **3×**. Shots under a roof are heard **60%** as far.
 | HUNTING RIFLE | 3.0 / 5.0 / 8.0 | 0 / 1.5 / 5.0 | 0.25× (4× scope) |
 | SMG | 2.6 / 3.5 / 6.0 | 0.8 / 1.6 / 4.0 | 0.8× |
 | ASSAULT RIFLE | 2.4 / 3.4 / 6.0 | 0.15 / 1.0 / 4.0 | 0.7× (red dot) |
+| LMG | 3.4 / 4.8 / 8.0 | 0.5 / 1.8 / 5.0 | 0.75× |
+| FLAMETHROWER | a 22° cone | the same | 0.9× |
 
 ### Damage per shot with distance
 
@@ -44,6 +50,7 @@ Aimed at a Shambler's chest, standing still. Hip / aimed:
 | HUNTING RIFLE | 160 / 160 | 150 / 160 | 103 / 160 | 56 / 160 | 23 / 160 |
 | SMG | 20 / 20 | 20 / 20 | 14 / 20 | 9 / 20 | 3 / 17 |
 | ASSAULT RIFLE | 42 / 42 | 42 / 42 | 32 / 42 | 21 / 42 | 10 / 42 |
+| LMG | 55 / 55 | 47 / 55 | 31 / 55 | 15 / 55 | 6 / 55 |
 
 ### Damage per second at 6 m, aimed
 
@@ -56,6 +63,7 @@ SHOTGUN        367 ████████████████████�
 HUNTING RIFLE  145 █████████▌                           84 █████▌
 SMG            267 █████████████████▌                  141 █████████▍
 ASSAULT RIFLE  420 ████████████████████████████        238 ███████████████▊
+LMG            500 █████████████████████████████████▎  344 ██████████████████████▉
 ```
 
 The hunting rifle's number undersells it: every round is a kill, and it goes on through two more.
@@ -69,6 +77,7 @@ The hunting rifle's number undersells it: every round is a kill, and it goes on 
 | HUNTING RIFLE | 1 | 1 | 1 | 6 | 23 |
 | SMG | 8 (3) | 4 (2) | 6 (2) | 45 | 180 |
 | ASSAULT RIFLE | 4 (2) | 2 (1) | 3 (1) | 22 | 86 |
+| LMG | 3 (1) | 2 (1) | 2 (1) | 17 | 66 |
 
 A dazed Juggernaut takes **2×** from any side, plate or not.
 

@@ -11,7 +11,7 @@ mod spec;
 #[cfg(test)]
 mod tests;
 
-pub use spec::{Falloff, Reload, Spec, Weapon};
+pub use spec::{Falloff, Reload, Shot, Spec, Stream, Weapon};
 
 use crate::loot::bag::Slot;
 
@@ -273,7 +273,8 @@ impl Hands {
             _ => dt,
         };
         self.since_swing += dt;
-        self.gap = (self.gap - dt).max(0.0);
+        // (Down to a frame past: held, a gun owes the next round that much.)
+        self.gap = (self.gap - dt).max(-dt);
         let crossed = |at: f64| before < at && self.t >= at;
         let marks = |marks: &[(f64, Act)]| marks.iter().filter(|(at, _)| crossed(*at)).map(|(_, act)| *act).collect::<Vec<Act>>();
         let room = |h: &Self| h.mag < spec.mag && h.spare > 0;
@@ -359,7 +360,10 @@ impl Hands {
                 None => self.swing(),
                 Some(_) if self.mag > 0 => {
                     self.mag -= 1;
-                    self.gap = spec.shot.map_or(0.0, |s| s.gap);
+                    // Held, what was left of the frame goes to the next
+                    // round: the rate's the gun's, whatever the frame's.
+                    let owed = if held { self.gap.min(0.0) } else { 0.0 };
+                    self.gap = spec.shot.map_or(0.0, |s| s.gap) + owed;
                     self.start(Clip::Fire);
                     acts.push(Act::Shoot);
                 }

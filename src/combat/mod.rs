@@ -8,6 +8,7 @@
 use lntrn_math::Vec3;
 
 mod dead;
+mod flame;
 
 use crate::collide::Surface;
 use crate::fx::{Fx, Marker};
@@ -54,11 +55,13 @@ pub struct Arms {
     pub rumble: Rumble,
     /// Their hitmarker, flashing.
     pub marker: Option<Marker>,
+    /// Till a stream of fire in their hands is heard again.
+    roar: f64,
 }
 
 impl Default for Arms {
     fn default() -> Self {
-        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0, rumble: Rumble::default(), marker: None }
+        Self { hands: Hands::default(), sprint_block: 0.0, hurt: 0.0, melee: 1.0, rumble: Rumble::default(), marker: None, roar: 0.0 }
     }
 }
 
@@ -189,6 +192,7 @@ impl Combat {
     pub fn frame(&mut self, game: &mut Game, seat: usize, trigger: Trigger, dt: f64, stats: &mut Stats) -> f64 {
         let arms = &mut self.arms[seat];
         arms.sprint_block -= dt;
+        arms.roar -= dt;
         arms.hurt = (arms.hurt - dt * 1.6).max(0.0);
         arms.marker = arms.marker.and_then(|m| m.faded(dt));
         let spec = arms.hands.spec();
@@ -209,6 +213,11 @@ impl Combat {
             match act {
                 Act::Shoot => {
                     let Some(shot) = spec.shot else { continue };
+                    // Fire, not a round.
+                    if let Some(stream) = shot.stream {
+                        self.breathe(game, &aim, &shot, stream);
+                        continue;
+                    }
                     stats.shots += 1;
                     self.sound.play(shot.sound, 0.9);
                     zombie::noise(&mut game.world, aim.eye, shot.heard);

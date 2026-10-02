@@ -59,7 +59,7 @@ fn standing_its_feet_are_on_the_ground_and_its_eyes_at_eye_height() {
 #[test]
 fn both_hands_are_on_every_gun_and_it_points_where_they_aim() {
     let rig = rig();
-    for weapon in [Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Smg, Weapon::AssaultRifle] {
+    for weapon in [Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Smg, Weapon::AssaultRifle, Weapon::Lmg, Weapon::Flamethrower] {
         let g = gun::of(weapon).expect("a gun");
         for (aimed, sprinting) in [(false, false), (true, false), (false, true)] {
             for pitch in [-0.7, 0.0, 0.7] {

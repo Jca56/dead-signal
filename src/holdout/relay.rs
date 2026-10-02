@@ -104,11 +104,12 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(-19, 18.0), 1, Face::S, Wares::Weapon(Item::AssaultRifle)),
         BuyAt(ns(15, -16.5), 0, Face::E, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-6, 22.0), 0, Face::N, Wares::Kit(Item::Bandage)),
-        // The motor pool's, the rifle up on its mezzanine; the west lot's,
-        // on the motor pool's wall.
+        // The motor pool's, the flamethrower in its parts store, the rifle
+        // up on its mezzanine; the west lot's, on the motor pool's wall.
         BuyAt(ew(-3, -44.0), 0, Face::S, Wares::Weapon(Item::Shotgun)),
         BuyAt(ew(12, -40.0), 0, Face::S, Wares::Kit(Item::Bandage)),
         BuyAt(ew(19, -26.0), 0, Face::N, Wares::Kit(Item::Medkit)),
+        BuyAt(ns(-24, 15.5), 0, Face::W, Wares::Weapon(Item::Flamethrower)),
         BuyAt(ew(19, -30.0), 1, Face::N, Wares::Weapon(Item::Rifle)),
         BuyAt(ew(-3, -31.0), 0, Face::N, Wares::Kit(Item::Medkit)),
         // The east court's, on the compound's wall.
@@ -121,8 +122,8 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ns(50, 11.5), 0, Face::E, Wares::Kit(Item::Medkit)),
         BuyAt(ew(19, 41.0), 1, Face::N, Wares::Weapon(Item::AssaultRifle)),
         BuyAt(ns(41, 1.0), 1, Face::W, Wares::Kit(Item::Medkit)),
-        // The bunker's: the armory, the ops room, the bunk room.
-        BuyAt(ew(19, 36.5), -1, Face::N, Wares::Weapon(Item::AssaultRifle)),
+        // The bunker's: the armory (the LMG), the ops room, the bunk room.
+        BuyAt(ew(19, 36.5), -1, Face::N, Wares::Weapon(Item::Lmg)),
         BuyAt(ew(13, 41.0), -1, Face::N, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-1, 36.5), -1, Face::S, Wares::Kit(Item::Bandage)),
     ],

@@ -230,6 +230,23 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
 }
 
 #[test]
+fn the_heavy_weapons_are_on_the_walls_with_fewer_belts_and_tanks_to_carry() {
+    let (mut world, mut h) = world_of(built());
+    for (kind, cost, carried) in [(Kind::Lmg, 3000, 400), (Kind::Flamethrower, 2500, 800)] {
+        let i = h.arena.buys.iter().position(|b| b.wares == Wares::Weapon(kind)).unwrap_or_else(|| panic!("no {kind:?} on a wall"));
+        assert_eq!(price(kind), cost);
+        let mut bag = Holdout::loadout();
+        h.wallets[0].points = cost;
+        let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(i), &mut bag);
+        assert_eq!((took, h.wallets[0].points), (Some(Slot::Primary), 0), "{kind:?}");
+        let (ammo, most) = spare(kind).unwrap();
+        assert_eq!((most, bag.count(ammo)), (carried, carried), "{kind:?}");
+    }
+    assert_eq!(h.arena.zones[h.arena.buys.iter().find(|b| b.wares == Wares::Weapon(Kind::Lmg)).unwrap().zone], "THE BUNKER");
+    assert_eq!(h.arena.zones[h.arena.buys.iter().find(|b| b.wares == Wares::Weapon(Kind::Flamethrower)).unwrap().zone], "MOTOR POOL");
+}
+
+#[test]
 fn a_window_is_nailed_up_from_its_own_floor_not_the_one_over_it() {
     let (mut world, h) = world_of(built());
     let up = Vec3::new(0.0, 1.0, 0.0);

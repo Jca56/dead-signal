@@ -17,13 +17,15 @@ pub enum Weapon {
     Rifle,
     Smg,
     AssaultRifle,
+    Lmg,
+    Flamethrower,
     Knife,
     Machete,
     Axe,
 }
 
 impl Weapon {
-    pub const ALL: [Weapon; 9] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Smg, Weapon::AssaultRifle, Weapon::Knife, Weapon::Machete, Weapon::Axe];
+    pub const ALL: [Weapon; 11] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Smg, Weapon::AssaultRifle, Weapon::Lmg, Weapon::Flamethrower, Weapon::Knife, Weapon::Machete, Weapon::Axe];
 }
 
 /// How far off true a round may fly, degrees: standing still, moving,
@@ -58,6 +60,14 @@ impl Falloff {
         let t = ((metres - self.near) / (self.far - self.near)).clamp(0.0, 1.0);
         1.0 + (self.least - 1.0) * t
     }
+}
+
+/// A stream of fire in place of rounds: everything in a cone ahead of the
+/// muzzle, out to the shot's range, is burnt by each puff of it (the
+/// shot's damage), and catches. `cone` is how wide it is, degrees across.
+#[derive(Clone, Copy, Debug)]
+pub struct Stream {
+    pub cone: f64,
 }
 
 /// How it shoots.
@@ -104,6 +114,8 @@ pub struct Shot {
     pub kick_side: f64,
     /// What happens in the Fire clip after the shot, and when (a pump).
     pub marks: &'static [(f64, Act)],
+    /// Fire, not rounds: each "shot" a puff of the stream.
+    pub stream: Option<Stream>,
 }
 
 /// How it's reloaded.
@@ -209,6 +221,7 @@ const PISTOL: Spec = Spec {
         kick: 1.5,
         kick_side: 0.8,
         marks: &[],
+        stream: None,
     }),
     reload: Some(Reload::Magazine { time: 1.4, marks: &[(0.2, Act::MagOut), (0.95, Act::MagIn), (1.12, Act::SlideRack)] }),
     // The pistol-whip lands on frame 9 of 30 a second.
@@ -248,6 +261,7 @@ const SHOTGUN: Spec = Spec {
         kick: 5.0,
         kick_side: 2.0,
         marks: &[(10.0 / 30.0, Act::Pump)],
+        stream: None,
     }),
     reload: Some(Reload::Rounds { start: 0.4, start_marks: &[], each: 13.0 / 30.0, insert_at: 8.0 / 30.0, end: 0.5, end_marks: &[(9.0 / 30.0, Act::Pump)] }),
     // The shove with the gun's side lands on frame 8.
@@ -287,6 +301,7 @@ const RIFLE: Spec = Spec {
         kick: 6.0,
         kick_side: 1.5,
         marks: &[(14.0 / 30.0, Act::Bolt)],
+        stream: None,
     }),
     reload: Some(Reload::Rounds { start: 0.5, start_marks: &[(6.0 / 30.0, Act::Bolt)], each: 0.6, insert_at: 10.0 / 30.0, end: 0.55, end_marks: &[(9.0 / 30.0, Act::Bolt)] }),
     bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
@@ -324,6 +339,7 @@ const SMG: Spec = Spec {
         kick: 0.8,
         kick_side: 0.9,
         marks: &[],
+        stream: None,
     }),
     reload: Some(Reload::Magazine { time: 2.0, marks: &[(0.5, Act::MagOut), (1.48, Act::MagIn), (1.76, Act::SlideRack)] }),
     bash: Bash { time: 0.6, swing_at: 0.1, damage: 50.0, reach: 1.8, stamina: 9.0, ..BLOW },
@@ -362,11 +378,91 @@ const ASSAULT_RIFLE: Spec = Spec {
         kick: 1.3,
         kick_side: 0.8,
         marks: &[],
+        stream: None,
     }),
     reload: Some(Reload::Magazine { time: 2.3, marks: &[(0.55, Act::MagOut), (1.7, Act::MagIn), (2.02, Act::SlideRack)] }),
     bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
     draw: 0.5,
     holster: 0.4,
+};
+
+// A belt of 7.62 and no hurry: slow up, slow to feed, and it doesn't stop.
+// Through one and the two behind it.
+const LMG: Spec = Spec {
+    name: "LMG",
+    slot: Some(Slot::Primary),
+    model: "lmg",
+    mag: 100,
+    ammo: Some(Kind::Rounds762),
+    shot: Some(Shot {
+        damage: 55.0,
+        pellets: 1,
+        falloff: None,
+        range: 400.0,
+        sound: Sfx::LmgShot,
+        heard: 110.0,
+        shove: 1.4,
+        stumble: false,
+        pierce: &[0.6, 0.3],
+        hip: Spread { still: 3.4, moving: 4.8, air: 8.0 },
+        aimed: Spread { still: 0.5, moving: 1.8, air: 5.0 },
+        aim_time: 0.4,
+        zoom: 0.75,
+        scope: false,
+        // About 550 a minute.
+        gap: 0.11,
+        time: 3.0 / 30.0,
+        auto: true,
+        select: false,
+        kick: 1.7,
+        kick_side: 1.3,
+        marks: &[],
+        stream: None,
+    }),
+    // The old box off, a fresh one on, the belt laid in, the handle hauled.
+    reload: Some(Reload::Magazine { time: 5.0, marks: &[(1.1, Act::MagOut), (3.3, Act::MagIn), (4.4, Act::SlideRack)] }),
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 60.0, reach: 1.9, stamina: 14.0, ..BLOW },
+    draw: 0.8,
+    holster: 0.6,
+};
+
+// A tank of fuel and a pilot light: no aim to speak of, no reach, and
+// nothing in front of it left unburnt.
+const FLAMETHROWER: Spec = Spec {
+    name: "FLAMETHROWER",
+    slot: Some(Slot::Primary),
+    model: "flamethrower",
+    mag: 200,
+    ammo: Some(Kind::FlameFuel),
+    shot: Some(Shot {
+        // Twenty puffs a second, each scorching all it reaches.
+        damage: 8.0,
+        pellets: 1,
+        falloff: None,
+        range: 9.0,
+        sound: Sfx::Flame,
+        heard: 35.0,
+        shove: 0.0,
+        stumble: false,
+        pierce: &[],
+        hip: Spread { still: 0.0, moving: 0.0, air: 0.0 },
+        aimed: Spread { still: 0.0, moving: 0.0, air: 0.0 },
+        aim_time: 0.25,
+        zoom: 0.9,
+        scope: false,
+        gap: 0.05,
+        time: 2.0 / 30.0,
+        auto: true,
+        select: false,
+        kick: 0.12,
+        kick_side: 0.25,
+        marks: &[],
+        stream: Some(Stream { cone: 22.0 }),
+    }),
+    reload: Some(Reload::Magazine { time: 3.0, marks: &[(0.6, Act::MagOut), (2.1, Act::MagIn), (2.6, Act::SlideRack)] }),
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 12.0, ..BLOW },
+    draw: 0.7,
+    holster: 0.5,
 };
 
 /// A melee weapon: no rounds, its swing everything.
@@ -390,6 +486,8 @@ impl Weapon {
             Weapon::Rifle => &RIFLE,
             Weapon::Smg => &SMG,
             Weapon::AssaultRifle => &ASSAULT_RIFLE,
+            Weapon::Lmg => &LMG,
+            Weapon::Flamethrower => &FLAMETHROWER,
             Weapon::Knife => &KNIFE,
             Weapon::Machete => &MACHETE,
             Weapon::Axe => &AXE,

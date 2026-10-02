@@ -423,3 +423,43 @@ fn a_full_auto_gun_fires_on_while_the_trigger_is_held_and_one_switches() {
     }
     assert_eq!(shots, 1, "a round a pull");
 }
+
+#[test]
+fn the_lmg_fires_on_through_its_belt_and_the_flamethrower_through_its_tank() {
+    let held = Trigger { fire: false, hold: true, reload: false, melee: false, aim: false };
+    for (weapon, rounds) in [(Weapon::Lmg, 100), (Weapon::Flamethrower, 200)] {
+        let spec = weapon.spec();
+        let shot = spec.shot.expect("a gun");
+        assert_eq!((spec.mag, spec.slot), (rounds, Some(Slot::Primary)));
+        let mut h = Hands { spare: rounds, ..Hands::default() };
+        h.take_up(Some(Slot::Primary), weapon, rounds);
+        idle(&mut h);
+        assert!(h.full_auto() && !h.switch_fire(), "{}: held is all it does", spec.name);
+        // A second of it held: about as many as its rate.
+        let mut shots = usize::from(h.update(FIRE, DT).contains(&Act::Shoot));
+        for _ in 0..(1.0 / DT) as usize {
+            shots += usize::from(h.update(held, DT).contains(&Act::Shoot));
+        }
+        assert!((shots as f64 - 1.0 / shot.gap).abs() <= 2.0, "{}: {shots} in a second", spec.name);
+        assert_eq!(h.mag as usize, rounds as usize - shots);
+        // Run dry, a pull feeds it again: all of a fresh belt (or tank).
+        idle_for(&mut h, 0.3);
+        h.mag = 0;
+        h.update(FIRE, DT);
+        assert_eq!(h.clip().0, Clip::Reload, "{}", spec.name);
+        idle_for(&mut h, 6.0);
+        assert_eq!((h.mag, h.spare), (rounds, 0), "{}", spec.name);
+    }
+    // Only the flamethrower's a stream; the LMG's rounds go on through
+    // two more.
+    assert!(Weapon::Flamethrower.spec().shot.unwrap().stream.is_some());
+    assert!(Weapon::ALL.iter().filter(|w| w.spec().shot.is_some_and(|s| s.stream.is_some())).count() == 1);
+    assert_eq!(Weapon::Lmg.spec().shot.unwrap().pierce.len(), 2);
+}
+
+/// Let `seconds` go by with nothing pressed.
+fn idle_for(h: &mut Hands, seconds: f64) {
+    for _ in 0..(seconds / DT) as usize {
+        h.update(Trigger::default(), DT);
+    }
+}

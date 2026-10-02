@@ -35,7 +35,9 @@ sys.path.insert(0, HERE)
 import ar  # noqa: E402
 import axe  # noqa: E402
 import fists  # noqa: E402
+import flamethrower  # noqa: E402
 import knife  # noqa: E402
+import lmg  # noqa: E402
 import machete  # noqa: E402
 import pistol  # noqa: E402
 import rifle  # noqa: E402
@@ -45,7 +47,7 @@ from kit import Builder, banded, norm, rotate  # noqa: E402
 MODELS = os.path.join(HERE, "..", "models")
 
 # Every weapon's viewmodel: its name in the file's, and its module.
-WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("smg", smg), ("ar", ar), ("knife", knife), ("machete", machete), ("axe", axe)]
+WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("smg", smg), ("ar", ar), ("lmg", lmg), ("flamethrower", flamethrower), ("knife", knife), ("machete", machete), ("axe", axe)]
 
 # Colours (sRGB, as in the title scene).
 SLEEVE = (0.30, 0.29, 0.20)

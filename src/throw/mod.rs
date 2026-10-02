@@ -2,10 +2,13 @@
 //! a Molotov flies till it meets something and bursts into a pool of fire
 //! (the dead that walk through it catch, and burn on a while; the player
 //! it scorches); a pipe bomb bounces to a stop, beeping ever quicker, every
-//! one of the dead near enough drawn to it, then blows. The world's side
-//! of it; what the player sees is in `draw.rs`, the throwing in the run.
+//! one of the dead near enough drawn to it, then blows. A flamethrower's
+//! stream (`flame.rs`) burns the same way, and a player it catches burns
+//! on too. The world's side of it; what the player sees is in `draw.rs`,
+//! the throwing in the run.
 
 pub mod draw;
+pub mod flame;
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Vec2, Vec3};
@@ -96,7 +99,8 @@ pub struct Fire {
     pub by: usize,
 }
 
-/// One of the dead on fire: how much longer, and whose fire it caught.
+/// One of the dead on fire (or a player a stream of it caught): how much
+/// longer, and whose fire it was.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Burning {
     pub left: f64,
@@ -176,6 +180,7 @@ pub fn arc(solid: &crate::collide::Solids, from: Vec3, vel: Vec3, every: f64) ->
 /// A fixed step of it all.
 pub fn step(world: &mut World) {
     fly(world);
+    flame::step(world);
     burn(world);
 }
 
@@ -340,13 +345,29 @@ fn burn(world: &mut World) {
             None => {}
         }
     }
-    let players: Vec<(usize, Vec3)> = world.query::<(&Player, &Body)>().iter(world).map(|(p, b)| (p.0, b.pos)).collect();
+    // The players: scorched standing in a fire, and while one a stream
+    // caught burns on.
+    let players: Vec<(Entity, usize, Vec3, Option<Burning>)> = world.query::<(Entity, &Player, &Body, Option<&Burning>)>().iter(world).map(|(e, p, b, burning)| (e, p.0, b.pos, burning.copied())).collect();
+    let mut scorched = Vec::new();
+    for (e, seat, p, burning) in players {
+        let alight = burning.map(|b| Burning { left: b.left - STEP, ..b }).filter(|b| b.left > 0.0);
+        match alight {
+            Some(b) => {
+                world.entity_mut(e).insert(b);
+            }
+            None if burning.is_some() => {
+                world.entity_mut(e).remove::<Burning>();
+            }
+            None => {}
+        }
+        if within(p).is_some() || alight.is_some() {
+            scorched.push(seat);
+        }
+    }
     let mut booms = world.resource_mut::<Booms>();
     booms.kills.extend(kills);
-    for (seat, p) in players {
-        if within(p).is_some() {
-            booms.felt(seat).scorched += BURN_PLAYER * STEP;
-        }
+    for seat in scorched {
+        booms.felt(seat).scorched += BURN_PLAYER * STEP;
     }
     world.resource_mut::<Horde>().sounds.extend(sounds);
 }
@@ -368,7 +389,7 @@ impl Fire {
 
 /// Everything thrown and burning, gone (back to the title).
 pub fn clear(world: &mut World) {
-    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Thrown>, With<Fire>)>>().iter(world).collect();
+    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Thrown>, With<Fire>, With<flame::Puff>)>>().iter(world).collect();
     for e in all {
         world.despawn(e);
     }

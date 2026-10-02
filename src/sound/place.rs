@@ -48,6 +48,7 @@ impl Sfx {
             Sfx::Shatter => 40.0,
             Sfx::Ignite => 45.0,
             Sfx::Crackle => 25.0,
+            Sfx::Flame => 40.0,
             Sfx::Beep => 50.0,
             Sfx::Explosion => 200.0,
             Sfx::Flesh => 40.0,

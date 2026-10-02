@@ -1,6 +1,7 @@
 //! What's thrown and what it's done, as drawn: the thing turning end over
 //! end in the air (a pipe bomb's light blinking as it beeps), the fires
 //! (a ring of flickering tongues, dying down at the end), the dead on fire,
+//! a flamethrower's stream (a puff of flame swelling as it flies),
 //! and, while a throw's being aimed, its arc dot by dot and a ring where
 //! it'll land.
 
@@ -8,6 +9,7 @@ use bevy_ecs::prelude::*;
 use lntrn_core::log_error;
 use lntrn_math::{Mat4, Quat, Vec3};
 
+use super::flame::Puff;
 use super::{Burning, Fire, Thrown};
 use crate::player::Body;
 use crate::render::{Draw, MeshId, Renderer};
@@ -78,6 +80,12 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
             let a = k as f64 * 2.1;
             flame(renderer, m.flame, f.at + Vec3::new(a.cos(), 0.0, a.sin()) * (size * 0.25), 1.5, time, 10.0 + k as f64);
         }
+    }
+    for p in world.query::<&Puff>().iter(world) {
+        // Small at the muzzle, swelling as it goes, guttering at the end.
+        let (at, share) = (p.prev + (p.pos - p.prev) * alpha, (p.age / p.life).clamp(0.0, 1.0));
+        let size = (0.22 + 1.0 * share) * ((1.0 - share) / 0.2).min(1.0);
+        flame(renderer, m.flame, at - Vec3::new(0.0, size * 0.45, 0.0), size, time, p.seed * 40.0);
     }
     for (b, burning) in world.query::<(&Body, &Burning)>().iter(world) {
         let fade = burning.left.min(1.0);

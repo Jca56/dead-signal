@@ -91,9 +91,13 @@ pub enum Kind {
     Bandolier,
     ArmorPlate,
     PrecinctKey,
+    Lmg,
+    Rounds762,
+    Flamethrower,
+    FlameFuel,
 }
 
-pub const ALL: [Kind; 43] = [
+pub const ALL: [Kind; 47] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -137,6 +141,10 @@ pub const ALL: [Kind; 43] = [
     Kind::Bandolier,
     Kind::ArmorPlate,
     Kind::PrecinctKey,
+    Kind::Lmg,
+    Kind::Rounds762,
+    Kind::Flamethrower,
+    Kind::FlameFuel,
 ];
 
 impl Kind {
@@ -187,6 +195,10 @@ impl Kind {
             Kind::Bandolier => "bandolier",
             Kind::ArmorPlate => "armor_plate",
             Kind::PrecinctKey => "precinct_key",
+            Kind::Lmg => "lmg",
+            Kind::Rounds762 => "rounds_762",
+            Kind::Flamethrower => "flamethrower",
+            Kind::FlameFuel => "flame_fuel",
         }
     }
 
@@ -205,6 +217,8 @@ impl Kind {
             Kind::FireAxe => Some(Weapon::Axe),
             Kind::Smg => Some(Weapon::Smg),
             Kind::AssaultRifle => Some(Weapon::AssaultRifle),
+            Kind::Lmg => Some(Weapon::Lmg),
+            Kind::Flamethrower => Some(Weapon::Flamethrower),
             _ => None,
         }
     }
@@ -272,6 +286,10 @@ impl Kind {
             Kind::Bandolier => d("BANDOLIER", (2, 1), 1, Uncommon, 70, "ITEM_Bandolier"),
             Kind::ArmorPlate => d("ARMOR PLATE", (2, 2), 1, Uncommon, 70, "ITEM_ArmorPlate"),
             Kind::PrecinctKey => d("PRECINCT KEY", (1, 1), 1, Rare, 40, "ITEM_PrecinctKey"),
+            Kind::Lmg => d("LMG", (5, 2), 1, Legendary, 1100, "ITEM_Lmg"),
+            Kind::Rounds762 => d("7.62 BELT", (2, 1), 100, Rare, 6, "ITEM_Rounds762"),
+            Kind::Flamethrower => d("FLAMETHROWER", (5, 2), 1, Legendary, 1200, "ITEM_Flamethrower"),
+            Kind::FlameFuel => d("FLAME FUEL", (1, 2), 200, Rare, 2, "ITEM_FlameFuel"),
         }
     }
 }

@@ -37,6 +37,9 @@ pub enum Sfx {
     /// one on another.
     SmgShot,
     ArShot,
+    /// The LMG's heavy bark; a flamethrower's stream, a breath of it.
+    LmgShot,
+    Flame,
     /// Thrown things: a bottle bursting, what's in it catching, a fire
     /// crackling, a pipe bomb's beep, and its blast.
     Shatter,
@@ -100,7 +103,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 52] = [
+const ALL: [Sfx; 54] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -109,6 +112,8 @@ const ALL: [Sfx; 52] = [
     Sfx::Bolt,
     Sfx::SmgShot,
     Sfx::ArShot,
+    Sfx::LmgShot,
+    Sfx::Flame,
     Sfx::Shatter,
     Sfx::Ignite,
     Sfx::Crackle,

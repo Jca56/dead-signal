@@ -76,10 +76,14 @@
   - [ ] Survivor figure: a body for your buddy on the shambler rig, holding what they hold.
 
 ## Phase 11: HOLDOUT, bigger 📻
-- [ ] Relay Station, expanded (plan: `plans/relay-station-expanded-v2.png`)
+- [ ] Relay Station, expanded (plan: `plans/relay-station-expanded-v3.png`)
   - [x] Under the ground and two storeys tall: digs in the land, cellars, stairs between any floors, tall rooms with a rail to shoot over.
   - [x] The map: motor pool, west lot, barracks, east court, station house, broadcast floor, the bunker and its escape tunnel. 11 zones, 24 ways in, 18 doors, 27 wall buys.
   - [x] New models: army truck, generator, bunk bed, server rack, radio console.
+  - [ ] Playtest, and what it turns up.
+- [ ] More guns
+  - [x] LMG: a 100-round belt of 7.62, through three at a time; slow up, slow to feed. In the bunker's armory (3000).
+  - [x] Flamethrower: a stream that burns all in its cone, leaves fire where it ends, and sets your buddy alight too. In the motor pool's parts store (2500).
   - [ ] Playtest, and what it turns up.
 - [ ] Waves tuning and difficulty (the counts are still the small map's).
 - [ ] Upgradable guns (the bench goes in the bunker's armory).

@@ -3,7 +3,8 @@ ITEM_Ammo), food and water (ITEM_Beans, ITEM_Water), valuables (ITEM_Pills,
 ITEM_Cash, ITEM_Watch, ITEM_Ring, ITEM_Chain, ITEM_Radio, ITEM_Battery,
 ITEM_Fuel, ITEM_GoldBar), the cage's key (ITEM_Key), the armory's (ITEM_ArmoryKey) and the police station's (ITEM_PrecinctKey), the weapons
 (ITEM_Pistol, ITEM_Shotgun, ITEM_Rifle, ITEM_Knife, ITEM_Machete, ITEM_Axe)
-and the guns' rounds (ITEM_Shells, ITEM_RifleRounds). Each its own object
+and the guns' rounds (ITEM_Shells, ITEM_RifleRounds), the heavy weapons
+and what they're fed (`items_heavy.py`). Each its own object
 sitting on its origin, for the game to set down wherever it likes and to
 draw its icon from (seen from the front, +Y, a little above: an item's
 long side runs along X, a tall one stands up Z).
@@ -31,6 +32,7 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 
 from item_kit import *  # noqa: E402,F403
 import items_guns  # noqa: E402
+import items_heavy  # noqa: E402
 import items_throw  # noqa: E402
 import items_gear  # noqa: E402
 
@@ -277,6 +279,10 @@ def main():
     items_guns.smg()
     items_guns.assault_rifle()
     items_guns.rounds_556()
+    items_heavy.lmg()
+    items_heavy.rounds_762()
+    items_heavy.flamethrower()
+    items_heavy.flame_fuel()
     items_throw.molotov()
     items_throw.pipe_bomb()
     items_gear.all_gear()

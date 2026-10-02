@@ -64,6 +64,8 @@ pub fn price(kind: Kind) -> u32 {
         Kind::FireAxe => 1000,
         Kind::Smg => 1200,
         Kind::AssaultRifle => 1800,
+        Kind::Flamethrower => 2500,
+        Kind::Lmg => 3000,
         Kind::Bandage => 200,
         Kind::Medkit => 600,
         _ => 1000,
@@ -71,11 +73,17 @@ pub fn price(kind: Kind) -> u32 {
 }
 
 /// A weapon's rounds, bought with it or after: so many magazines' worth
-/// carried spare.
+/// carried spare (fewer of an LMG's belts and a flamethrower's tanks:
+/// each is a lot).
 fn spare(kind: Kind) -> Option<(Kind, u32)> {
     let spec = kind.weapon()?.spec();
     let ammo = spec.ammo?;
-    Some((ammo, spec.mag * if kind == Kind::Pistol { 10 } else { 12 }))
+    let mags = match kind {
+        Kind::Pistol => 10,
+        Kind::Lmg | Kind::Flamethrower => 4,
+        _ => 12,
+    };
+    Some((ammo, spec.mag * mags))
 }
 
 /// The count of what earns points, as it stood.

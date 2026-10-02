@@ -43,6 +43,9 @@ const RIFLE: Gun = Gun { kind: Kind::Rifle, grip: at(-0.16, 0.024, -0.02), fore:
 const SMG: Gun = Gun { kind: Kind::Smg, grip: at(-0.07, 0.022, -0.07), fore: at(0.12, 0.022, -0.035), sight: at(-0.09, 0.022, 0.038), muzzle: at(0.335, 0.022, 0.008), well: at(0.05, 0.022, -0.1), rack: at(-0.08, 0.022, 0.03), ads: 0.24, long: true };
 const ASSAULT_RIFLE: Gun = Gun { kind: Kind::AssaultRifle, grip: at(-0.07, 0.026, -0.07), fore: at(0.25, 0.026, -0.04), sight: at(0.0, 0.026, 0.065), muzzle: at(0.66, 0.026, 0.004), well: at(0.05, 0.026, -0.1), rack: at(-0.12, 0.026, 0.04), ads: 0.18, long: true };
 
+const LMG: Gun = Gun { kind: Kind::Lmg, grip: at(-0.07, 0.03, -0.07), fore: at(0.24, 0.03, -0.045), sight: at(0.0, 0.03, 0.07), muzzle: at(0.77, 0.03, 0.0), well: at(0.06, 0.042, -0.11), rack: at(-0.02, 0.03, 0.045), ads: 0.16, long: true };
+const FLAMETHROWER: Gun = Gun { kind: Kind::Flamethrower, grip: at(-0.07, 0.045, -0.07), fore: at(0.26, 0.045, -0.075), sight: at(0.0, 0.045, 0.03), muzzle: at(0.755, 0.045, 0.0), well: at(0.09, 0.045, -0.11), rack: at(0.01, 0.045, 0.035), ads: 0.2, long: true };
+
 /// The gun `weapon` is, if it's one.
 pub(super) fn of(weapon: Weapon) -> Option<&'static Gun> {
     Some(match weapon {
@@ -51,6 +54,8 @@ pub(super) fn of(weapon: Weapon) -> Option<&'static Gun> {
         Weapon::Rifle => &RIFLE,
         Weapon::Smg => &SMG,
         Weapon::AssaultRifle => &ASSAULT_RIFLE,
+        Weapon::Lmg => &LMG,
+        Weapon::Flamethrower => &FLAMETHROWER,
         _ => return None,
     })
 }
@@ -285,7 +290,9 @@ pub(super) fn hold(rig: &Rig, pose: &mut Pose, m: &Motion, g: &Gun, d: &Doing, a
         };
         rig.reach(pose, Side::Left, left, LEFT_POLE);
     }
-    let flash = (clip == weapon::Clip::Fire && t < FLASH).then(|| item * Mat4::from_translation(g.muzzle));
+    // (A stream of fire is its own light: the puffs of it are in the
+    // world to be seen.)
+    let flash = (clip == weapon::Clip::Fire && t < FLASH && spec.shot.is_none_or(|s| s.stream.is_none())).then(|| item * Mat4::from_translation(g.muzzle));
     (Some(item), flash)
 }
 
