@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use lntrn_app::lntrn_render::ImageHandle;
-use lntrn_math::{Color, Vec3};
+use lntrn_math::{Color, Vec2, Vec3};
 use lntrn_ui::{Action, AreaCx, Host, HostCx, Key, ShellRequest, Ui};
 
 mod dev;
@@ -199,6 +199,10 @@ pub struct DeadSignal {
     lobby: Option<Lobby>,
     devices: Vec<Device>,
     last_device: Device,
+    /// The mouse's pointer put away: a pad's been touched since the mouse
+    /// last stirred. And where the pointer was last frame.
+    pointer_away: bool,
+    pointer_was: Vec2,
 }
 
 impl DeadSignal {
@@ -264,6 +268,8 @@ impl DeadSignal {
             lobby: None,
             devices: vec![Device::All],
             last_device: Device::Keys,
+            pointer_away: false,
+            pointer_was: Vec2::ZERO,
         }
     }
 }
@@ -334,6 +340,7 @@ impl Host for DeadSignal {
         // lobby, which reads them itself) the keys they stand for.
         self.pads.poll();
         self.note_device(ui);
+        self.note_pointer(ui);
         self.keep_pads(cx);
         let playing = self.screen == Screen::Run && !self.paused && self.run.ending.is_none() && self.settings.is_none() && !self.dev_open;
         if self.lobby.is_none() {

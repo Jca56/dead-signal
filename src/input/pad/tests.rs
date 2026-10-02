@@ -51,6 +51,21 @@ fn a_resting_stick_is_nothing_and_two_pads_make_one() {
 }
 
 #[test]
+fn a_walking_stick_let_go_short_of_its_middle_walks_nowhere() {
+    // Let go from a push forward, it's come to rest a fifth of the way out.
+    let rest = frame(&pushed([0.02, 0.2], [0.02, 0.2], 0.0), &[], &mut [false; 2], Labels::Xbox);
+    assert_eq!(rest.left, Vec2::ZERO);
+    assert!(!rest.touched);
+    // (The look stick's finer; its curve makes next to nothing of as much.)
+    let turn = crate::input::look::stick_turn(rest.right, &mut 0.0, 1.0, false, 1.0);
+    assert!(rest.right.y > 0.0 && turn.length() < 0.02, "{turn:?} in a second");
+    // And pushed, it still goes from a creep to all the way.
+    let creep = frame(&pushed([0.0, 0.3], [0.0; 2], 0.0), &[], &mut [false; 2], Labels::Xbox);
+    let full = frame(&pushed([0.0, 0.97], [0.0; 2], 0.0), &[], &mut [false; 2], Labels::Xbox);
+    assert!(creep.left.y > 0.05 && creep.left.y < 0.12 && full.left.y == 1.0, "{creep:?}");
+}
+
+#[test]
 fn a_flick_is_one_arrow_till_the_stick_comes_back() {
     let (key, armed) = flick(Vec2::new(0.0, 0.9), true);
     assert_eq!(key, Some(Key::ArrowUp));

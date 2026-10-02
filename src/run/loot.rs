@@ -11,6 +11,7 @@ use super::seat::{Open, Seat};
 use crate::bag_ui::{Hands, Icons, Shelves};
 use crate::combat::Combat;
 use crate::containers::{self, Container};
+use crate::input::Prompt;
 use crate::items;
 use crate::loot::grid::Grid;
 use crate::loot::{Kind, Stack};
@@ -30,9 +31,6 @@ pub(super) const NOTE_FOR: f64 = 1.4;
 /// Things thrown down land this near the feet, and no nearer.
 const DROP_FAR: f64 = 1.1;
 const DROP_NEAR: f64 = 0.5;
-/// The bag put up by a pad, the mouse moved this far (counts) in a frame
-/// takes it over.
-const STIRRED: f64 = 4.0;
 
 /// What's looked at that E does something with.
 #[derive(Clone, Copy, Debug, Default)]
@@ -106,6 +104,18 @@ impl Seat {
                     ("E", format!("SEARCH {name}"))
                 })
             }
+        }
+    }
+
+    /// How what's aimed at is used: taken or opened by a press, searched
+    /// (and a way out worked) by holding.
+    pub(super) fn asks(&self, game: &Game, aimed: &Aimed) -> Prompt {
+        match *aimed {
+            Aimed::Nothing => Prompt::None,
+            Aimed::Pickup(..) => Prompt::Press,
+            Aimed::Exit(_) => Prompt::Hold,
+            Aimed::Container(e) if game.world.get::<Container>(e).is_some_and(|c| c.searched) => Prompt::Press,
+            Aimed::Container(_) => Prompt::Hold,
         }
     }
 
@@ -211,14 +221,14 @@ impl Seat {
         }
     }
 
-    /// The inventory screen up. The pointer's let go for it if the mouse
-    /// is theirs and what they're playing with (on a pad, not till the
-    /// mouse stirs).
+    /// The inventory screen up, and the pointer let go for it, if the
+    /// mouse is theirs (on a pad it's out of sight till the mouse stirs:
+    /// see the app's `note_pointer`).
     fn open_bag(&mut self, cx: &mut AreaCx<()>, container: Option<Entity>) {
         self.open = Some(Open { container });
         self.search = None;
         self.bag_ui.opened(self.input.on_pad || !self.input.has_keys());
-        if self.input.has_keys() && !self.input.on_pad {
+        if self.input.has_keys() {
             cx.request(ShellRequest::LockPointer(false));
         }
     }
@@ -267,12 +277,7 @@ impl Seat {
             Some((n, g)) => (n, Some(g)),
             None => ("", None),
         };
-        // (Put up by a pad, the pointer's kept till the mouse stirs.)
-        let mine = self.input.has_keys();
-        if mine && ui.state.pointer_locked && (ui.state.pressed || ui.state.locked_motion.length() > STIRRED) {
-            cx.request(ShellRequest::LockPointer(false));
-        }
-        let hands = Hands { mouse: mine, pad: Some(self.input.steer(dt)) };
+        let hands = Hands { mouse: self.input.has_keys(), pad: Some(self.input.steer(dt)) };
         let moved = {
             let mut shelves = Shelves { bag: &mut self.bag, loot: grid.as_mut().map(|g| (name, g)), sell: None, fit: self.fit };
             self.bag_ui.frame(ui, &mut shelves, icons, hands)

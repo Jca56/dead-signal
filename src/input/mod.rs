@@ -20,8 +20,54 @@ use pad::{Control, PadBinds, PadFrame};
 /// using.
 const MOUSED: f64 = 2.0;
 /// A control that's one thing tapped and another held: held this long,
-/// it's the other.
+/// it's the other (the bag and the map; reloading, and what's used by
+/// holding).
 const HOLD: f64 = 0.4;
+const USE_HOLD: f64 = 0.22;
+
+/// What's in front of a player to use, as a pad's X has it (X reloads
+/// too): nothing; something a press uses (X is that press, not a reload);
+/// or something used by holding (X held is that, and tapped, still a
+/// reload).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Prompt {
+    #[default]
+    None,
+    Press,
+    Hold,
+}
+
+/// A control told apart by how long it's down: a tap (let go soon), or a
+/// hold.
+#[derive(Clone, Copy, Debug, Default)]
+struct Timed {
+    /// How long it's been down, while which it is is still to be told.
+    since: Option<f64>,
+    /// Which it turned out to be this frame, if it did; and whether it's
+    /// down still, past a tap.
+    tapped: bool,
+    long: bool,
+    holding: bool,
+}
+
+impl Timed {
+    /// A frame of control `c` on `pad`, `dt` on from the last: a hold
+    /// after `after` seconds down.
+    fn step(&mut self, pad: &PadFrame, c: Control, after: f64, dt: f64) {
+        (self.tapped, self.long) = (false, false);
+        if pad.went_down(c) {
+            (self.since, self.holding) = (Some(0.0), false);
+        }
+        self.holding &= pad.held(c);
+        let Some(t) = self.since else { return };
+        self.since = Some(t + dt);
+        if !pad.held(c) {
+            (self.tapped, self.since) = (true, None);
+        } else if t + dt >= after {
+            (self.long, self.holding, self.since) = (true, true, None);
+        }
+    }
+}
 
 /// What a player plays with: the keyboard and mouse, one pad (by its id),
 /// or, playing alone, the lot.
@@ -60,17 +106,16 @@ pub struct Input {
     /// Whether a pad was the last thing they touched: the HUD names its
     /// buttons then.
     pub on_pad: bool,
-    /// Something's in front of them to use: a pad's X is interact, not
-    /// reload.
-    prompting: bool,
+    /// What's in front of them to use, and what was as a pad's X last
+    /// went down (what that press is for).
+    prompt: Prompt,
+    began: Prompt,
     /// How long the look stick's been held hard over (its turn builds).
     pub hard_over: f64,
-    /// The control that's the bag tapped and the map held: how long it's
-    /// been down (while that's still to be told), and which it turned out
-    /// to be this frame.
-    timing: Option<f64>,
-    tapped: bool,
-    long: bool,
+    /// The control that's the bag tapped and the map held, and the one
+    /// that reloads and uses: how long each has been down.
+    view: Timed,
+    using: Timed,
     /// The map's up: that control puts it away, tapped or held.
     mapped: bool,
     /// The bag's up: their pad's working it ([`Input::steer`]), and none
@@ -95,28 +140,30 @@ impl Input {
         self.locked = locked;
         self.pad = pad;
         // A tap's told from a hold when it's let go, or held long enough.
-        (self.tapped, self.long) = (false, false);
-        let Some(c) = self.two_way() else {
-            self.timing = None;
-            return;
-        };
-        if pad.went_down(c) {
-            self.timing = Some(0.0);
+        match self.two_way() {
+            Some(c) => self.view.step(&pad, c, HOLD, dt),
+            None => self.view = Timed::default(),
         }
-        if let Some(t) = self.timing {
-            let t = t + dt;
-            self.timing = Some(t);
-            if !pad.held(c) {
-                (self.tapped, self.timing) = (true, None);
-            } else if t >= HOLD {
-                (self.long, self.timing) = (true, None);
+        match self.shared() {
+            Some(c) => {
+                if pad.went_down(c) {
+                    self.began = self.prompt;
+                }
+                self.using.step(&pad, c, USE_HOLD, dt);
             }
+            None => self.using = Timed::default(),
         }
     }
 
     /// The control that's both the bag and the map, if one is.
     fn two_way(&self) -> Option<Control> {
         self.binds.get(Action::Inventory).filter(|c| self.binds.get(Action::Map) == Some(*c))
+    }
+
+    /// The control that both reloads and uses what's in front of them, if
+    /// one does (and the pad's not the bag's).
+    fn shared(&self) -> Option<Control> {
+        self.binds.get(Action::Reload).filter(|c| !self.rummaging && self.binds.get(Action::Interact) == Some(*c))
     }
 
     /// The map's up (or away): up, the control that's the bag tapped and
@@ -135,10 +182,10 @@ impl Input {
         self.steering.read(&mut self.pad, dt)
     }
 
-    /// Whether something's in front of them to use (a prompt's up): a
-    /// pad's X interacts with it instead of reloading.
-    pub fn set_prompting(&mut self, prompting: bool) {
-        self.prompting = prompting;
+    /// What's in front of them to use (a prompt's up): a pad's X uses it
+    /// (pressed, or held) instead of reloading.
+    pub fn set_prompt(&mut self, prompt: Prompt) {
+        self.prompt = prompt;
     }
 
     /// Whether the keyboard and mouse are theirs.
@@ -146,30 +193,51 @@ impl Input {
         self.keys.is_some()
     }
 
-    /// The pad control `a` is on this frame: where one control is both
-    /// reload and interact, it's interact while something's in front of
-    /// them and reload while there isn't.
-    /// (None at all while the pad's the bag's; and none for the bag and
-    /// the map on one control, told apart by how long it's held.)
+    /// The pad control `a` is on this frame, where it has one of its own:
+    /// none at all while the pad's the bag's, and none for the controls
+    /// two actions share (told apart in [`Input::pad_pressed`] and
+    /// [`Input::pad_held`]).
     fn control(&self, a: Action) -> Option<Control> {
-        let shared = self.binds.get(Action::Reload) == self.binds.get(Action::Interact);
         match a {
             _ if self.rummaging => None,
             Action::Inventory | Action::Map if self.two_way().is_some() => None,
-            Action::Reload if shared && self.prompting => None,
-            Action::Interact if shared && !self.prompting => None,
+            Action::Reload | Action::Interact if self.shared().is_some() => None,
             _ => self.binds.get(a),
         }
     }
 
     /// Whether `a`'s button went down on the pad this frame (a press
-    /// taken): the bag's is a tap of its control and the map's a hold,
-    /// where they share one.
+    /// taken). Where two share a control: the bag's is a tap of it and the
+    /// map's a hold; a reload is a press with nothing in front of them, or
+    /// a tap with something there that's used by holding, and using that
+    /// is a press, or the hold.
     pub fn pad_pressed(&mut self, a: Action) -> bool {
-        match a {
-            Action::Inventory if self.two_way().is_some() => !self.mapped && std::mem::take(&mut self.tapped),
-            Action::Map if self.two_way().is_some() => std::mem::take(&mut self.long) || (self.mapped && std::mem::take(&mut self.tapped)),
+        let take = std::mem::take::<bool>;
+        match (a, self.shared()) {
+            (Action::Inventory, _) if self.two_way().is_some() => !self.mapped && take(&mut self.view.tapped),
+            (Action::Map, _) if self.two_way().is_some() => take(&mut self.view.long) || (self.mapped && take(&mut self.view.tapped)),
+            (Action::Reload, Some(c)) => match self.began {
+                Prompt::None => self.pad.take(c),
+                Prompt::Press => false,
+                Prompt::Hold => take(&mut self.using.tapped),
+            },
+            (Action::Interact, Some(c)) => match self.began {
+                Prompt::None => false,
+                Prompt::Press => self.pad.take(c),
+                Prompt::Hold => take(&mut self.using.long),
+            },
             _ => self.control(a).is_some_and(|c| self.pad.take(c)),
+        }
+    }
+
+    /// Whether `a`'s button is held down on the pad. The one that reloads
+    /// and uses is using while something's in front of them: from the
+    /// press that used it, else once it's been down longer than a tap.
+    fn pad_held(&self, a: Action) -> bool {
+        match (a, self.shared()) {
+            (Action::Interact, Some(c)) => self.prompt != Prompt::None && self.pad.held(c) && (self.began == Prompt::Press || self.using.holding),
+            (Action::Reload, Some(c)) => self.prompt == Prompt::None && self.pad.held(c),
+            _ => self.control(a).is_some_and(|c| self.pad.held(c)),
         }
     }
 
@@ -181,7 +249,7 @@ impl Input {
 
     /// Whether `a`'s key or button is held down.
     pub fn held(&self, ui: &Ui, a: Action) -> bool {
-        self.control(a).is_some_and(|c| self.pad.held(c)) || self.keys.is_some_and(|k| self.counts(k.get(a)) && k.held(ui, a))
+        self.pad_held(a) || self.keys.is_some_and(|k| self.counts(k.get(a)) && k.held(ui, a))
     }
 
     /// Whether `a`'s key or button went down this frame (a press is taken,
@@ -252,8 +320,8 @@ mod tests {
             let mut i = Input::default();
             i.update(ui, Some(Keys::default()), true, x, 0.016);
             assert!(i.pressed(ui, Action::Reload) && !i.pressed(ui, Action::Interact));
+            i.set_prompt(Prompt::Press);
             i.update(ui, Some(Keys::default()), true, x, 0.016);
-            i.set_prompting(true);
             assert!(!i.pressed(ui, Action::Reload) && i.pressed(ui, Action::Interact));
             assert_eq!(i.name(Action::Interact), "X", "named for the pad just pressed");
         });
@@ -270,6 +338,53 @@ mod tests {
             i.update(ui, Some(Keys::default()), true, PadFrame::default(), 0.016);
             assert!(i.held(ui, Action::Fire));
             assert_eq!(i.name(Action::Fire), "MOUSE LEFT");
+        });
+    }
+
+    #[test]
+    fn where_x_is_held_to_use_a_tap_of_it_still_reloads() {
+        let mut h = Harness::new(800.0, 600.0);
+        h.frame(|ui| {
+            let (held, rest) = (pad::frame_holding(&[Button::West]), PadFrame::default());
+            let down = held.merge(pad::frame_with(&[Button::West]));
+            // At a window to be boarded up, X tapped: a reload, as it's
+            // let go; nothing's nailed.
+            let mut i = Input::default();
+            i.set_prompt(Prompt::Hold);
+            i.update(ui, None, true, down, 0.016);
+            assert!(!i.pressed(ui, Action::Reload) && !i.held(ui, Action::Interact), "not yet: it may be a hold");
+            i.update(ui, None, true, held, 0.05);
+            assert!(!i.held(ui, Action::Interact));
+            i.update(ui, None, true, rest, 0.016);
+            assert!(i.pressed(ui, Action::Reload) && !i.pressed(ui, Action::Interact));
+            assert!(!i.pressed(ui, Action::Reload), "once");
+            // Held: the boards are nailed while it's down, and no reload
+            // as it's let go.
+            i.update(ui, None, true, down, 0.016);
+            i.update(ui, None, true, held, 0.25);
+            assert!(i.held(ui, Action::Interact) && i.pressed(ui, Action::Interact) && !i.pressed(ui, Action::Reload));
+            i.update(ui, None, true, held, 1.0);
+            assert!(i.held(ui, Action::Interact));
+            i.update(ui, None, true, rest, 0.016);
+            assert!(!i.held(ui, Action::Interact) && !i.pressed(ui, Action::Reload));
+            // The aim swung off the window before the tap was let go:
+            // still a reload.
+            i.update(ui, None, true, down, 0.016);
+            i.set_prompt(Prompt::None);
+            i.update(ui, None, true, rest, 0.016);
+            assert!(i.pressed(ui, Action::Reload));
+            // Nothing in front of them: a reload at once; held on up to a
+            // window, the boards go on.
+            i.update(ui, None, true, down, 0.016);
+            assert!(i.pressed(ui, Action::Reload));
+            i.set_prompt(Prompt::Hold);
+            i.update(ui, None, true, held, 0.3);
+            assert!(i.held(ui, Action::Interact) && !i.pressed(ui, Action::Reload));
+            // Something a press uses (a gun on the wall): used at once.
+            i.update(ui, None, true, rest, 0.016);
+            i.set_prompt(Prompt::Press);
+            i.update(ui, None, true, down, 0.016);
+            assert!(i.pressed(ui, Action::Interact) && i.held(ui, Action::Interact) && !i.pressed(ui, Action::Reload));
         });
     }
 

@@ -14,6 +14,7 @@ use crate::bag_ui::Icons;
 use crate::combat::Combat;
 use crate::holdout::rounds::{Event, Wave};
 use crate::holdout::{Holdout, arena::Arena};
+use crate::input::Prompt;
 use crate::profile::perks::Perks;
 use crate::settings::keys::Action;
 use crate::sound::Sfx;
@@ -135,7 +136,14 @@ impl Seat {
         // Down, or picking someone up (whose prompt it is), nothing else.
         let busy = self.open.is_some() || self.vitals.healing.is_some() || !self.standing() || self.reviving.is_some();
         let aimed = if busy { None } else { loot::eye(game, self.n).and_then(|(eye, dir)| h.aimed(&game.world, eye, dir)) };
-        self.input.set_prompting(aimed.is_some() || self.reviving.is_some());
+        // (Boards are nailed, and someone picked up, by holding: a tap of a
+        // pad's X is still a reload there.)
+        self.input.set_prompt(match aimed {
+            _ if self.reviving.is_some() => Prompt::Hold,
+            Some(crate::holdout::Aimed::Window(_)) => Prompt::Hold,
+            Some(_) => Prompt::Press,
+            None => Prompt::None,
+        });
         if let Some(a) = aimed
             && self.input.pressed(ui, Action::Interact)
         {

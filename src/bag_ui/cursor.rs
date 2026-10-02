@@ -11,7 +11,7 @@ use crate::input::steer::Steer;
 use crate::loot::bag::Slot;
 
 /// The mouse moved this far in a frame, it's the mouse at the screen.
-const MOUSED: f64 = 1.5;
+const MOUSED: f64 = 3.0;
 /// How much dearer a step off to the side is than one straight on,
 /// picking where the cursor goes off the edge of a grid.
 const ASIDE: f64 = 2.0;

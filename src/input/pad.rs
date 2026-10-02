@@ -13,7 +13,11 @@ use lntrn_ui::{Key, KeyPress, Modifiers, Ui};
 use crate::settings::keys::Action;
 
 /// A stick's dead zone: nothing within the inner, all of it from the outer.
-const DEAD: f64 = 0.15;
+/// The walking stick's is the wider: a stick let go doesn't spring all the
+/// way back to its middle (a fifth of the way out isn't rare), and what's
+/// left of a push walks, where the look's curve makes nothing of it.
+const WALK_DEAD: f64 = 0.24;
+const LOOK_DEAD: f64 = 0.15;
 const FULL: f64 = 0.95;
 /// A trigger counts as pulled past this, and as let go under that.
 const PULLED: f64 = 0.55;
@@ -211,11 +215,11 @@ impl PadFrame {
 /// since the last (`down`: a tap in between still counts), and whether its
 /// triggers were pulled at the last (`pulled`, kept up to date).
 fn frame(state: &PadState, down: &[Button], pulled: &mut [bool; 2], labels: Labels) -> PadFrame {
-    let stick = |s: [f64; 2]| {
-        let [x, y] = dead_zone(s, DEAD, FULL);
+    let stick = |s: [f64; 2], dead: f64| {
+        let [x, y] = dead_zone(s, dead, FULL);
         Vec2::new(x, y)
     };
-    let mut f = PadFrame { left: stick(state.left), right: stick(state.right), labels, ..PadFrame::default() };
+    let mut f = PadFrame { left: stick(state.left, WALK_DEAD), right: stick(state.right, LOOK_DEAD), labels, ..PadFrame::default() };
     for b in BUTTONS.into_iter().filter(|&b| state.held(b)) {
         f.held |= Control::Button(b).bit();
     }

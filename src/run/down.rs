@@ -116,7 +116,7 @@ impl Run {
                 continue;
             };
             let helper = &mut self.seats[i];
-            helper.input.set_prompting(true);
+            helper.input.set_prompt(crate::input::Prompt::Hold);
             let held = helper.input.held(ui, Action::Interact);
             let so_far = match helper.reviving {
                 Some((t, p)) if t == j => p,

@@ -215,7 +215,10 @@ impl Run {
             return;
         }
         let prompt = if seat.open.is_some() { None } else { seat.prompt(game, &aimed) };
-        seat.input.set_prompting(prompt.as_ref().is_some_and(|(key, _)| !key.is_empty()));
+        seat.input.set_prompt(match &prompt {
+            Some((key, _)) if !key.is_empty() => seat.asks(game, &aimed),
+            _ => crate::input::Prompt::None,
+        });
         let whole = ui.clip();
         seat.hud(ui, whole, combat, game, prompt, self.out.progress());
         let o = self.out.hud(game, 0);

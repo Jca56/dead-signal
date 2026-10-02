@@ -5,7 +5,7 @@
 use lntrn_app::lntrn_render::{Gpu, Images};
 use lntrn_app::{AppHost, RenderCx, wgpu};
 use lntrn_core::log_error;
-use lntrn_ui::Shell;
+use lntrn_ui::{CursorIcon, Shell};
 
 use std::time::Instant;
 
@@ -28,6 +28,11 @@ use crate::zombie::{self, figure::Figure};
 const SCOPE_HIDES: f64 = 0.35;
 
 impl AppHost for DeadSignal {
+    /// (No pointer while a pad's what's being played with.)
+    fn cursor(&self, wanted: CursorIcon) -> CursorIcon {
+        if self.pointer_away { CursorIcon::Hidden } else { wanted }
+    }
+
     fn init_gpu(&mut self, gpu: &Gpu, format: wgpu::TextureFormat, images: &mut Images) {
         let mut renderer = Renderer::new(gpu, format);
         match assets::load(&mut renderer, "title_scene") {

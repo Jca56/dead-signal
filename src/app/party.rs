@@ -14,6 +14,9 @@ use crate::world::Solid;
 
 /// How far apart players start, side by side.
 const APART: f64 = 1.2;
+/// The mouse moved this far in a frame (pixels, or counts while it's
+/// locked), it's stirred.
+const STIRRED: f64 = 3.0;
 
 impl DeadSignal {
     /// What was touched this frame, a pad or the keyboard and mouse.
@@ -22,6 +25,20 @@ impl DeadSignal {
             self.last_device = Device::Pad(id);
         } else if !ui.state.keys.is_empty() || ui.state.pressed {
             self.last_device = Device::Keys;
+        }
+    }
+
+    /// The mouse's pointer is put away while a pad's the last thing
+    /// touched, wherever that is (a menu, the pause, the bag), and out
+    /// again as soon as the mouse stirs.
+    pub(super) fn note_pointer(&mut self, ui: &Ui) {
+        let s = &ui.state;
+        let stirred = (s.pointer - self.pointer_was).length() > STIRRED || s.locked_motion.length() > STIRRED || s.pressed || s.right_pressed || s.middle_pressed || s.wheel.y != 0.0;
+        self.pointer_was = s.pointer;
+        if stirred {
+            self.pointer_away = false;
+        } else if self.pads.all().touched {
+            self.pointer_away = true;
         }
     }
 
