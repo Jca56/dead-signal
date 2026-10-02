@@ -1,6 +1,6 @@
 //! What a hit throws up: chips of whatever was struck (dirt, splinters,
 //! concrete, sparks off steel) flying off the surface, tumbling, falling
-//! and shrinking away; a shot's flash and a blast's, as light on what's
+//! and shrinking away; a broken pane's shards; a shot's flash and a blast's, as light on what's
 //! about them (at night); and the hitmarker a hit flashes at the
 //! crosshair (each player's own, kept with their arms).
 
@@ -21,7 +21,13 @@ struct Chip {
     life: f64,
     left: f64,
     tint: [f32; 3],
+    /// Its shape, as shares of a chip's size: a shard's flat.
+    shape: Vec3,
 }
+
+/// A shard of glass: its colour (linear), and its shape.
+const SHARD: [f32; 3] = [0.62, 0.80, 0.85];
+const SHARD_SHAPE: Vec3 = Vec3::new(1.7, 1.7, 0.25);
 
 /// A hitmarker at the crosshair: how long it has left, whether the hit
 /// beat what it struck (drawn bigger, and red), and whether it was a shot
@@ -121,8 +127,28 @@ impl Fx {
             let shade = 0.8 + 0.4 * self.rand() as f32;
             let axis = self.rand_dir();
             let spin = 8.0 + 14.0 * self.rand();
-            self.chips.push(Chip { pos: at + normal * 0.03, vel, axis, spin, angle: 0.0, life, left: life, tint: [l.r as f32 * shade, l.g as f32 * shade, l.b as f32 * shade] });
+            self.chips.push(Chip { pos: at + normal * 0.03, vel, axis, spin, angle: 0.0, life, left: life, tint: [l.r as f32 * shade, l.g as f32 * shade, l.b as f32 * shade], shape: Vec3::ONE });
         }
+    }
+
+    /// A pane of glass (the box `lo` to `hi`) broken: `count` shards of
+    /// it, from all over it, thrown on the way `along` and falling.
+    pub fn shards(&mut self, lo: Vec3, hi: Vec3, along: Vec3, count: usize) {
+        for _ in 0..count {
+            let pos = Vec3::new(lo.x + (hi.x - lo.x) * self.rand(), lo.y + (hi.y - lo.y) * self.rand(), lo.z + (hi.z - lo.z) * self.rand());
+            let vel = along * (1.0 + 3.0 * self.rand()) + self.rand_dir() * 1.3;
+            let life = 0.6 + 0.5 * self.rand();
+            let shade = 0.7 + 0.6 * self.rand() as f32;
+            let axis = self.rand_dir();
+            let spin = 6.0 + 12.0 * self.rand();
+            self.chips.push(Chip { pos, vel, axis, spin, angle: 0.0, life, left: life, tint: SHARD.map(|c| c * shade), shape: SHARD_SHAPE });
+        }
+    }
+
+    /// How many chips are flying.
+    #[cfg(test)]
+    pub fn chip_count(&self) -> usize {
+        self.chips.len()
     }
 
     /// A flash at `at`, reaching `radius`, of `color` (linear), gone in
@@ -156,7 +182,7 @@ impl Fx {
         let Some(mesh) = self.mesh else { return };
         for c in &self.chips {
             let size = SIZE * (c.left / c.life).sqrt();
-            let model = Mat4::from_translation(c.pos) * Mat4::from_quat(Quat::from_axis_angle(c.axis, c.angle)) * Mat4::from_scale(Vec3::new(size, size, size));
+            let model = Mat4::from_translation(c.pos) * Mat4::from_quat(Quat::from_axis_angle(c.axis, c.angle)) * Mat4::from_scale(c.shape * size);
             renderer.draw(Draw { mesh, model, emissive: 0.0, fog: 1.0, tint: c.tint });
         }
     }

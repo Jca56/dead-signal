@@ -225,8 +225,10 @@ A round's Shambler has 150 health, 50 more each round to 600 at the tenth, then 
 | Hunting rifle | 120 m | 3.0 |
 | Pipe bomb | 150 m | 3.75 |
 | Searching a container | 14 m (less with Light Hands) | 0.35 |
+| A window's glass breaking | 22 m | 0.55 |
 
 - **Under a roof:** noises carry 60% as far, and heat that much less.
+- **Glass:** a window that's only for looking out of has a pane in it (the ones a holdout's dead climb through are bare). A shot, a blow, a blast within 7 m or anything thrown through it breaks it for good; bodies are kept out either way.
 - **Who reacts:** within half a noise's reach, every one of the dead heeds it, and knows just where. Past that, fewer do (1 in 3 at the very edge), and they only know roughly where: off by up to a quarter of the distance.
 - **The crowd:** a map starts with 250 of the dead. Near the player (100 m) there should be **8 + heat**, at most 30. Heat halves every 40 s. Newcomers come every 4 s, from 60–90 m off, out of sight.
 - **The surge:** 45 near, one every 0.3 s, from 35–60 m.

@@ -98,6 +98,25 @@ fn world_fs(in: VertexOut) -> @location(0) vec4<f32> {
     return vec4<f32>(fogged(color, in.world, in.fog_amount), 1.0);
 }
 
+// A pane of glass, seen through: what light's on it shows as a faint film
+// (the dust on it catches it), more of it the more the pane's looked
+// along, where the sky shows in it too; and streaks of glare slant across
+// it, so it reads as glass in whatever light there is.
+@fragment
+fn glass_fs(in: VertexOut) -> @location(0) vec4<f32> {
+    let n = normalize(in.normal);
+    let to_eye = g.camera.xyz - in.world;
+    let facing = abs(dot(n, to_eye / max(length(to_eye), 1e-4)));
+    let along = pow(1.0 - facing, 3.0);
+    // (The streaks lie in the world's own space: they stay put.)
+    let s = fract((in.world.y * 1.9 + (in.world.x + in.world.z) * 1.3) * 0.42);
+    let streak = smoothstep(0.70, 0.76, s) * (1.0 - smoothstep(0.86, 0.92, s)) + 0.6 * smoothstep(0.10, 0.13, s) * (1.0 - smoothstep(0.17, 0.20, s));
+    let light = light_on(in.world, n);
+    let color = in.color.rgb * light * (1.0 + 0.9 * streak) + g.fog.rgb * (0.35 * along);
+    let alpha = clamp(in.color.a * (1.0 + 2.5 * along) + 0.10 * streak, 0.0, 0.8);
+    return vec4<f32>(fogged(color, in.world, in.fog_amount), alpha);
+}
+
 // Something soft (a wisp of mist): thinning to nothing at its edge and
 // close up to the eye, lit as if it lay flat.
 @fragment

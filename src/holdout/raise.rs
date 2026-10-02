@@ -128,15 +128,15 @@ fn house(layout: &Layout, h: &House, out: &mut Raised) {
     let wall_of = |plan: &Plan, on: Line, level: i8| plan::wall_at(&plan.walls, h.storey(level), on.along_x, on.at, on.u).unwrap_or_else(|| panic!("{}: no wall on {on:?} (level {level})", h.name));
     for door in h.doors {
         let wall = wall_of(&plan, door.0, door.1);
-        plan.openings.push(Opening { wall, centre: door.0.u, width: door.2, sill: 0.0, head: door_head(door.2), door: true, boarded: false });
+        plan.openings.push(Opening { wall, centre: door.0.u, width: door.2, sill: 0.0, head: door_head(door.2), door: true, boarded: false, bare: false });
     }
     for win in h.windows {
         let wall = wall_of(&plan, win.0, win.1);
-        plan.openings.push(Opening { wall, centre: win.0.u, width: WINDOW.0, sill: WINDOW.1, head: WINDOW.2, door: false, boarded: false });
+        plan.openings.push(Opening { wall, centre: win.0.u, width: WINDOW.0, sill: WINDOW.1, head: WINDOW.2, door: false, boarded: false, bare: win.2 });
     }
     for rail in h.rails {
         let wall = wall_of(&plan, rail.0, rail.1);
-        plan.openings.push(Opening { wall, centre: rail.0.u, width: rail.2, sill: RAIL, head: CEILING, door: false, boarded: false });
+        plan.openings.push(Opening { wall, centre: rail.0.u, width: rail.2, sill: RAIL, head: CEILING, door: false, boarded: false, bare: false });
     }
     let corner = Vec2::new(f64::from(h.at.0), f64::from(h.at.1));
     // Its frame starts at its lowest floor: the ground floor's raised off

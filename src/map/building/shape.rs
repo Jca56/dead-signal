@@ -46,6 +46,11 @@ pub enum Stuff {
     Solid(Surface),
     /// Only bodies meet it: an empty window.
     Ghost,
+    /// A pane of glass: seen (and seen through), only bodies meet it, and
+    /// a shot through it breaks it (`glass.rs`).
+    Glass,
+    /// Seen, and met by nothing: a window's frame and bars.
+    Trim,
 }
 
 /// A box, lined up with the building: corners, colour, what it is.
@@ -312,6 +317,12 @@ pub fn shape(plan: &Plan, dice: &mut Dice) -> Shape {
                         (Vec3::new(face - 0.02, base + y - 0.1, a - 0.12), Vec3::new(face + 0.02, base + y + 0.1, b + 0.12))
                     };
                     add(lo, hi, PLANKS_DARK, wall_stuff);
+                }
+            } else if !g.door && wall.outside() && !g.bare {
+                // A window to look out of: glass in it, in its frame.
+                let boxed = |u0: f64, u1: f64, y0: f64, y1: f64, half: f64| if wall.along_x { (Vec3::new(u0, base + y0, at - half), Vec3::new(u1, base + y1, at + half)) } else { (Vec3::new(at - half, base + y0, u0), Vec3::new(at + half, base + y1, u1)) };
+                for b in super::glazing::glaze(boxed, (a, b), (g.sill, g.head), worn(super::glazing::FRAME, 0.85)) {
+                    add(b.lo, b.hi, b.colour, b.stuff);
                 }
             } else if !g.door {
                 let (lo, hi) = span(at - 0.03, at + 0.03, g.sill, g.head);

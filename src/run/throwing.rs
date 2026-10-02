@@ -19,6 +19,8 @@ use crate::world::Game;
 /// While aiming: the arc's dots (a dot this many seconds of flight apart)
 /// and where it comes down.
 const DOTS_EVERY: f64 = 0.05;
+/// A blast breaks the glass this near it.
+const GLASS_BREAKS: f64 = 7.0;
 
 /// A throw being aimed: the arc to show, and where it lands.
 #[derive(Clone, Debug, Default)]
@@ -126,6 +128,8 @@ impl Run {
     /// chips they threw. What each player felt of them, for their own.
     pub(super) fn booms(&mut self, game: &mut Game, combat: &mut Combat) -> Booms {
         let mut booms = std::mem::take(&mut *game.world.resource_mut::<Booms>());
+        // (The glass something thrown went through.)
+        crate::glass::settle(&mut game.world, &mut combat.fx);
         for (by, e) in std::mem::take(&mut booms.kills) {
             if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
                 seat.stats.blast_kills += 1;
@@ -136,6 +140,7 @@ impl Run {
             combat.fx.flash(at + Vec3::new(0.0, 0.8, 0.0), 20.0, [3.0, 2.0, 1.0], 0.35);
             combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Metal, 50);
             combat.fx.burst(at + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, crate::collide::Surface::Dirt, 40);
+            crate::glass::blast(&mut game.world, &mut combat.fx, at + Vec3::new(0.0, 0.8, 0.0), GLASS_BREAKS);
         }
         booms
     }

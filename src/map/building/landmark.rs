@@ -97,7 +97,7 @@ fn door_out(dice: &mut Dice, plan: &mut Plan, r: usize, along_x: bool, at: i32) 
         let spots = plan::spots_along(plan, w, plan::DOOR_WIDTH, 2.0);
         if !spots.is_empty() {
             let c = spots[dice.next() as usize % spots.len()];
-            plan.openings.push(Opening { wall: w, centre: c, width: plan::DOOR_WIDTH, sill: 0.0, head: plan::DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: w, centre: c, width: plan::DOOR_WIDTH, sill: 0.0, head: plan::DOOR_HEAD, door: true, boarded: false, bare: false });
             return true;
         }
     }
@@ -113,7 +113,7 @@ fn doors(dice: &mut Dice, plan: &mut Plan, cuts: &[(u8, Cut)], front: Use, back:
         if let Some(w) = plan::wall_at(&plan.walls, *s, c.along_x, c.at, c.door)
             && plan.walls[w].sides.iter().all(Option::is_some)
         {
-            plan.openings.push(Opening { wall: w, centre: c.door, width: plan::DOOR_WIDTH, sill: 0.0, head: plan::DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: w, centre: c.door, width: plan::DOOR_WIDTH, sill: 0.0, head: plan::DOOR_HEAD, door: true, boarded: false, bare: false });
         }
     }
     if let Some(r) = find(plan, front) {
@@ -148,7 +148,7 @@ fn windows(dice: &mut Dice, mut plan: Plan, glass_front: bool) -> Plan {
             (false, None) => continue,
         };
         for c in plan::spots_along(&plan, i, width, every) {
-            plan.openings.push(Opening { wall: i, centre: c, width, sill, head, door: false, boarded: dice.unit() < 0.15 });
+            plan.openings.push(Opening { wall: i, centre: c, width, sill, head, door: false, boarded: dice.unit() < 0.15, bare: false });
         }
     }
     plan
@@ -243,7 +243,7 @@ pub fn fire_station(dice: &mut Dice, w: i32, d: i32) -> Plan {
         wall.along_x && wall.at == 0 && wall.sides[1] == Some(0)
     }) {
         for centre in [f64::from(bay) * 0.25, f64::from(bay) * 0.75] {
-            plan.openings.push(Opening { wall: front, centre, width: BAY_DOOR.0, sill: 0.0, head: BAY_DOOR.1, door: true, boarded: false });
+            plan.openings.push(Opening { wall: front, centre, width: BAY_DOOR.0, sill: 0.0, head: BAY_DOOR.1, door: true, boarded: false, bare: false });
         }
     }
     windows(dice, plan, false)

@@ -102,7 +102,7 @@ pub fn shell(dice: &mut Dice, w: i32, d: i32) -> Plan {
     for i in 0..plan.walls.len() {
         let spots = spots_along(&plan, i, 1.2, 3.0);
         for c in spots {
-            plan.openings.push(Opening { wall: i, centre: c, width: 1.2, sill: SILL, head: WINDOW_HEAD, door: false, boarded: true });
+            plan.openings.push(Opening { wall: i, centre: c, width: 1.2, sill: SILL, head: WINDOW_HEAD, door: false, boarded: true, bare: false });
         }
     }
     let _ = dice;

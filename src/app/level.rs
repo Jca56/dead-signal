@@ -70,7 +70,7 @@ impl DeadSignal {
     pub(super) fn install(&mut self, gpu: &Gpu, images: &mut Images) {
         let Some(built) = self.ready.take() else { return };
         let Some(renderer) = self.renderer.as_mut() else { return };
-        let Built { map, solids, nav, chunks, containers, mut exits, picture, arena } = built;
+        let Built { map, solids, nav, chunks, containers, mut exits, picture, arena, panes } = built;
         let game = &mut self.game;
         game.clear_map();
         game.hide_title();
@@ -101,6 +101,7 @@ impl DeadSignal {
         }
         let field = std::sync::Arc::new(map.field.clone());
         game.world.insert_resource(Solid(solids));
+        game.world.insert_resource(crate::glass::Glazing::new(panes));
         game.world.insert_resource(Ground::Field(field));
         game.world.resource_mut::<zombie::Nav>().0 = Some(nav);
         containers::spawn(&mut game.world, containers, &self.container_meshes);

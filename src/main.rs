@@ -14,6 +14,7 @@ mod containers;
 mod dev;
 mod ending;
 mod fx;
+mod glass;
 mod glow;
 mod head;
 mod hideout;

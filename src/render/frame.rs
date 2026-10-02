@@ -74,9 +74,11 @@ impl Renderer {
         self.lights.clear();
         self.viewmodels.clear();
 
-        // The solid things, then the soft, in one buffer.
-        let (solid, soft) = (std::mem::take(&mut self.frame), std::mem::take(&mut self.mist));
+        // The solid things, then the glass, then the soft, in one buffer.
+        let (solid, glass, soft) = (std::mem::take(&mut self.frame), std::mem::take(&mut self.panes), std::mem::take(&mut self.mist));
         let (mut instances, runs) = self.gathered(solid, panes.len(), 0);
+        let (glass, glass_runs) = self.gathered(glass, panes.len(), instances.len());
+        instances.extend(glass);
         let (soft, soft_runs) = self.gathered(soft, panes.len(), instances.len());
         instances.extend(soft);
         if instances.len() > self.instance_cap {
@@ -129,12 +131,16 @@ impl Renderer {
                     }
                 }
                 this.figures.draw_into(&mut pass, i);
-                if let Some(vertices) = this.vertices.as_ref().filter(|_| soft_runs.iter().any(|r| r.0 == i)) {
-                    pass.set_pipeline(&this.soft);
-                    pass.set_vertex_buffer(0, vertices.slice(..));
-                    pass.set_vertex_buffer(1, this.instances.slice(..));
-                    for (_, range, first, count) in soft_runs.iter().filter(|r| r.0 == i) {
-                        pass.draw(range.first..range.first + range.count, *first..*first + *count);
+                // What's seen through, over all that: the glass, then the
+                // mist (in front of it or behind, it's thin enough).
+                for (pipeline, runs) in [(&this.glass, &glass_runs), (&this.soft, &soft_runs)] {
+                    if let Some(vertices) = this.vertices.as_ref().filter(|_| runs.iter().any(|r| r.0 == i)) {
+                        pass.set_pipeline(pipeline);
+                        pass.set_vertex_buffer(0, vertices.slice(..));
+                        pass.set_vertex_buffer(1, this.instances.slice(..));
+                        for (_, range, first, count) in runs.iter().filter(|r| r.0 == i) {
+                            pass.draw(range.first..range.first + range.count, *first..*first + *count);
+                        }
                     }
                 }
             }

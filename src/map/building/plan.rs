@@ -152,7 +152,9 @@ impl Wall {
 }
 
 /// A gap in a wall: its middle along it, how wide, from how high to how
-/// high; a doorway (else a window); and whether it's been boarded up.
+/// high; a doorway (else a window); whether it's been boarded up; and
+/// whether it's left bare (a window on the outside with no glass in it:
+/// one a holdout's dead come in by).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Opening {
     pub wall: usize,
@@ -162,6 +164,7 @@ pub struct Opening {
     pub head: f64,
     pub door: bool,
     pub boarded: bool,
+    pub bare: bool,
 }
 
 /// A straight flight up from `storey` to the next, against the wall at x
@@ -348,7 +351,7 @@ pub(super) fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Pla
         if let Some(w) = wall_at(&plan.walls, *s, c.along_x, c.at, c.door)
             && plan.walls[w].sides.iter().all(Option::is_some)
         {
-            plan.openings.push(Opening { wall: w, centre: c.door, width: DOOR_WIDTH, sill: 0.0, head: DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: w, centre: c.door, width: DOOR_WIDTH, sill: 0.0, head: DOOR_HEAD, door: true, boarded: false, bare: false });
         }
     }
     let store = plan.kind == Kind::Store;
@@ -368,7 +371,7 @@ pub(super) fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Pla
         let spots = spots_along(&plan, w, DOOR_WIDTH, 2.0);
         if !spots.is_empty() {
             let c = spots[dice.next() as usize % spots.len()];
-            plan.openings.push(Opening { wall: w, centre: c, width: DOOR_WIDTH, sill: 0.0, head: DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: w, centre: c, width: DOOR_WIDTH, sill: 0.0, head: DOOR_HEAD, door: true, boarded: false, bare: false });
             front_door = Some(plan.openings.len() - 1);
             break;
         }
@@ -387,7 +390,7 @@ pub(super) fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Pla
         let spots = spots_along(&plan, w, DOOR_WIDTH, 2.0);
         if !spots.is_empty() {
             let c = spots[dice.next() as usize % spots.len()];
-            plan.openings.push(Opening { wall: w, centre: c, width: DOOR_WIDTH, sill: 0.0, head: DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: w, centre: c, width: DOOR_WIDTH, sill: 0.0, head: DOOR_HEAD, door: true, boarded: false, bare: false });
             back_door = true;
         }
     }
@@ -413,7 +416,7 @@ pub(super) fn finish(dice: &mut Dice, mut plan: Plan, cuts: &[(u8, Cut)]) -> Pla
                 continue;
             }
             let sill = if bath { 1.4 } else { SILL };
-            plan.openings.push(Opening { wall: i, centre: c, width, sill, head: WINDOW_HEAD, door: false, boarded: dice.unit() < 0.22 });
+            plan.openings.push(Opening { wall: i, centre: c, width, sill, head: WINDOW_HEAD, door: false, boarded: dice.unit() < 0.22, bare: false });
         }
     }
     plan

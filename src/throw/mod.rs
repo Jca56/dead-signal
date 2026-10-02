@@ -195,6 +195,8 @@ fn fly(world: &mut World) {
     let mut blasts = Vec::new();
     let mut lures = Vec::new();
     let mut gone = Vec::new();
+    // (Each one's flight this step: the glass it goes through breaks.)
+    let mut flights = Vec::new();
     let mut thrown: Vec<(Entity, Thrown)> = world.query::<(Entity, &Thrown)>().iter(world).map(|(e, t)| (e, *t)).collect();
     {
         let solid = &world.resource::<Solid>().0;
@@ -207,6 +209,7 @@ fn fly(world: &mut World) {
                 t.spin += STEP * 12.0;
                 let step = t.vel * STEP;
                 let len = step.length();
+                flights.push((t.pos, step * (1.0 / len.max(1e-9)), len));
                 match solid.raycast(t.pos, step * (1.0 / len.max(1e-9)), len) {
                     Some(h) if t.what == Throwable::Molotov => {
                         // It bursts, and what's in it catches: on the ground,
@@ -256,6 +259,9 @@ fn fly(world: &mut World) {
         if let Some(mut now) = world.get_mut::<Thrown>(e) {
             *now = t;
         }
+    }
+    for (from, dir, len) in flights {
+        crate::glass::through(world, from, dir, len);
     }
     for e in gone {
         world.despawn(e);

@@ -5,6 +5,7 @@
 
 pub mod country;
 pub mod furnish;
+pub mod glazing;
 pub mod landmark;
 pub mod plan;
 mod program;

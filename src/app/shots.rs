@@ -6,7 +6,9 @@
 //!
 //! A holdout's arena is built and put in as the game does it, a player
 //! stood in it, and each view drawn by the game's own renderer (the world
-//! and the arms; none of the HUD) to `<dir>/<name>.png`.
+//! and the arms; none of the HUD) to `<dir>/<name>.png`. With
+//! `WILDS=<seed>` it's an extraction run's map by day instead, looked at
+//! from outside the buildings nearest where the run starts.
 
 use lntrn_app::lntrn_render::{Gpu, Images, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -41,6 +43,12 @@ const SHOTS: &[Shot] = &[
     Shot("treeline", 0.0, 14.0, 0, 180.0, 3.0),
     Shot("mist", -18.0, 12.0, 0, 75.0, -4.0),
     Shot("dead_room_shot", 33.0, -9.0, 0, 290.0, 0.0),
+    // The control room's window on the yard: from inside, from the yard,
+    // and shot out.
+    Shot("window_in", 6.0, -14.5, 0, 180.0, 4.0),
+    Shot("window_out", 6.0, -7.5, 0, 0.0, 4.0),
+    Shot("window_side", 3.5, -12.3, 0, 100.0, 4.0),
+    Shot("window_in_shot", 6.0, -14.5, 0, 180.0, 4.0),
 ];
 
 impl DeadSignal {
@@ -66,6 +74,51 @@ impl DeadSignal {
         let arena = self.arena.take().expect("a holdout's arena");
         self.run.start_holdout(&mut self.game, &mut self.combat, arena, 0, 1);
         self.black = 0.0;
+    }
+
+    /// An extraction run begun with no window, on the map of `seed`: the
+    /// player at its start, by day.
+    fn wilds_off_screen(&mut self, gpu: &Gpu, images: &mut Images, seed: u32) {
+        let mut building = Building::start(Blueprint::Wilds(seed), self.kit.clone());
+        let built = loop {
+            match building.take() {
+                Some(built) => break built,
+                None => std::thread::sleep(std::time::Duration::from_millis(20)),
+            }
+        };
+        self.ready = Some(built);
+        self.install(gpu, images);
+        self.screen = Screen::Run;
+        let (at, yaw) = self.spawn_point();
+        self.game.despawn_players();
+        self.game.spawn_player(0, at.x, at.z, yaw);
+        if let Some(vm) = &mut self.viewmodel {
+            vm.reset(1);
+        }
+        let map = self.map.as_ref().expect("a map");
+        self.run.start(&mut self.game, &mut self.combat, crate::loot::bag::Bag::with_rounds(), 0, Default::default(), map);
+        self.black = 0.0;
+    }
+
+    /// Where to stand to look at each of the `n` buildings nearest the
+    /// run's start, from two sides: a name, the feet, and the yaw.
+    fn building_views(&self, n: usize) -> Vec<(String, Vec3, f64)> {
+        let map = self.map.as_ref().expect("a map");
+        let (start, _) = self.spawn_point();
+        let middle = |b: &crate::map::building::Building| b.world(Vec3::new(f64::from(b.plan.w) * 0.5, 1.4, f64::from(b.plan.d) * 0.5));
+        let mut near: Vec<&crate::map::building::Building> = map.buildings.iter().collect();
+        near.sort_by(|a, b| (middle(a) - start).length().total_cmp(&(middle(b) - start).length()));
+        let mut out = Vec::new();
+        for (i, b) in near.into_iter().take(n).enumerate() {
+            let (mid, off) = (middle(b), f64::from(b.plan.w.max(b.plan.d)) * 0.5 + 6.0);
+            for (k, way) in [Vec3::new(1.0, 0.0, 0.3), Vec3::new(-0.3, 0.0, 1.0), Vec3::new(-1.0, 0.0, -0.4), Vec3::new(0.2, 0.0, -1.0)].into_iter().enumerate() {
+                let way = way.normalize();
+                let at = mid + way * off;
+                let y = self.game.ground().height_at(at.x, at.z).unwrap_or(mid.y - 1.4);
+                out.push((format!("building_{i}_{:?}_{k}", b.plan.kind).to_lowercase(), Vec3::new(at.x, y, at.z), way.x.atan2(way.z)));
+            }
+        }
+        out
     }
 
     /// The frame as the player standing at `feet`, looking along `yaw` and
@@ -129,13 +182,6 @@ fn shots() {
     let mut images = Images::new(&gpu);
     let mut app = DeadSignal::new(Settings::default(), false);
     app.init_gpu(&gpu, FORMAT, &mut images);
-    app.holdout_off_screen(&gpu, &mut images);
-    // Something to see the light on: a few of the dead about the yard, a
-    // hound, a fire.
-    for (x, z, kind) in [(2.0, 2.0, Kind::Shambler), (4.5, 3.0, Kind::Shambler), (-3.0, 8.0, Kind::Ripper), (6.0, 9.0, Kind::Hound), (14.0, 7.0, Kind::Juggernaut)] {
-        zombie::spawn_kind(&mut app.game.world, Vec3::new(x + 0.5, 0.0, z + 0.5), 0.0, kind, Theme::Drifter);
-    }
-    crate::throw::pyre(&mut app.game.world, Vec3::new(-4.5, 0.0, 3.5), 0);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("shot"),
         size: wgpu::Extent3d { width: SIZE[0], height: SIZE[1], depth_or_array_layers: 1 },
@@ -146,6 +192,28 @@ fn shots() {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
+    let write = |name: &str, pixels: Vec<u8>| {
+        let file = out.join(format!("{name}.png"));
+        std::fs::write(&file, lntrn_image::encode_png(&lntrn_image::Image::new(SIZE[0], SIZE[1], pixels))).expect("the picture written");
+        eprintln!("shots: {}", file.display());
+    };
+    // (An extraction run's map by day, asked for: its nearest buildings.)
+    if let Ok(seed) = std::env::var("WILDS") {
+        app.wilds_off_screen(&gpu, &mut images, seed.parse().expect("WILDS=<seed>"));
+        eprintln!("shots: {} panes of glass on the map", app.game.world.resource::<crate::glass::Glazing>().panes.len());
+        for (i, (name, feet, yaw)) in app.building_views(4).into_iter().enumerate() {
+            let pixels = app.frame_off_screen(&gpu, &target, feet, yaw, 0.08, 100.0 + i as f64, false);
+            write(&name, pixels);
+        }
+        return;
+    }
+    app.holdout_off_screen(&gpu, &mut images);
+    // Something to see the light on: a few of the dead about the yard, a
+    // hound, a fire.
+    for (x, z, kind) in [(2.0, 2.0, Kind::Shambler), (4.5, 3.0, Kind::Shambler), (-3.0, 8.0, Kind::Ripper), (6.0, 9.0, Kind::Hound), (14.0, 7.0, Kind::Juggernaut)] {
+        zombie::spawn_kind(&mut app.game.world, Vec3::new(x + 0.5, 0.0, z + 0.5), 0.0, kind, Theme::Drifter);
+    }
+    crate::throw::pyre(&mut app.game.world, Vec3::new(-4.5, 0.0, 3.5), 0);
     for lamp in app.game.world.query::<&crate::holdout::lamps::Lamp>().iter(&app.game.world).filter(|l| l.mood != crate::holdout::lamps::Mood::Steady) {
         eprintln!("shots: a {:?} lamp at {:.0}, {:.1}, {:.0}", lamp.mood, lamp.light.at.x - 0.5, lamp.light.at.y, lamp.light.at.z - 0.5);
     }
@@ -163,8 +231,6 @@ fn shots() {
         let floor = app.game.world.resource::<zombie::Nav>().0.as_ref().and_then(|n| n.height_at(about)).unwrap_or(about.y);
         let feet = Vec3::new(about.x, floor, about.z);
         let pixels = app.frame_off_screen(&gpu, &target, feet, -bearing.to_radians(), pitch.to_radians(), 100.0 + i as f64, name.ends_with("_shot"));
-        let file = out.join(format!("{name}.png"));
-        std::fs::write(&file, lntrn_image::encode_png(&lntrn_image::Image::new(SIZE[0], SIZE[1], pixels))).expect("the picture written");
-        eprintln!("shots: {}", file.display());
+        write(name, pixels);
     }
 }

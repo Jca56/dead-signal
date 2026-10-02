@@ -96,7 +96,8 @@ fn house(two: bool, seed: u32) -> (Solids, crate::map::building::Building) {
     for block in &sh.blocks {
         let tris = crate::collide::box_tris(b.world(block.lo), b.world(block.hi));
         match block.stuff {
-            shape::Stuff::Ghost => {
+            shape::Stuff::Trim => {}
+            shape::Stuff::Ghost | shape::Stuff::Glass => {
                 s.add_barrier(&tris);
             }
             shape::Stuff::Solid(_) => s.add(&tris),

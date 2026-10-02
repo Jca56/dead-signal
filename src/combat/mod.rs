@@ -332,6 +332,10 @@ impl Combat {
         let dead = zombie::raycast_past(&mut game.world, aim.eye, dir, reach, &heard.struck);
         let reach = dead.map_or(reach, |(_, t, _)| t);
         let target = targets::raycast(&mut game.world, aim.eye, dir, reach);
+        // The glass on the way breaks: as far as the first thing it stops
+        // in (what goes on through one of the dead goes on to the wall).
+        let stops = target.map(|(_, t, _)| t).or_else(|| dead.filter(|_| hit.pierce.is_empty()).map(|(_, t, _)| t));
+        crate::glass::shot(&mut game.world, &mut self.fx, aim.eye, dir, stops.unwrap_or(wall.map_or(hit.reach, |h| h.t)));
         let punch = |t: f64| hit.damage * hit.falloff.map_or(1.0, |f| f.at(t));
         if target.is_none()
             && let Some(first) = dead

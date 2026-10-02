@@ -52,6 +52,7 @@ impl AppHost for DeadSignal {
         self.motes.init(&mut renderer);
         zombie::spit::load(&mut renderer, &mut self.game.world);
         crate::throw::draw::load(&mut renderer, &mut self.game.world);
+        crate::glass::load(&mut renderer, &mut self.game.world);
         self.load_things(&mut renderer, gpu, images);
         match assets::load_figure(&mut renderer, "shambler").and_then(zombie::figure::Model::new) {
             Ok(model) => self.game.world.insert_resource(model),
@@ -151,6 +152,7 @@ impl AppHost for DeadSignal {
             zombie::spit::draw(&mut self.game.world, renderer, alpha);
             crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
             zombie::rift::draw(&mut self.game.world, renderer, time);
+            crate::glass::draw(&self.game.world, renderer, &sights);
         }
         // The figures: the dead, and (playing together) the players, each
         // left out of the panes that look through their own eyes.

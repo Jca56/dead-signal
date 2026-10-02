@@ -52,7 +52,7 @@ pub fn barn(dice: &mut Dice, w: i32, d: i32) -> Plan {
     for i in 0..plan.walls.len() {
         let wall = plan.walls[i];
         if wall.along_x {
-            plan.openings.push(Opening { wall: i, centre: middle, width: BARN_DOOR, sill: 0.0, head: BARN_DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: i, centre: middle, width: BARN_DOOR, sill: 0.0, head: BARN_DOOR_HEAD, door: true, boarded: false, bare: false });
         }
     }
     for i in 0..plan.walls.len() {
@@ -60,7 +60,7 @@ pub fn barn(dice: &mut Dice, w: i32, d: i32) -> Plan {
             continue;
         }
         for c in plan::spots_along(&plan, i, 0.8, 4.5) {
-            plan.openings.push(Opening { wall: i, centre: c, width: 0.8, sill: BARN_SILL, head: BARN_WINDOW_HEAD, door: false, boarded: dice.unit() < 0.3 });
+            plan.openings.push(Opening { wall: i, centre: c, width: 0.8, sill: BARN_SILL, head: BARN_WINDOW_HEAD, door: false, boarded: dice.unit() < 0.3, bare: false });
         }
     }
     plan
@@ -82,10 +82,10 @@ pub fn garage(dice: &mut Dice, w: i32, d: i32) -> Plan {
     for i in 0..plan.walls.len() {
         let wall = plan.walls[i];
         if wall.along_x && wall.at == 0 {
-            plan.openings.push(Opening { wall: i, centre: middle, width: BARN_DOOR, sill: 0.0, head: BARN_DOOR_HEAD, door: true, boarded: false });
+            plan.openings.push(Opening { wall: i, centre: middle, width: BARN_DOOR, sill: 0.0, head: BARN_DOOR_HEAD, door: true, boarded: false, bare: false });
         } else if !wall.along_x {
             for c in plan::spots_along(&plan, i, 1.2, 4.0) {
-                plan.openings.push(Opening { wall: i, centre: c, width: 1.2, sill: plan::SILL, head: plan::WINDOW_HEAD, door: false, boarded: dice.unit() < 0.3 });
+                plan.openings.push(Opening { wall: i, centre: c, width: 1.2, sill: plan::SILL, head: plan::WINDOW_HEAD, door: false, boarded: dice.unit() < 0.3, bare: false });
             }
         }
     }

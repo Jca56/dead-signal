@@ -121,8 +121,11 @@ pub struct Renderer {
     format: wgpu::TextureFormat,
     sky: wgpu::RenderPipeline,
     world: wgpu::RenderPipeline,
-    /// What's soft and seen through (mist), drawn over the rest.
+    /// What's soft and seen through (mist), drawn over the rest; and
+    /// glass, under the mist.
     soft: wgpu::RenderPipeline,
+    glass: wgpu::RenderPipeline,
+    panes: Vec<(Option<usize>, MeshId, Instance)>,
     mist: Vec<(Option<usize>, MeshId, Instance)>,
     /// Each pane's globals, and the layout to make more with.
     layout: wgpu::BindGroupLayout,
@@ -206,12 +209,13 @@ impl Renderer {
         };
         let world = pipeline("world", "world_fs", None, true);
         let soft = pipeline("soft", "mist_fs", Some(wgpu::BlendState::ALPHA_BLENDING), false);
+        let glass = pipeline("glass", "glass_fs", Some(wgpu::BlendState::ALPHA_BLENDING), false);
         let instance_cap = 64;
         let instances = Self::instance_buffer(gpu, instance_cap);
         let skinned = Skinned::new(gpu, format);
         let shade = Shade::new(gpu);
         let figures = Figures::new(gpu, format, &layout, &shade);
-        Self { format, sky, world, soft, mist: Vec::new(), layout, globals: Vec::new(), staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodels: Vec::new(), figures, lights: Vec::new(), shade }
+        Self { format, sky, world, soft, glass, panes: Vec::new(), mist: Vec::new(), layout, globals: Vec::new(), staged: Vec::new(), vertices: None, meshes: Vec::new(), instances, instance_cap, frame: Vec::new(), targets: None, skinned, viewmodels: Vec::new(), figures, lights: Vec::new(), shade }
     }
 
     /// A pane's globals: the buffer, and its bind group.
@@ -312,6 +316,15 @@ impl Renderer {
     /// Queue one thing for this frame, seen in pane `pane` only.
     pub fn draw_in(&mut self, pane: usize, d: Draw) {
         self.frame.push((Some(pane), d.mesh, d.instance()));
+    }
+
+    /// Queue a pane of glass for this frame, in one pane of the window:
+    /// seen through, hiding `film` of what's behind it looked at square
+    /// on (more, looked along).
+    pub fn draw_glass_in(&mut self, pane: usize, d: Draw, film: f32) {
+        let mut instance = d.instance();
+        instance.tint[3] = film;
+        self.panes.push((Some(pane), d.mesh, instance));
     }
 
     /// Queue something soft for this frame (a wisp of mist): seen through,

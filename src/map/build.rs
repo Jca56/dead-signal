@@ -60,6 +60,8 @@ pub struct Built {
     pub picture: Image,
     /// A holdout's arena (its doors made solid, and shut to the dead).
     pub arena: Option<crate::holdout::arena::Arena>,
+    /// Every pane of glass in a window: its box.
+    pub panes: Vec<(Vec3, Vec3)>,
 }
 
 /// What's to be built: the wilds for an extraction run (from a seed), or
@@ -229,16 +231,25 @@ fn make(map: Map, mut arena: Option<crate::holdout::arena::Arena>, kit: &Kit, st
         roofs.extend(shape.roof.iter().enumerate().map(|(i, (t, colour))| (k as u32, i, t.map(|p| b.world(p)), *colour)));
     }
     let mut by_surface: HashMap<Surface, Vec<[Vec3; 3]>> = HashMap::new();
-    let mut barriers = Vec::new();
+    let (mut barriers, mut panes) = (Vec::new(), Vec::new());
     for (salt, i, block) in blocks {
         let tris = box_tris(block.lo, block.hi);
+        // Each face (two triangles) a shade of its own.
+        let mut seen = |tris: &[[Vec3; 3]]| {
+            for (f, t) in tris.iter().enumerate() {
+                bucket(*t, shade(block.colour, 0.93 + 0.14 * hash(seed ^ salt, i, f / 2, 21)));
+            }
+        };
         match block.stuff {
             Stuff::Ghost => barriers.extend(tris),
+            // (A pane's drawn by itself, while it's whole: `glass.rs`.)
+            Stuff::Glass => {
+                barriers.extend(tris);
+                panes.push((block.lo, block.hi));
+            }
+            Stuff::Trim => seen(&tris),
             Stuff::Solid(surface) => {
-                for (f, t) in tris.iter().enumerate() {
-                    // Each face (two triangles) a shade of its own.
-                    bucket(*t, shade(block.colour, 0.93 + 0.14 * hash(seed ^ salt, i, f / 2, 21)));
-                }
+                seen(&tris);
                 by_surface.entry(surface).or_default().extend(tris);
             }
         }
@@ -297,7 +308,7 @@ fn make(map: Map, mut arena: Option<crate::holdout::arena::Arena>, kit: &Kit, st
     }
     let picture = super::screen::picture(&map, &network);
     stage(Stage::Done);
-    Built { map, solids, nav, chunks, containers, exits, picture, arena }
+    Built { map, solids, nav, chunks, containers, exits, picture, arena, panes }
 }
 
 // ---- colour -------------------------------------------------------------------

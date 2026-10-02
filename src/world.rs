@@ -156,6 +156,7 @@ impl Game {
         world.insert_resource(zombie::Heat::default());
         world.insert_resource(crate::dev::Cheats::default());
         world.insert_resource(crate::throw::Booms::default());
+        world.insert_resource(crate::glass::Glazing::default());
         world.insert_resource(zombie::Stealth::default());
         world.insert_resource(zombie::Horde::default());
         let mut frame = Schedule::default();
