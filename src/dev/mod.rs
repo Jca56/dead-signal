@@ -64,14 +64,15 @@ pub enum DevAction {
     Reset,
 }
 
-/// A few lines up in the corner: what's going on.
+/// A few lines up in the top right corner (clear of a holdout's round and
+/// points, at the left): what's going on.
 pub fn draw_info(ui: &mut Ui, lines: &[String]) {
     let s = ui.m.scale;
     let screen = ui.clip();
     let text = TextStyle::new((22.0 * s) as f32).bold().family(style::FONT);
     let h = f64::from(text.line_height()) + 4.0 * s;
     let w = lines.iter().map(|l| ui.measure(l, &text)).fold(0.0, f64::max) + 30.0 * s;
-    let at = Vec2::new(screen.min.x + 30.0 * s, screen.min.y + 30.0 * s);
+    let at = Vec2::new(screen.max.x - 30.0 * s - w, screen.min.y + 30.0 * s);
     ui.draw.rect(Rect::from_min_size(at, Vec2::new(w, h * lines.len() as f64 + 20.0 * s)), Color::rgba(0.0, 0.0, 0.0, 0.6));
     for (i, line) in lines.iter().enumerate() {
         ui.text_at(line, &text, at + Vec2::new(15.0 * s, 10.0 * s + h * i as f64), w, if i == 0 { crate::hideout::GOLD } else { style::BONE });
