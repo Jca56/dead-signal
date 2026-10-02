@@ -13,6 +13,7 @@ mod flame;
 use crate::collide::Surface;
 use crate::fx::{Fx, Marker};
 use crate::head::{self, View};
+use crate::hurts::Hurts;
 use crate::input::pad::Rumble;
 use crate::items;
 use crate::loot::Dice;
@@ -35,6 +36,8 @@ pub struct Combat {
     /// Each player's, by seat.
     pub arms: Vec<Arms>,
     pub fx: Fx,
+    /// The numbers the dead's hurts throw up, and their bars.
+    pub hurts: Hurts,
     sound: Sound,
     seed: u32,
     /// Luck for what the dead drop: its own, so it owes nothing to the
@@ -138,7 +141,7 @@ struct Aim {
 
 impl Combat {
     pub fn new() -> Self {
-        Self { arms: vec![Arms::default()], fx: Fx::default(), sound: Sound::new(), seed: 0x6C8E_9CF5, loot: Dice::default() }
+        Self { arms: vec![Arms::default()], fx: Fx::default(), hurts: Hurts::default(), sound: Sound::new(), seed: 0x6C8E_9CF5, loot: Dice::default() }
     }
 
     pub fn init(&mut self, renderer: &mut Renderer) {
@@ -149,6 +152,7 @@ impl Combat {
     /// what to take up).
     pub fn reset(&mut self, players: usize) {
         self.arms = (0..players).map(|_| Arms::default()).collect();
+        self.hurts.clear();
     }
 
     /// Set how loud everything is.
@@ -185,6 +189,7 @@ impl Combat {
     /// A frame of what flies, once for everyone (before their hands).
     pub fn update(&mut self, dt: f64) {
         self.fx.update(dt);
+        self.hurts.update(dt);
     }
 
     /// One frame of a run for player `seat`: their hands, and what they
@@ -337,7 +342,7 @@ impl Combat {
                 let close = hit.falloff.is_none_or(|f| t <= f.near);
                 // Plate turns it, with a spark and a clang.
                 let plated = zombie::plated(&game.world, e, dir, limb);
-                let impact = zombie::Impact { damage: punch(t) * share, head, limb, blow: hit.blow, shove: hit.shove, stumble: hit.stumble && close, takedown: hit.takedown };
+                let impact = zombie::Impact { damage: punch(t) * share, head, limb, blow: hit.blow, shove: hit.shove, stumble: hit.stumble && close, takedown: hit.takedown, fire: false, at: Some(point) };
                 if let Some(mut z) = game.world.get_mut::<zombie::brain::Zombie>(e) {
                     z.by = Some(aim.seat);
                 }

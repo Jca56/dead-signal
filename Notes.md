@@ -85,6 +85,10 @@
   - [x] LMG: a 100-round belt of 7.62, through three at a time; slow up, slow to feed. In the bunker's armory (3000).
   - [x] Flamethrower: a stream that burns all in its cone, leaves fire where it ends, and sets your buddy alight too. In the motor pool's parts store (2500).
   - [ ] Playtest, and what it turns up.
+- [ ] Health bars and damage numbers (Borderlands' way; a switch for each in Settings, HUD)
+  - [x] A bar over one of the dead that's been hurt or that the crosshair's on: what it has, and (paler) what the last hits took; the special dead named.
+  - [x] A number for each hit, thrown up where it struck for whoever dealt it: gold and CRITICAL to the head, grey off plate, fire's run together into one counting up.
+  - [ ] Playtest, and what it turns up.
 - [ ] Waves tuning and difficulty (the counts are still the small map's).
 - [ ] Upgradable guns (the bench goes in the bunker's armory).
 - [ ] Perks

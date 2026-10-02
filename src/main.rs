@@ -18,6 +18,7 @@ mod head;
 mod hideout;
 mod holdout;
 mod hud;
+mod hurts;
 mod icons;
 mod input;
 mod items;

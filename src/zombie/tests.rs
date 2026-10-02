@@ -443,7 +443,7 @@ fn a_takedown_kills_only_one_that_never_saw_it_coming() {
         let mut z = Zombie::new(0.0, 5);
         z.state = state;
         let e = world.spawn((z, Body::at(Vec3::ZERO))).id();
-        let hit = super::Impact { damage: 45.0, head: false, limb: false, blow: true, shove: 3.0, stumble: true, takedown: true };
+        let hit = super::Impact { damage: 45.0, head: false, limb: false, blow: true, shove: 3.0, stumble: true, takedown: true, fire: false, at: None };
         super::hurt(&mut world, e, Vec3::new(0.0, 0.0, -1.0), Vec3::new(0.0, 1.6, 2.0), hit)
     };
     assert!(knife(State::Wander { goal: None, rest: 1.0 }), "wandering: dead");

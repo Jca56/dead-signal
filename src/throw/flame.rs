@@ -87,7 +87,7 @@ pub fn spray(world: &mut World, by: usize, eye: Vec3, dir: Vec3, muzzle: Vec3, d
             z.by = Some(by);
         }
         // (Fire finds everything: `limb`, so no plate turns it.)
-        let hit = zombie::Impact { damage, head: false, limb: true, blow: false, shove: 0.0, stumble: false, takedown: false };
+        let hit = zombie::Impact { damage, head: false, limb: true, blow: false, shove: 0.0, stumble: false, takedown: false, fire: true, at: None };
         if zombie::hurt(world, e, dir, eye, hit) {
             kills.push((by, e));
         }

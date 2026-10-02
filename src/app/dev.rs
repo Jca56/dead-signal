@@ -99,7 +99,7 @@ impl DeadSignal {
                     .map(|(e, _, b)| (e, b.pos))
                     .collect();
                 for (e, at) in near {
-                    let impact = zombie::Impact { damage: 1.0e7, head: false, limb: false, blow: false, shove: 2.0, stumble: false, takedown: false };
+                    let impact = zombie::Impact { damage: 1.0e7, head: false, limb: false, blow: false, shove: 2.0, stumble: false, takedown: false, fire: false, at: None };
                     zombie::hurt(&mut self.game.world, e, at - body.pos, body.pos, impact);
                 }
             }

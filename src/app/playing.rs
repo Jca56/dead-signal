@@ -126,6 +126,8 @@ impl DeadSignal {
         }
         let area = ui.clip();
         let panes: Vec<Rect> = self.shares.iter().map(|&share| super::panes::in_rect(share, area)).collect();
+        // (Under everything else of a run's: the HUD, a bag open.)
+        self.draw_hurts(ui, &panes);
         let feeds = self.feeds();
         self.run.play(ui, cx, &mut self.game, &mut self.combat, locked, &self.icons, &feeds, &panes);
         // Each player's figure, as they are now (for the others to see).

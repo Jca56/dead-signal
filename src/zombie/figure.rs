@@ -161,6 +161,17 @@ impl Figure {
         self.solid = false;
     }
 
+    /// The middle of its chest and the top of its head, in the world, as
+    /// it's drawn (none: it isn't).
+    pub fn chest(&self) -> Option<Vec3> {
+        (!self.joints.is_empty()).then(|| (self.points[HIPS] + self.points[NECK]) * 0.5)
+    }
+
+    pub fn crown(&self) -> Option<Vec3> {
+        let g = if self.girth > 0.0 { self.girth } else { 1.0 };
+        (!self.joints.is_empty()).then(|| self.points[HEAD] + Vec3::new(0.0, HEAD_RADIUS * g + 0.08, 0.0))
+    }
+
     /// How far along a ray (unit `dir`) it is hit, and whether in the head.
     #[cfg(test)]
     pub fn ray(&self, from: Vec3, dir: Vec3, max: f64) -> Option<(f64, bool)> {

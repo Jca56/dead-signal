@@ -48,7 +48,7 @@ impl Tab {
             Tab::Gamepad => &[Field::StickSensitivity, Field::InvertLook, Field::AimAssist, Field::Rumble],
             Tab::Video => &[Field::Fov, Field::Fullscreen, Field::Vsync, Field::SideBySide],
             Tab::Audio => &[Field::Master, Field::Music, Field::Effects, Field::Zombies, Field::MusicInRuns],
-            Tab::Hud => &[Field::Crosshair, Field::HeadBob, Field::UiScale],
+            Tab::Hud => &[Field::Crosshair, Field::HealthBars, Field::DamageNumbers, Field::HeadBob, Field::UiScale],
             Tab::Game => &[Field::DevMode],
         }
     }

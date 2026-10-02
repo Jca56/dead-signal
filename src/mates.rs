@@ -25,7 +25,7 @@ const INSET: f64 = 70.0;
 
 /// Where `p` shows over `screen` from `camera` (whose view fills it), and
 /// whether it's ahead of the eye.
-fn onto(camera: &Camera, screen: Rect, p: Vec3) -> (Vec2, bool) {
+pub fn onto(camera: &Camera, screen: Rect, p: Vec3) -> (Vec2, bool) {
     let (right, up, forward) = camera.basis();
     let to = p - camera.position;
     let z = to.dot(forward);

@@ -8,6 +8,7 @@ pub mod brain;
 pub mod breach;
 pub mod director;
 pub mod figure;
+pub mod harm;
 pub mod kind;
 pub mod looks;
 pub mod nav;
@@ -123,6 +124,8 @@ pub struct Horde {
     pub poisoned: Vec<usize>,
     /// Pipe bombs beeping, drawing the dead near to them.
     pub lures: Vec<Vec3>,
+    /// The hits the dead took, to be shown (what each took, and where).
+    pub harms: Vec<harm::Harm>,
     pub gone: usize,
     seed: u32,
     /// The world's steps so far.
@@ -148,7 +151,7 @@ impl Horde {
 
 pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
     fixed.add_systems((step::think, spit::fly, spit::fester, crate::throw::step).chain());
-    frame.add_systems((step::pose, step::bury));
+    frame.add_systems((step::pose, step::bury, harm::drain));
 }
 
 /// The dead's thinking and moving, a step at a time (for tests of the
@@ -305,6 +308,10 @@ pub struct Impact {
     pub stumble: bool,
     /// A killing blow to one that never saw it coming.
     pub takedown: bool,
+    /// Fire: it burns on, a tick at a time (its numbers run together).
+    pub fire: bool,
+    /// Where it struck, if anywhere in particular (not: its chest).
+    pub at: Option<Vec3>,
 }
 
 /// A blow's shove, m/s, `times` the usual.
@@ -316,14 +323,25 @@ pub fn blow_shove(times: f64) -> f64 {
 /// died.
 pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) -> bool {
     let one_shot = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.one_shot);
+    let now = world.get_resource::<crate::world::Clock>().map_or(0.0, |c| c.time);
     let Some(mut z) = world.get_mut::<Zombie>(e) else { return false };
+    if z.dead() {
+        return false;
+    }
+    let before = z.hp;
     let hit = if one_shot { Impact { damage: z.hp * 100.0, ..hit } } else { hit };
     // (No knife in the back drops a Juggernaut.)
-    let damage = if hit.takedown && z.unaware() && z.kind != Kind::Juggernaut { z.hp * 10.0 } else { hit.damage * z.plating(dir, hit.limb) };
+    let outright = hit.takedown && z.unaware() && z.kind != Kind::Juggernaut;
+    let plate = z.plating(dir, hit.limb);
+    let damage = if outright { z.hp * 10.0 } else { hit.damage * plate };
     let killed = z.hurt(damage, hit.head, hit.blow, from);
     if hit.stumble && !killed {
         z.stumble();
     }
+    // What it's seen to have taken: what the hit took, or (killed
+    // outright) all it had.
+    let amount = if outright || one_shot { before } else { brain::dealt(damage, hit.head, hit.blow) };
+    let by = z.by;
     let mut sounds = Vec::new();
     if killed {
         sounds.push(if z.kind == Kind::Spitter { Sfx::Swell } else { Sfx::Gurgle });
@@ -335,9 +353,12 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) ->
         body.push += push;
         body.pos
     });
+    harm::mark(world, e, before, now);
     if let Some(at) = at {
+        let chest = world.get::<Figure>(e).and_then(Figure::chest).unwrap_or(at + Vec3::new(0.0, 1.2, 0.0));
         let mut horde = world.resource_mut::<Horde>();
         horde.sounds.extend(sounds.into_iter().map(|s| (s, at + Vec3::new(0.0, 1.2, 0.0), 1.0)));
+        horde.harms.push(harm::Harm { on: e, at: hit.at.unwrap_or(chest), amount, head: hit.head && !hit.blow, turned: plate < 1.0 && !outright, fire: hit.fire, killed, by });
     }
     killed
 }

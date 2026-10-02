@@ -92,6 +92,29 @@ impl DeadSignal {
         }
     }
 
+    /// Over each player's pane, the dead's hurts as that pane's camera
+    /// sees them: their bars, and the numbers of that player's own hits
+    /// (each as the settings have it).
+    pub(super) fn draw_hurts(&mut self, ui: &mut Ui, panes: &[Rect]) {
+        let (bars, numbers) = {
+            let s = self.game.world.resource::<crate::settings::Settings>();
+            (s.health_bars, s.damage_numbers)
+        };
+        if !bars && !numbers {
+            return;
+        }
+        for ((pane, camera), &seat) in panes.iter().zip(&self.cameras).zip(&self.eyes) {
+            ui.draw.push_clip(*pane);
+            if bars {
+                self.combat.hurts.bars(ui, *pane, camera, &mut self.game.world, seat);
+            }
+            if numbers {
+                self.combat.hurts.numbers(ui, *pane, camera, &self.game.world, seat);
+            }
+            ui.draw.pop_clip();
+        }
+    }
+
     /// Where each pane's camera is this frame, the window `aspect` wide
     /// (the window cut again: the screen may have changed since).
     pub(super) fn place_cameras(&mut self, time: f64, aspect: f64) {

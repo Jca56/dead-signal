@@ -20,18 +20,20 @@ fn away(from: Vec3, to: Vec3) -> Vec3 {
 
 impl Combat {
     /// What the dead did since last frame: play their sounds where they
-    /// are (heard by the nearest player), and take their blows (a shove, a
-    /// shake, the edges of that player's screen gone red). Once the run's
+    /// are (heard by the nearest player), throw up the numbers of the hits
+    /// they took, and take their blows (a shove, a shake, the edges of
+    /// that player's screen gone red). Once the run's
     /// over (not `alive`) it's all let go unheard. The blows that landed,
     /// each with whose seat.
     pub fn answer_the_dead(&mut self, game: &mut Game, alive: bool) -> Vec<(usize, zombie::brain::Blow)> {
-        let (sounds, blows) = {
+        let (sounds, blows, harms) = {
             let mut horde = game.world.resource_mut::<Horde>();
-            (std::mem::take(&mut horde.sounds), std::mem::take(&mut horde.blows))
+            (std::mem::take(&mut horde.sounds), std::mem::take(&mut horde.blows), std::mem::take(&mut horde.harms))
         };
         if !alive {
             return Vec::new();
         }
+        self.hurts.take(harms);
         let alpha = game.alpha();
         let ears: Vec<Aim> = game.players().iter().map(|(seat, body, view)| aim(*seat, view, body, alpha)).collect();
         if ears.is_empty() {
@@ -78,7 +80,7 @@ impl Combat {
                 game.world.query::<(bevy_ecs::entity::Entity, &zombie::brain::Zombie, &Body)>().iter(&game.world).filter(|(_, z, b)| !z.dead() && (b.pos - at).length() < spit::BURST_REACH).map(|(e, _, b)| (e, b.pos)).collect();
             for (e, pos) in near {
                 let share = spit::burst_share((pos - at).length());
-                let impact = zombie::Impact { damage: BURST_DEAD * share + 30.0, head: false, limb: false, blow: false, shove: 3.0 + 9.0 * share, stumble: true, takedown: false };
+                let impact = zombie::Impact { damage: BURST_DEAD * share + 30.0, head: false, limb: false, blow: false, shove: 3.0 + 9.0 * share, stumble: true, takedown: false, fire: false, at: None };
                 if let (Some(by), Some(mut z)) = (by, game.world.get_mut::<zombie::brain::Zombie>(e)) {
                     z.by = Some(by);
                 }

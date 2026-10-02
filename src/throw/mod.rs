@@ -275,7 +275,7 @@ fn blast(world: &mut World, at: Vec3, by: usize) {
     for (e, pos) in dead {
         let share = 1.0 - (pos - at).length() / BLAST;
         // (A blast finds everything: `limb` so no plate turns it.)
-        let hit = zombie::Impact { damage: BLAST_DEAD * share + 120.0, head: false, limb: true, blow: false, shove: 4.0 + 14.0 * share, stumble: true, takedown: false };
+        let hit = zombie::Impact { damage: BLAST_DEAD * share + 120.0, head: false, limb: true, blow: false, shove: 4.0 + 14.0 * share, stumble: true, takedown: false, fire: false, at: None };
         blame(world, e, by);
         if zombie::hurt(world, e, pos - at, at, hit) {
             kills.push((by, e));
@@ -334,7 +334,7 @@ fn burn(world: &mut World) {
             Some(b) => {
                 world.entity_mut(e).insert(b);
                 blame(world, e, b.by);
-                let hit = zombie::Impact { damage: BURN_DEAD * STEP, head: false, limb: true, blow: false, shove: 0.0, stumble: false, takedown: false };
+                let hit = zombie::Impact { damage: BURN_DEAD * STEP, head: false, limb: true, blow: false, shove: 0.0, stumble: false, takedown: false, fire: true, at: None };
                 if zombie::hurt(world, e, Vec3::ZERO, pos, hit) {
                     kills.push((b.by, e));
                 }
