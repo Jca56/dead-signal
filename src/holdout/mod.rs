@@ -204,21 +204,33 @@ impl Holdout {
 
     /// A step of the holdout, the players' feet at `feet`: the rounds on
     /// (the paid boards counted afresh each round), the points flown off.
-    /// Whether a round began.
-    pub fn update(&mut self, world: &mut World, feet: &[Vec3], dt: f64) -> bool {
+    /// What came of it: a round begun, or cleared.
+    pub fn update(&mut self, world: &mut World, feet: &[Vec3], dt: f64) -> Option<rounds::Event> {
         for w in &mut self.wallets {
             for p in &mut w.pops {
                 p.1 += dt;
             }
             w.pops.retain(|p| p.1 < hud::POP_FOR);
         }
-        let began = self.rounds.update(world, &self.arena, &self.open, feet, dt);
-        if began {
+        let event = self.rounds.update(world, &self.arena, &self.open, feet, dt);
+        if let Some(rounds::Event::Began(_)) = event {
             for w in &mut self.wallets {
                 w.nailed = 0;
             }
         }
-        began
+        event
+    }
+
+    /// Every gun in `bag`'s slots, its rounds topped up to a full carry
+    /// (what a hound round cleared is worth).
+    pub fn max_ammo(bag: &mut Bag) {
+        for slot in Slot::ALL {
+            let Some((ammo, most)) = bag.slot(slot).and_then(|gun| spare(gun.kind)) else { continue };
+            let have = bag.count(ammo);
+            if have < most {
+                bag.add(Stack::new(ammo, most - have));
+            }
+        }
     }
 
     /// What the player at `eye`, looking along `dir`, would use.
@@ -386,7 +398,10 @@ fn flat_dist(a: Vec3, b: Vec3) -> f64 {
 
 #[cfg(test)]
 mod cellar_tests;
+
 #[cfg(test)]
 mod dump;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod waves_tests;

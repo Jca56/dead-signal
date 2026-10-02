@@ -16,7 +16,8 @@ const DRAIN: f64 = 1.6;
 
 /// A hit as it's shown: on which of the dead, where it struck, what it
 /// took; to the head, turned by plate, fire (which burns on, a tick at a
-/// time); whether it killed; and whose it was (their seat).
+/// time), fire on one it's nothing to; whether it killed; and whose it
+/// was (their seat).
 #[derive(Clone, Copy, Debug)]
 pub struct Harm {
     pub on: Entity,
@@ -25,6 +26,7 @@ pub struct Harm {
     pub head: bool,
     pub turned: bool,
     pub fire: bool,
+    pub immune: bool,
     pub killed: bool,
     pub by: Option<usize>,
 }

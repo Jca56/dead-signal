@@ -69,8 +69,10 @@ impl Zombie {
             self.set(State::Vault { t: 0.0, from: body.pos, to: b.inside });
             return None;
         }
+        // (A Juggernaut makes short work of them.)
+        let every = if self.kind == super::kind::Kind::Juggernaut { TEAR_EVERY * 0.4 } else { TEAR_EVERY };
         let t = t.max(1e-6) + dt;
-        if t >= TEAR_EVERY {
+        if t >= every {
             out.tore = Some(at);
             out.sounds.push((Sfx::HitWood, 1.0));
             self.set(State::Breach { at, t: 1e-6 });

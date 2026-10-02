@@ -67,6 +67,9 @@ const STRIDE: f64 = 1.1;
 const WALK_CLIP: f64 = 0.8;
 const RUN_STRIDE: f64 = 3.4;
 const RUN_CLIP: f64 = 0.5;
+/// A bound of a hound's gallop covers this much ground.
+const BOUND: f64 = 2.6;
+const BOUND_CLIP: f64 = 0.4;
 /// A shot to the head does this many times a body shot's damage (blows do
 /// the same wherever they land).
 pub const HEADSHOT: f64 = 3.0;
@@ -238,6 +241,11 @@ impl Zombie {
     pub fn clip(&self) -> (Clip, f64) {
         match self.state {
             State::Dead { t } => (Clip::Death, t),
+            // A hound has few (its own, on its own rig): its bite, knocked
+            // off its stride, its gallop, standing.
+            State::Attack { t, .. } if self.kind == Kind::Hound => (Clip::Attack, t),
+            State::Stagger { t, until } if self.kind == Kind::Hound => (if until > FLINCH_TIME { Clip::Stumble } else { Clip::Flinch }, t),
+            _ if self.kind == Kind::Hound => if self.moving { (Clip::Run, self.walked / BOUND * BOUND_CLIP) } else { (Clip::Idle, self.clip_t) },
             State::Attack { t, .. } if self.kind == Kind::Ripper => (Clip::Slash, t),
             State::Spit { t, .. } => (Clip::Spit, t),
             State::Roar { t } => (Clip::Roar, t),
@@ -348,7 +356,7 @@ impl Zombie {
             && matches!(self.state, State::Wander { .. } | State::Search(_))
         {
             // Another saw them: come and look, answering it.
-            out.sounds.push((Sfx::Groan, 0.8));
+            out.sounds.push((traits.voice, 0.8));
             self.state = State::Investigate { at: seen_at, looked: 0.0 };
         }
         if let Some(lure) = lure
@@ -357,7 +365,7 @@ impl Zombie {
             self.state = State::Investigate { at: lure, looked: 0.0 };
         }
         if self.groan <= 0.0 {
-            out.sounds.push((Sfx::Groan, 0.9));
+            out.sounds.push((traits.voice, 0.9));
             self.groan = 4.0 + 5.0 * self.rand();
         }
 

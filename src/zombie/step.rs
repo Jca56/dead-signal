@@ -171,8 +171,8 @@ fn elbow(dead: &mut Query<(&mut Zombie, &mut Body, &mut Beat), Without<Player>>)
 /// figure, and how it looks.
 type Posed<'a> = (&'a Zombie, &'a Body, &'a Beat, &'a mut Figure, Option<&'a Looks>);
 
-pub(super) fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<(&Player, &Body)>, mut frames: Local<u32>, mut dead: Query<Posed, Without<Player>>) {
-    let Some(model) = model else { return };
+pub(super) fn pose(model: Option<Res<Model>>, hound: Option<Res<figure::Hound>>, blend: Res<Blend>, players: Query<(&Player, &Body)>, mut frames: Local<u32>, mut dead: Query<Posed, Without<Player>>) {
+    let Some(shambler) = model else { return };
     let players: Vec<(usize, Vec3)> = players.iter().map(|(p, b)| (p.0, b.pos)).collect();
     *frames = frames.wrapping_add(1);
     for (z, body, beat, mut figure, looks) in &mut dead {
@@ -184,6 +184,15 @@ pub(super) fn pose(model: Option<Res<Model>>, blend: Res<Blend>, players: Query<
         if far > MID && !figure.joints.is_empty() && !(*frames + beat.phase).is_multiple_of(POSE_FAR_EVERY) {
             continue;
         }
+        // A hound's on its own rig (none loaded: it isn't drawn).
+        let model = match (z.kind, &hound) {
+            (Kind::Hound, Some(h)) => &h.0,
+            (Kind::Hound, None) => {
+                figure.hide();
+                continue;
+            }
+            _ => &*shambler,
+        };
         let (clip, t) = z.clip();
         let (joints, points) = model.pose(clip, t);
         // Between the step it took and the next it will, over as many of

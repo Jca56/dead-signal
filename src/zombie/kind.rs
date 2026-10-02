@@ -18,6 +18,10 @@ pub enum Kind {
     /// Huge and plated in scrap: roars, then charges; turn it into a wall
     /// and it's dazed. Its front shrugs off shots; its back doesn't.
     Juggernaut,
+    /// A dog long dead and still burning: quicker than anything on two
+    /// legs, and a few shots drop it; its bite sets you alight, fire's
+    /// nothing to it, and dead it goes up in flames where it falls.
+    Hound,
 }
 
 /// Its swipe: seconds it takes, when in it the blow lands, the rest after,
@@ -50,8 +54,10 @@ pub struct Traits {
     /// Its lunge starts this far off.
     pub lunge: f64,
     pub swipe: Swipe,
-    /// What it cries on seeing the player, and as it swipes.
+    /// What it cries on seeing the player, and as it swipes; and what it
+    /// mutters, going about.
     pub snarl: Sfx,
+    pub voice: Sfx,
     /// Its drop: how likely (a share of a corpse's).
     pub loot: f64,
 }
@@ -66,6 +72,7 @@ const SHAMBLER: Traits = Traits {
     lunge: 2.2,
     swipe: Swipe { time: 0.9, strike_at: 0.4, cooldown: 1.2, range: 1.4, reach: 1.8, damage: 20.0, leaves: None },
     snarl: Sfx::Snarl,
+    voice: Sfx::Groan,
     loot: 1.0,
 };
 
@@ -79,6 +86,7 @@ const RIPPER: Traits = Traits {
     lunge: 3.5,
     swipe: Swipe { time: 0.45, strike_at: 0.18, cooldown: 0.3, range: 1.5, reach: 1.9, damage: 7.0, leaves: Some(Affliction::Bleed) },
     snarl: Sfx::Shriek,
+    voice: Sfx::Groan,
     loot: 1.75,
 };
 
@@ -92,6 +100,7 @@ const SPITTER: Traits = Traits {
     lunge: 0.0,
     swipe: Swipe { time: 0.9, strike_at: 0.4, cooldown: 1.5, range: 1.4, reach: 1.7, damage: 10.0, leaves: None },
     snarl: Sfx::Retch,
+    voice: Sfx::Groan,
     loot: 1.5,
 };
 
@@ -106,16 +115,51 @@ const JUGGERNAUT: Traits = Traits {
     lunge: 0.0,
     swipe: Swipe { time: 1.3, strike_at: 0.65, cooldown: 1.2, range: 2.1, reach: 2.8, damage: 40.0, leaves: None },
     snarl: Sfx::Bellow,
+    voice: Sfx::Groan,
     loot: 1.0,
 };
 
+const HOUND: Traits = Traits {
+    hp: 60.0,
+    // (Its lunge is its leap, the last few metres.)
+    pace: (8.2, 8.2, 10.5),
+    fast: (8.2, 8.2, 10.5),
+    fast_share: 0.0,
+    sight: 1.5,
+    turn: 7.0,
+    lunge: 4.0,
+    swipe: Swipe { time: 0.5, strike_at: 0.2, cooldown: 0.6, range: 1.6, reach: 2.0, damage: 10.0, leaves: Some(Affliction::Burn) },
+    snarl: Sfx::Bark,
+    voice: Sfx::Growl,
+    loot: 0.0,
+};
+
 impl Kind {
+    pub const ALL: [Kind; 5] = [Kind::Shambler, Kind::Ripper, Kind::Spitter, Kind::Juggernaut, Kind::Hound];
+
+    /// Its name, as it's shown.
+    pub fn name(self) -> &'static str {
+        match self {
+            Kind::Shambler => "SHAMBLER",
+            Kind::Ripper => "RIPPER",
+            Kind::Spitter => "SPITTER",
+            Kind::Juggernaut => "JUGGERNAUT",
+            Kind::Hound => "HELLHOUND",
+        }
+    }
+
+    /// Whether fire's nothing to it.
+    pub fn fireproof(self) -> bool {
+        self == Kind::Hound
+    }
+
     pub fn traits(self) -> &'static Traits {
         match self {
             Kind::Shambler => &SHAMBLER,
             Kind::Ripper => &RIPPER,
             Kind::Spitter => &SPITTER,
             Kind::Juggernaut => &JUGGERNAUT,
+            Kind::Hound => &HOUND,
         }
     }
 }
@@ -132,9 +176,25 @@ mod tests {
         // Quicker blows, each less, but they cut.
         let (s, rs) = (Kind::Shambler.traits().swipe, r.swipe);
         assert!(rs.time + rs.cooldown < s.time + s.cooldown && rs.damage < s.damage && rs.leaves == Some(Affliction::Bleed));
-        for k in [Kind::Shambler, Kind::Ripper, Kind::Spitter, Kind::Juggernaut] {
+        for k in Kind::ALL {
             let w = k.traits().swipe;
             assert!(w.strike_at < w.time && w.range < w.reach, "{k:?}");
         }
+    }
+
+    #[test]
+    fn every_kind_is_in_the_list_of_them_in_its_place() {
+        // (Counted by kind, as a number: the dev's readout.)
+        assert!(Kind::ALL.iter().enumerate().all(|(i, k)| *k as usize == i));
+        let named: std::collections::HashSet<&str> = Kind::ALL.iter().map(|k| k.name()).collect();
+        assert_eq!(named.len(), Kind::ALL.len());
+    }
+
+    #[test]
+    fn a_hound_outruns_a_ripper_but_not_a_sprint_and_goes_down_easier() {
+        let (h, r) = (Kind::Hound.traits(), Kind::Ripper.traits());
+        assert!(h.pace.1 > r.pace.1 && h.pace.1 < crate::player::SPRINT && h.pace.2 > crate::player::SPRINT);
+        assert!(h.hp < r.hp && h.swipe.leaves == Some(Affliction::Burn));
+        assert!(Kind::Hound.fireproof() && !Kind::Ripper.fireproof());
     }
 }

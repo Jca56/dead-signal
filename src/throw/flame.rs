@@ -79,10 +79,14 @@ fn reaches(world: &World, eye: Vec3, dir: Vec3, feet: Vec3, range: f64, half: f6
 /// catches; so does any other player; and where it ends it leaves fire.
 pub fn spray(world: &mut World, by: usize, eye: Vec3, dir: Vec3, muzzle: Vec3, damage: f64, range: f64, cone: f64) {
     let half = cone.to_radians() * 0.5;
-    let dead: Vec<Entity> = world.query::<(Entity, &Zombie, &Body)>().iter(world).filter(|(_, z, b)| !z.dead() && reaches(world, eye, dir, b.pos, range, half)).map(|(e, _, _)| e).collect();
+    let dead: Vec<(Entity, bool)> = world.query::<(Entity, &Zombie, &Body)>().iter(world).filter(|(_, z, b)| !z.dead() && reaches(world, eye, dir, b.pos, range, half)).map(|(e, z, _)| (e, z.kind.fireproof())).collect();
     let mut kills = Vec::new();
-    for e in dead {
-        world.entity_mut(e).insert(Burning { left: BURNS_ON, by });
+    for (e, fireproof) in dead {
+        // (A hound doesn't catch: the stream's nothing to it, and it's
+        // told so.)
+        if !fireproof {
+            world.entity_mut(e).insert(Burning { left: BURNS_ON, by });
+        }
         if let Some(mut z) = world.get_mut::<Zombie>(e) {
             z.by = Some(by);
         }

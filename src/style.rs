@@ -33,3 +33,30 @@ pub const AIR: Atmosphere = Atmosphere {
     ambient_sky: Color::rgb(0.66, 0.70, 0.70),
     ambient_ground: Color::rgb(0.33, 0.31, 0.27),
 };
+
+/// The air gone bad, a hound round's: the fog thick and close, the colour
+/// of old embers, the light gone dull.
+const GLOOM: Atmosphere = Atmosphere {
+    fog: Color::rgb(0.30, 0.20, 0.17),
+    density: 0.034,
+    zenith: Color::rgb(0.15, 0.11, 0.11),
+    sun_dir: AIR.sun_dir,
+    sun: Color::rgb(0.40, 0.26, 0.20),
+    ambient_sky: Color::rgb(0.52, 0.42, 0.40),
+    ambient_ground: Color::rgb(0.30, 0.24, 0.21),
+};
+
+/// The air, `gloom` (0–1) of the way gone bad.
+pub fn air(gloom: f64) -> Atmosphere {
+    let t = gloom.clamp(0.0, 1.0);
+    let mix = |a: Color, b: Color| Color::rgb(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+    Atmosphere {
+        fog: mix(AIR.fog, GLOOM.fog),
+        density: AIR.density + (GLOOM.density - AIR.density) * t,
+        zenith: mix(AIR.zenith, GLOOM.zenith),
+        sun_dir: AIR.sun_dir,
+        sun: mix(AIR.sun, GLOOM.sun),
+        ambient_sky: mix(AIR.ambient_sky, GLOOM.ambient_sky),
+        ambient_ground: mix(AIR.ambient_ground, GLOOM.ambient_ground),
+    }
+}

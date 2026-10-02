@@ -1,6 +1,7 @@
 //! What's thrown and what it's done, as drawn: the thing turning end over
 //! end in the air (a pipe bomb's light blinking as it beeps), the fires
-//! (a ring of flickering tongues, dying down at the end), the dead on fire,
+//! (a ring of flickering tongues, dying down at the end), the dead on fire
+//! (and a hound, which always is: flames down its back),
 //! a flamethrower's stream (a puff of flame swelling as it flies),
 //! and, while a throw's being aimed, its arc dot by dot and a ring where
 //! it'll land.
@@ -13,6 +14,9 @@ use super::flame::Puff;
 use super::{Burning, Fire, Thrown};
 use crate::player::Body;
 use crate::render::{Draw, MeshId, Renderer};
+use crate::zombie::brain::Zombie;
+use crate::zombie::figure::Figure;
+use crate::zombie::kind::Kind;
 
 /// What flames, the arc's dots and the landing ring look like, and a
 /// shot's muzzle flash (a buddy's gun, as the others see it)
@@ -21,7 +25,7 @@ use crate::render::{Draw, MeshId, Renderer};
 pub struct Meshes {
     flame: MeshId,
     dot: MeshId,
-    ring: MeshId,
+    pub ring: MeshId,
     pub flash: MeshId,
 }
 
@@ -92,6 +96,18 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
         for k in 0..3 {
             let a = k as f64 * 2.1 + time * 0.7;
             flame(renderer, m.flame, b.pos + Vec3::new(a.cos() * 0.15, 0.4 + 0.45 * k as f64, a.sin() * 0.15), 1.1 * fade, time, 20.0 + k as f64);
+        }
+    }
+    // A hound burns as it goes: flames from its rump to its shoulders,
+    // the biggest between them.
+    for (z, f) in world.query::<(&Zombie, &Figure)>().iter(world) {
+        if z.kind != Kind::Hound || z.dead() {
+            continue;
+        }
+        let Some([hips, neck, _]) = f.spine() else { continue };
+        let own = hips.x * 3.7 + hips.z * 1.3;
+        for (k, (along, size)) in [(0.1, 0.55), (0.45, 0.8), (0.8, 0.65)].into_iter().enumerate() {
+            flame(renderer, m.flame, hips + (neck - hips) * along + Vec3::new(0.0, 0.12, 0.0), size, time, own + k as f64);
         }
     }
 }

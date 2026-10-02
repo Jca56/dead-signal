@@ -36,6 +36,9 @@ pub enum Affliction {
     Bleed,
     /// Poisoned afresh for [`POISON_FOR`].
     Poison,
+    /// Set alight (a hound's bite): the fire's the world's (`throw`), not
+    /// counted here.
+    Burn,
 }
 
 /// Something that heals.
@@ -178,6 +181,7 @@ impl Vitals {
         match a {
             Affliction::Bleed => self.bleeding = (self.bleeding + 1).min(BLEED_MOST),
             Affliction::Poison => self.poison = POISON_FOR,
+            Affliction::Burn => {}
         }
     }
 

@@ -33,6 +33,10 @@ pub const FIRE_DYING: f64 = 1.5;
 const BURN_DEAD: f64 = 30.0;
 const BURN_PLAYER: f64 = 15.0;
 const BURNS_ON: f64 = 3.0;
+/// How long a player a hound's bitten burns.
+const BITE_BURNS: f64 = 1.2;
+/// The fire a hound leaves where it falls: how wide, how long.
+const PYRE: (f64, f64) = (1.1, 3.0);
 /// A pipe bomb: its fuse from the throw, how far off the dead come to it,
 /// how far its blast reaches and how hard (the dead, the player), and how
 /// far off it's heard.
@@ -322,8 +326,9 @@ fn burn(world: &mut World) {
     let fires: Vec<Fire> = world.query::<&Fire>().iter(world).copied().collect();
     // The fire `p` stands in, if any: whose it is.
     let within = |p: Vec3| fires.iter().find(|f| Vec2::new(p.x - f.at.x, p.z - f.at.z).length() < f.size() && (p.y - f.at.y).abs() < 1.2).map(|f| f.by);
-    // The dead: those in a fire catch; those on fire burn.
-    let dead: Vec<(Entity, Vec3, Option<Burning>)> = world.query::<(Entity, &Zombie, &Body, Option<&Burning>)>().iter(world).filter(|(_, z, _, _)| !z.dead()).map(|(e, _, b, burning)| (e, b.pos, burning.copied())).collect();
+    // The dead: those in a fire catch; those on fire burn. (Not a hound:
+    // fire's nothing to it.)
+    let dead: Vec<(Entity, Vec3, Option<Burning>)> = world.query::<(Entity, &Zombie, &Body, Option<&Burning>)>().iter(world).filter(|(_, z, _, _)| !z.dead() && !z.kind.fireproof()).map(|(e, _, b, burning)| (e, b.pos, burning.copied())).collect();
     let mut kills = Vec::new();
     for (e, pos, burning) in dead {
         let now = match within(pos) {
@@ -370,6 +375,21 @@ fn burn(world: &mut World) {
         booms.felt(seat).scorched += BURN_PLAYER * STEP;
     }
     world.resource_mut::<Horde>().sounds.extend(sounds);
+}
+
+/// Player `seat` is set alight (a hound's bite): they burn a moment.
+pub fn alight(world: &mut World, seat: usize) {
+    let who = world.query::<(Entity, &Player)>().iter(world).find(|(_, p)| p.0 == seat).map(|(e, _)| e);
+    if let Some(e) = who {
+        world.entity_mut(e).insert(Burning { left: BITE_BURNS, by: seat });
+    }
+}
+
+/// A hound's gone up in flames at `at` (player `by`'s kill, what it burns
+/// theirs).
+pub fn pyre(world: &mut World, at: Vec3, by: usize) {
+    world.spawn(Fire { at, radius: PYRE.0, left: PYRE.1, crackle_in: 0.0, by });
+    world.resource_mut::<Horde>().sounds.push((Sfx::Ignite, at + Vec3::new(0.0, 0.4, 0.0), 0.9));
 }
 
 /// One of the dead was hurt by player `by`: whatever it takes with it is

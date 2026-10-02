@@ -167,6 +167,10 @@ pub struct Looks {
     /// plates.
     pub claws: bool,
     pub pauldrons: bool,
+    /// Not one of the dead on two legs at all: a hound, on its own rig
+    /// (`hound.glb`), and the ribs showing through its side.
+    pub hound: bool,
+    pub ribs: bool,
     /// Each region's colour, as authored (sRGB).
     pub colors: [Rgb; PALETTE],
     /// How tall and how broad, times the model.
@@ -191,6 +195,8 @@ impl Default for Looks {
             pack: false,
             claws: false,
             pauldrons: false,
+            hound: false,
+            ribs: false,
             colors: [SKINS[0], [0.31, 0.34, 0.37], [0.27, 0.23, 0.18], HAIR[0], SHIRTS[2]],
             height: 1.0,
             bulk: 1.0,
@@ -201,6 +207,9 @@ impl Default for Looks {
 impl Looks {
     /// The parts of `shambler.glb` it's put together from.
     pub fn parts(&self) -> Vec<String> {
+        if self.hound {
+            return ["hound_head", if self.ribs { "hound_body_flayed" } else { "hound_body" }, "hound_legs", "hound_tail"].map(String::from).to_vec();
+        }
         let mut parts: Vec<String> = Vec::with_capacity(10);
         parts.push(
             match self.head {

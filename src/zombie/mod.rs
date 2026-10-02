@@ -12,6 +12,7 @@ pub mod harm;
 pub mod kind;
 pub mod looks;
 pub mod nav;
+pub mod rift;
 pub mod spit;
 mod senses;
 mod special;
@@ -150,7 +151,7 @@ impl Horde {
 }
 
 pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
-    fixed.add_systems((step::think, spit::fly, spit::fester, crate::throw::step).chain());
+    fixed.add_systems((step::think, spit::fly, spit::fester, crate::throw::step, rift::step).chain());
     frame.add_systems((step::pose, step::bury, harm::drain));
 }
 
@@ -159,7 +160,7 @@ pub fn install(fixed: &mut Schedule, frame: &mut Schedule) {
 #[cfg(test)]
 pub fn stepper() -> Schedule {
     let mut fixed = Schedule::default();
-    fixed.add_systems(step::think);
+    fixed.add_systems((step::think, rift::step).chain());
     fixed
 }
 
@@ -190,6 +191,7 @@ pub fn spawn_kind(world: &mut World, at: Vec3, yaw: f64, kind: Kind, theme: Them
         Kind::Ripper => Looks::ripper(dice),
         Kind::Spitter => Looks::spitter(dice),
         Kind::Juggernaut => Looks::juggernaut(dice),
+        Kind::Hound => Looks::hound(dice),
     };
     let mut zombie = Zombie::of(kind, yaw, seed);
     if looks.headless() {
@@ -262,6 +264,7 @@ pub fn clear(world: &mut World) {
         world.despawn(e);
     }
     world.remove_resource::<breach::Barriers>();
+    rift::clear(world);
 }
 
 /// How many are up and about (not lying dead).
@@ -328,6 +331,15 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) ->
     if z.dead() {
         return false;
     }
+    // Fire on one it's nothing to: nothing taken, and that's shown.
+    if hit.fire && z.kind.fireproof() {
+        let by = z.by;
+        let at = world.get::<Figure>(e).and_then(Figure::chest).or_else(|| world.get::<Body>(e).map(|b| b.pos + Vec3::new(0.0, 0.5, 0.0)));
+        if let Some(at) = at {
+            world.resource_mut::<Horde>().harms.push(harm::Harm { on: e, at, amount: 0.0, head: false, turned: false, fire: true, immune: true, killed: false, by });
+        }
+        return false;
+    }
     let before = z.hp;
     let hit = if one_shot { Impact { damage: z.hp * 100.0, ..hit } } else { hit };
     // (No knife in the back drops a Juggernaut.)
@@ -341,10 +353,14 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) ->
     // What it's seen to have taken: what the hit took, or (killed
     // outright) all it had.
     let amount = if outright || one_shot { before } else { brain::dealt(damage, hit.head, hit.blow) };
-    let by = z.by;
+    let (by, kind) = (z.by, z.kind);
     let mut sounds = Vec::new();
     if killed {
-        sounds.push(if z.kind == Kind::Spitter { Sfx::Swell } else { Sfx::Gurgle });
+        sounds.push(match kind {
+            Kind::Spitter => Sfx::Swell,
+            Kind::Hound => Sfx::Yelp,
+            _ => Sfx::Gurgle,
+        });
     }
     // (Shot from straight above, it isn't shoved at all.)
     let flat = Vec3::new(dir.x, 0.0, dir.z);
@@ -358,7 +374,11 @@ pub fn hurt(world: &mut World, e: Entity, dir: Vec3, from: Vec3, hit: Impact) ->
         let chest = world.get::<Figure>(e).and_then(Figure::chest).unwrap_or(at + Vec3::new(0.0, 1.2, 0.0));
         let mut horde = world.resource_mut::<Horde>();
         horde.sounds.extend(sounds.into_iter().map(|s| (s, at + Vec3::new(0.0, 1.2, 0.0), 1.0)));
-        horde.harms.push(harm::Harm { on: e, at: hit.at.unwrap_or(chest), amount, head: hit.head && !hit.blow, turned: plate < 1.0 && !outright, fire: hit.fire, killed, by });
+        horde.harms.push(harm::Harm { on: e, at: hit.at.unwrap_or(chest), amount, head: hit.head && !hit.blow, turned: plate < 1.0 && !outright, fire: hit.fire, immune: false, killed, by });
+        // A hound goes up in flames where it falls.
+        if killed && kind == Kind::Hound {
+            crate::throw::pyre(world, at, by.unwrap_or(0));
+        }
     }
     killed
 }
@@ -405,6 +425,8 @@ fn sound_off(world: &mut World, at: Vec3, range: f64, heats: bool) {
 
 #[cfg(test)]
 mod bench;
+#[cfg(test)]
+mod hound_tests;
 #[cfg(test)]
 mod model_tests;
 #[cfg(test)]

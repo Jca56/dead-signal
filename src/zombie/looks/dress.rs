@@ -142,6 +142,16 @@ impl Looks {
         }
     }
 
+    /// A Hellhound: charred black and ash grey, half of them open to
+    /// the ribs, big and small.
+    pub fn hound(dice: &mut Dice) -> Self {
+        const CHAR: [Rgb; 4] = [[0.13, 0.11, 0.10], [0.19, 0.16, 0.14], [0.10, 0.10, 0.11], [0.24, 0.19, 0.15]];
+        let mut l = Looks { hound: true, ribs: dice.unit() < 0.5, colors: [pick(dice, &CHAR), pick(dice, &CHAR), pick(dice, &CHAR), [0.08, 0.07, 0.07], pick(dice, &CHAR)], ..Looks::default() };
+        l.height = 0.92 + 0.2 * dice.unit();
+        l.bulk = l.height * (0.95 + 0.1 * dice.unit());
+        l
+    }
+
     /// Put a hat on it, `chance` of the time: one of `kinds` in one of
     /// `colours`.
     fn hat(&mut self, dice: &mut Dice, chance: f64, kinds: &[Crown], colours: &[Rgb]) {

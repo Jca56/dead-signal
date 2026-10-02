@@ -14,6 +14,7 @@ use lntrn_ui::Ui;
 
 use crate::loot::Kind;
 use crate::style;
+use crate::holdout::rounds::Wave;
 use crate::zombie::kind::Kind as Dead;
 
 /// The cheats that are on (none, but in the DEV slot).
@@ -39,6 +40,9 @@ pub enum DevAction {
     Spawn(Dead, u32),
     /// Every one of the dead this near the player, dead.
     KillNear(f64),
+    /// A holdout's round over: so many rounds passed over, and the next
+    /// one hounds, or with a Juggernaut (or as it would have been).
+    Round(u32, Option<Wave>),
     /// To the middle of the place with this number.
     Teleport(usize),
     RevealExits,

@@ -103,6 +103,7 @@ impl DeadSignal {
                     zombie::hurt(&mut self.game.world, e, at - body.pos, body.pos, impact);
                 }
             }
+            DevAction::Round(skip, wave) => self.run.dev_round(&mut self.game, wave, skip),
             DevAction::Teleport(i) => {
                 let Some(site) = self.map.as_ref().and_then(|m| m.sites.get(i)) else { return };
                 let middle = site.plot.world(Vec2::ZERO);
@@ -142,7 +143,7 @@ impl DeadSignal {
         }
         let dt = self.game.clock().dt.max(1e-6);
         self.dev_fps += (1.0 / dt - self.dev_fps) * 0.05;
-        let mut counts = [0usize; 4];
+        let mut counts = [0usize; zombie::kind::Kind::ALL.len()];
         for z in self.game.world.query::<&Zombie>().iter(&self.game.world).filter(|z| !z.dead()) {
             counts[z.kind as usize] += 1;
         }
@@ -152,7 +153,7 @@ impl DeadSignal {
         let on: Vec<&str> = [(cheats.god, "GOD"), (cheats.ammo, "AMMO"), (cheats.ignored, "IGNORED"), (cheats.one_shot, "ONE-SHOT")].into_iter().filter(|(on, _)| *on).map(|(_, n)| n).collect();
         let lines = vec![
             format!("DEV · {:.0} FPS", self.dev_fps),
-            format!("DEAD {}: {} shamblers, {} rippers, {} spitters, {} juggernauts", counts.iter().sum::<usize>(), counts[0], counts[1], counts[2], counts[3]),
+            format!("DEAD {}: {} shamblers, {} rippers, {} spitters, {} juggernauts, {} hounds", counts.iter().sum::<usize>(), counts[0], counts[1], counts[2], counts[3], counts[4]),
             format!("HEAT {heat:.1}"),
             format!("AT {:.0}, {:.0}, {:.0}", at.x, at.y, at.z),
             format!("CHEATS {}", if on.is_empty() { "none".to_string() } else { on.join(", ") }),

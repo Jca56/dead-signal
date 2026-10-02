@@ -11,6 +11,7 @@ use super::{Cheats, DevAction};
 use crate::bag_ui::Icons;
 use crate::hideout::{GOLD, pressed};
 use crate::loot::Kind;
+use crate::holdout::rounds::Wave;
 use crate::zombie::kind::Kind as Dead;
 use crate::{feedback, style};
 
@@ -105,13 +106,8 @@ impl DevPanel {
             Tab::Dead if !in_run => run_only(ui),
             Tab::Dead => {
                 let mut y = area.min.y;
-                for kind in [Dead::Shambler, Dead::Ripper, Dead::Spitter, Dead::Juggernaut] {
-                    let name = match kind {
-                        Dead::Shambler => "SHAMBLER",
-                        Dead::Ripper => "RIPPER",
-                        Dead::Spitter => "SPITTER",
-                        Dead::Juggernaut => "JUGGERNAUT",
-                    };
+                for kind in Dead::ALL {
+                    let name = kind.name();
                     ui.text_at(name, &button, Vec2::new(area.min.x, y + 16.0 * s), 360.0 * s, style::BONE);
                     for (i, n) in [1u32, 5].into_iter().enumerate() {
                         let r = Rect::from_min_size(Vec2::new(area.min.x + 380.0 * s + i as f64 * 260.0 * s, y), Vec2::new(240.0 * s, 64.0 * s));
@@ -124,6 +120,16 @@ impl DevPanel {
                 let r = Rect::from_min_size(Vec2::new(area.min.x, y + 30.0 * s), Vec2::new(500.0 * s, 64.0 * s));
                 if pressed(ui, "kill near", r, "KILL ALL WITHIN 60 M", &button, true, true, active) {
                     asked.action = Some(DevAction::KillNear(60.0));
+                }
+                // A holdout's rounds: this one over, and what's next.
+                let mut x = area.min.x;
+                for (label, action) in [("HOUNDS NEXT", DevAction::Round(0, Some(Wave::Hounds))), ("JUGGERNAUT NEXT", DevAction::Round(0, Some(Wave::Dead { boss: 1 }))), ("SKIP 5 ROUNDS", DevAction::Round(5, None))] {
+                    let bw = ui.measure(label, &button) + 40.0 * s;
+                    let r = Rect::from_min_size(Vec2::new(x, y + 114.0 * s), Vec2::new(bw, 64.0 * s));
+                    if pressed(ui, label, r, label, &button, true, false, active) {
+                        asked.action = Some(action);
+                    }
+                    x += bw + 20.0 * s;
                 }
             }
             Tab::Cheats => {

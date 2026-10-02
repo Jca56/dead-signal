@@ -1,13 +1,15 @@
 //! The holdout's own over the run, top left: the round, chalked up in
 //! blood (tally marks for the first five, then its number), flaring as a
 //! new one begins and dim between; under it the points, and what was just
-//! earned rising off them.
+//! earned rising off them; and in a breather, what the radio says is
+//! coming.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
 use super::Holdout;
+use super::rounds::Wave;
 use crate::style;
 
 /// How long a "+50" stays up, rising and fading.
@@ -72,11 +74,19 @@ pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize) {
             y += f64::from(small.line_height()) + 6.0 * s;
         }
     }
-    // Resting: when the next round comes.
+    // Resting: when the next round comes, and what the radio says of it.
     if h.rounds.resting() {
         let words = if round == 0 { "GET READY".to_string() } else { format!("ROUND {} IN {}", round + 1, h.rounds.between.ceil() as u32) };
         let ww = ui.measure(&words, &small);
         ui.text_at(&words, &small, Vec2::new(left, y + 56.0 * s), ww + 8.0, style::DIM);
+        if let Some(warning) = h.rounds.warning() {
+            let wide = ui.measure(warning, &points);
+            let beat = 0.6 + 0.4 * (h.rounds.between * 5.0).sin().abs();
+            ui.text_at(warning, &points, Vec2::new(left, y + 56.0 * s + f64::from(small.line_height()) + 10.0 * s), wide + 8.0, Color::rgba(style::SIGNAL.r, style::SIGNAL.g, style::SIGNAL.b, beat));
+        }
+    } else if h.rounds.wave == Wave::Hounds {
+        let ww = ui.measure("HELLHOUNDS", &small);
+        ui.text_at("HELLHOUNDS", &small, Vec2::new(left, y + 56.0 * s), ww + 8.0, style::SIGNAL);
     }
 }
 

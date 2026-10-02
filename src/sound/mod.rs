@@ -80,6 +80,14 @@ pub enum Sfx {
     Flesh,
     Gurgle,
     Shuffle,
+    /// A Hellhound: its bark, the growl in its throat, the yelp it dies
+    /// with, the pack's howl far off, and the crack of the static it
+    /// comes through.
+    Bark,
+    Growl,
+    Yelp,
+    Howl,
+    Zap,
     /// The player: a heart thumping when hurt badly, the drone under YOU
     /// DIED, something picked up, a bandage torn and wound.
     Heartbeat,
@@ -103,7 +111,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 54] = [
+const ALL: [Sfx; 59] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -144,6 +152,11 @@ const ALL: [Sfx; 54] = [
     Sfx::Flesh,
     Sfx::Gurgle,
     Sfx::Shuffle,
+    Sfx::Bark,
+    Sfx::Growl,
+    Sfx::Yelp,
+    Sfx::Howl,
+    Sfx::Zap,
     Sfx::Heartbeat,
     Sfx::Died,
     Sfx::Pickup,
@@ -163,7 +176,7 @@ const ALL: [Sfx; 54] = [
 impl Sfx {
     /// Whether it's the dead's (their own volume), not the world's.
     fn of_the_dead(self) -> bool {
-        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Retch | Sfx::Swell | Sfx::Bellow | Sfx::Stomp | Sfx::Gurgle | Sfx::Shuffle)
+        matches!(self, Sfx::Groan | Sfx::Snarl | Sfx::Shriek | Sfx::Retch | Sfx::Swell | Sfx::Bellow | Sfx::Stomp | Sfx::Gurgle | Sfx::Shuffle | Sfx::Bark | Sfx::Growl | Sfx::Yelp | Sfx::Howl)
     }
 }
 

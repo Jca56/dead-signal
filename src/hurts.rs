@@ -4,7 +4,7 @@
 //! whoever dealt it, arcing out and falling away. A shot to the head's is
 //! gold and bigger (CRITICAL, over the first of a burst); one plate
 //! turned, grey; fire's run together into one number by the one burning,
-//! counting up.
+//! counting up (IMMUNE, by one fire's nothing to).
 
 use bevy_ecs::prelude::*;
 use lntrn_math::{Color, Rect, Vec2, Vec3};
@@ -59,13 +59,15 @@ const MOST: usize = 96;
 /// A burst to the head says CRITICAL once: not again this soon.
 const WORD_GAP: f64 = 0.3;
 
-/// How a number reads: a hit, one to the head, one plate turned, fire.
+/// How a number reads: a hit, one to the head, one plate turned, fire;
+/// or no number at all, fire on one it's nothing to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Tone {
     Plain,
     Head,
     Turned,
     Fire,
+    Immune,
 }
 
 impl Tone {
@@ -76,6 +78,7 @@ impl Tone {
             Tone::Head => (42.0, 1.15, Color::rgb(0.98, 0.76, 0.16)),
             Tone::Turned => (24.0, 0.7, Color::rgb(0.64, 0.66, 0.68)),
             Tone::Fire => (30.0, 0.9, ALIGHT),
+            Tone::Immune => (24.0, 0.7, Color::rgb(0.64, 0.66, 0.68)),
         }
     }
 }
@@ -135,13 +138,14 @@ impl Hurts {
             if h.fire {
                 // (One it killed lets its number go.)
                 let wait = if h.killed { 0.05 } else { ROLL_FOR };
-                if let Some(n) = self.numbers.iter_mut().find(|n| n.rolling > 0.0 && n.on == h.on && n.by == by) {
+                let tone = if h.immune { Tone::Immune } else { Tone::Fire };
+                if let Some(n) = self.numbers.iter_mut().find(|n| n.rolling > 0.0 && n.on == h.on && n.by == by && n.tone == tone) {
                     n.amount += h.amount;
                     n.rolling = wait;
                     continue;
                 }
                 let vel = Vec2::new(side * (20.0 + 40.0 * self.rand()), -190.0);
-                self.numbers.push(Number { by, on: h.on, at: h.at, off: Vec2::new(side * 56.0, -10.0), vel, amount: h.amount, tone: Tone::Fire, word: false, age: POP_FOR, rolling: wait });
+                self.numbers.push(Number { by, on: h.on, at: h.at, off: Vec2::new(side * 56.0, -10.0), vel, amount: h.amount, tone, word: false, age: POP_FOR, rolling: wait });
                 continue;
             }
             let tone = if h.turned {
@@ -251,13 +255,8 @@ impl Hurts {
                 ui.draw.stroke_rect(trough.expand(edge), edge, 0.0, Color::rgba(ALIGHT.r, ALIGHT.g, ALIGHT.b, b.alpha));
             }
             // The special dead are named, near enough to read it.
-            let words = match b.kind {
-                Kind::Shambler => continue,
-                Kind::Ripper => "RIPPER",
-                Kind::Spitter => "SPITTER",
-                Kind::Juggernaut => "JUGGERNAUT",
-            };
-            if k > 0.75 {
+            let words = b.kind.name();
+            if b.kind != Kind::Shambler && k > 0.75 {
                 let w = ui.measure(words, &name);
                 let top = trough.min.y - edge - f64::from(name.line_height()) - 2.0 * s;
                 outlined(ui, words, &name, Vec2::new(b.at.x - w * 0.5, top), style::BONE, b.alpha);
@@ -286,7 +285,7 @@ impl Hurts {
             // (On whole even pixels: a few sizes of each, not one a frame.)
             let pop = 1.0 + POP * (1.0 - n.age / POP_FOR).max(0.0);
             let style = TextStyle::new(((size * pop * s * 0.5).round() * 2.0) as f32).bold().family(style::FONT);
-            let words = format!("{:.0}", n.amount.round().max(1.0));
+            let words = if n.tone == Tone::Immune { "IMMUNE".to_string() } else { format!("{:.0}", n.amount.round().max(1.0)) };
             let (w, h) = (ui.measure(&words, &style), f64::from(style.line_height()));
             let top = at.y - h * 0.5;
             outlined(ui, &words, &style, Vec2::new(at.x - w * 0.5, top), colour, alpha);
@@ -330,7 +329,7 @@ mod tests {
     use super::*;
 
     fn harm(on: Entity, amount: f64, by: Option<usize>) -> Harm {
-        Harm { on, at: Vec3::ZERO, amount, head: false, turned: false, fire: false, killed: false, by }
+        Harm { on, at: Vec3::ZERO, amount, head: false, turned: false, fire: false, immune: false, killed: false, by }
     }
 
     #[test]
@@ -373,6 +372,10 @@ mod tests {
         // More fire then is a new number.
         h.take(vec![burn(a, 0)]);
         assert_eq!(h.numbers.len(), 4);
+        // On one fire's nothing to, it only says so, the once.
+        let nothing = Harm { amount: 0.0, immune: true, ..burn(b, 0) };
+        h.take(vec![nothing, nothing, nothing]);
+        assert_eq!(h.numbers.iter().filter(|n| n.tone == Tone::Immune).count(), 1);
     }
 
     /// One of the dead standing at `at` (as its figure would be posed),

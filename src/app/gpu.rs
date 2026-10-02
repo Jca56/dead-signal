@@ -43,6 +43,10 @@ impl AppHost for DeadSignal {
             Ok(model) => self.game.world.insert_resource(model),
             Err(e) => log_error!("shambler: {e}"),
         }
+        match assets::load_figure(&mut renderer, "hound").and_then(zombie::figure::Model::new) {
+            Ok(model) => self.game.world.insert_resource(zombie::figure::Hound(model)),
+            Err(e) => log_error!("hound: {e}"),
+        }
         match assets::load_figure(&mut renderer, "survivor").and_then(survivor::Rig::new) {
             Ok(rig) => self.game.world.insert_resource(rig),
             Err(e) => log_error!("survivor: {e}"),
@@ -109,6 +113,7 @@ impl AppHost for DeadSignal {
             let alpha = self.game.alpha();
             zombie::spit::draw(&mut self.game.world, renderer, alpha);
             crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
+            zombie::rift::draw(&mut self.game.world, renderer, time);
         }
         // The figures: the dead, and (playing together) the players, each
         // left out of the panes that look through their own eyes.
@@ -120,7 +125,9 @@ impl AppHost for DeadSignal {
                 renderer.draw_figure(FigureDraw { parts: f.parts.clone(), model: f.model, joints: f.joints.clone(), fog: 1.0, tint: [1.0; 3], palette, hidden });
             }
         }
-        renderer.render(cx, &panes, &style::AIR, time);
+        // (A hound round's air is its own.)
+        let gloom = if self.screen == Screen::Run { self.run.holdout.as_ref().map_or(0.0, |h| h.rounds.gloom) } else { 0.0 };
+        renderer.render(cx, &panes, &style::air(gloom), time);
         self.perf.done(Phase::Render, started);
     }
 }

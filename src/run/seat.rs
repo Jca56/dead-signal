@@ -311,10 +311,10 @@ impl Seat {
             let (armored, _) = self.bag.armor();
             let damage = (blow.damage - f64::from(self.bag.soak(blow.damage.round() as u32))).max(0.0);
             self.stats.damage_taken += damage.min(self.vitals.hp);
-            if let Some(a) = blow.leaves
-                && !(a == Affliction::Bleed && armored > 0)
-            {
-                self.vitals.afflict(a);
+            match blow.leaves {
+                Some(Affliction::Burn) => crate::throw::alight(&mut game.world, self.n),
+                Some(a) if !(a == Affliction::Bleed && armored > 0) => self.vitals.afflict(a),
+                _ => {}
             }
             if self.vitals.hurt(damage) {
                 let side = if self.stats.times_hit.is_multiple_of(2) { 1.0 } else { -1.0 };

@@ -2,6 +2,7 @@
 //! envelopes, rendered once into a buffer each.
 
 mod guns;
+mod hound;
 
 use super::{RATE, Sfx};
 
@@ -94,6 +95,7 @@ pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
     match sfx {
         // The guns', and what's thrown and burns (`guns.rs`).
         Sfx::Shot | Sfx::Blast | Sfx::Pump | Sfx::ShellIn | Sfx::RifleShot | Sfx::SmgShot | Sfx::ArShot | Sfx::LmgShot | Sfx::Flame | Sfx::Shatter | Sfx::Ignite | Sfx::Crackle | Sfx::Beep | Sfx::Explosion | Sfx::Bolt | Sfx::DryFire | Sfx::MagOut | Sfx::MagIn | Sfx::SlideRack => guns::make(sfx),
+        Sfx::Bark | Sfx::Growl | Sfx::Yelp | Sfx::Howl | Sfx::Zap => hound::make(sfx),
         Sfx::Whoosh => {
             let mut f = Svf::default();
             render(0.32, 0.5, |t, n| {

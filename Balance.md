@@ -178,8 +178,9 @@ Footfalls draw the dead near, but add no heat.
 | RIPPER | 70 | 7.5 / 7.5 / 9.5 | 1.4× | 7 | 0.75 s | a cut (bleeding) | 1.75× |
 | SPITTER | 110 | 1.5 / 1.8 / 2.2 | 1.3× | 10 | 2.4 s | poison, by its globs | 1.5× |
 | JUGGERNAUT | 900 | 2.0 / 2.4 / charge 11 | 1.2× | 40 | 2.5 s | nothing | 2–3 things, always |
+| HELLHOUND | 60 | 8.2 / 8.2 / leap 10.5 | 1.5× | 10 | 1.1 s | fire (alight 1.2 s) | nothing |
 
-The player walks at 6 m/s and sprints at 9. A Ripper is faster than walking but slower than a sprint.
+The player walks at 6 m/s and sprints at 9. A Ripper is faster than walking but slower than a sprint; a Hellhound is faster still, and its leap outruns a sprint.
 
 - **Shambler:** a headshot or a blow staggers it. Soldiers' remains drop 35% of the time, and better.
 - **Ripper:** hunts the woods in packs of 2–3 (3 packs a map), and turns up in 4% of the trickle and 25% of the surge.
@@ -192,6 +193,18 @@ The player walks at 6 m/s and sprints at 9. A Ripper is faster than walking but 
   - It roars 1 s, then charges 6–25 m in a straight line for up to 2.2 s: 50 damage and a huge shove.
   - Into a wall, it's dazed 2.5 s and takes 2×. It charges again ~7 s later.
   - On half the maps, guarding the military camp or the crash.
+- **Hellhound** (HOLDOUT only, for now):
+  - Comes out of a rift of static that crackles 1.4 s where it'll appear, 7–14 m from a player, never within 5 m of anyone.
+  - Its bite sets you alight (15 a second for 1.2 s). Fire does nothing to it (the flamethrower says IMMUNE).
+  - Dead, it leaves a fire 1.1 m round for 3 s where it fell.
+
+### HOLDOUT's rounds
+
+A round's Shambler has 150 health, 50 more each round to 600 at the tenth, then 8% more a round. The rest are a share of that: Ripper 0.5×, Spitter 0.75×, Hellhound 0.4×, Juggernaut 4×.
+
+- **Rippers** join from round 6 (6% of the round, 2% more each round, to 20%); **Spitters** from round 9 (4%, 1% more a round, to 10%).
+- **A Juggernaut** comes with round 10 (or 11), then no sooner than every 5 rounds; two from round 20. It comes in by the widest ways in, and tears boards off 2.5× as fast.
+- **A hound round** is round 5 or 6, then every 4 or 5: no dead, only Hellhounds. 8 in the first, 2 more each time, to 24 (half as many again for two players); 4 up at once (6 for two). The last one dead fills every gun's spare rounds.
 
 **Bleeding:** 1 health a second a cut, up to 3 cuts. It never stops on its own; a bandage or a medkit stops it. **Poison:** 3 a second for 10 s; a medkit clears it. Neither lets health come back.
 

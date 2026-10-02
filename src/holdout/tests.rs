@@ -11,7 +11,7 @@ use bevy_ecs::world::World;
 
 use crate::zombie::{self, Nav};
 
-fn built() -> Built {
+pub(super) fn built() -> Built {
     build_holdout(&crate::testing::kit(), &|_| {})
 }
 
@@ -31,7 +31,7 @@ pub(super) fn world_of(built: Built) -> (World, Holdout) {
     (world, h)
 }
 
-fn feet(world: &mut World) -> Vec3 {
+pub(super) fn feet(world: &mut World) -> Vec3 {
     world.query_filtered::<&Body, With<Player>>().single(world).expect("the player").pos
 }
 

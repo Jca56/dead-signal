@@ -61,14 +61,14 @@ fn balance_md_matches_the_game() {
     }
     // Every kind of the dead.
     let dead = table("| Kind | HP |");
-    for (kind, name) in [(Kind::Shambler, "SHAMBLER"), (Kind::Ripper, "RIPPER"), (Kind::Spitter, "SPITTER"), (Kind::Juggernaut, "JUGGERNAUT")] {
-        let t = kind.traits();
+    for kind in Kind::ALL {
+        let (t, name) = (kind.traits(), kind.name());
         let row = dead.iter().find(|r| r["Kind"] == name).unwrap_or_else(|| panic!("no row for {name}"));
         assert_eq!(num(&row["HP"]), t.hp, "{name} HP");
         assert_eq!(num(&row["Swipe"]), t.swipe.damage, "{name} swipe");
         assert!((num(&row["Every"]) - (t.swipe.time + t.swipe.cooldown)).abs() < 0.01, "{name} swipes every {}", row["Every"]);
     }
-    assert_eq!(dead.len(), 4);
+    assert_eq!(dead.len(), Kind::ALL.len());
     // Everything worn.
     let gear = table("| Gear | Worn on |");
     for kind in crate::loot::ALL {

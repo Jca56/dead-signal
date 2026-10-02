@@ -89,6 +89,11 @@
   - [x] A bar over one of the dead that's been hurt or that the crosshair's on: what it has, and (paler) what the last hits took; the special dead named.
   - [x] A number for each hit, thrown up where it struck for whoever dealt it: gold and CRITICAL to the head, grey off plate, fire's run together into one counting up.
   - [ ] Playtest, and what it turns up.
+- [ ] The special dead in HOLDOUT
+  - [x] Rippers (from round 6) and Spitters (from round 9) among a round's dead; a Juggernaut with round 10 and every 5 or so after; the radio warns of each in the breather.
+  - [x] The Hellhound: a burning dog on a rig of its own, out of a rift of static. Its bite sets you alight, fire's nothing to it, and it leaves a fire where it falls.
+  - [x] Hound rounds (5 or 6, then every 4 or 5): the air goes bad, hounds only, and full ammo for clearing it.
+  - [ ] Playtest, and what it turns up.
 - [ ] Waves tuning and difficulty (the counts are still the small map's).
 - [ ] Upgradable guns (the bench goes in the bunker's armory).
 - [ ] Perks

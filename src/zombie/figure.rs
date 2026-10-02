@@ -68,7 +68,8 @@ const HEAD_RADIUS: f64 = 0.14;
 const BODY_RADIUS: f64 = 0.21;
 
 /// The Shambler's model, shared by every one of them: every part any of
-/// them is put together from, on the one rig.
+/// them is put together from, on the one rig. (A hound's is its own, on
+/// bones of the same names: its forelegs its arms, the rest as it is.)
 #[derive(Resource)]
 pub struct Model {
     parts: Vec<(String, FigureMeshId)>,
@@ -82,7 +83,7 @@ impl Model {
     pub fn new(rig: Rigged<Vec<(String, FigureMeshId)>>) -> Result<Self, String> {
         let mut bones = [0; 15];
         for (slot, name) in bones.iter_mut().zip(BONES) {
-            *slot = rig.gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).ok_or_else(|| format!("shambler.glb: no bone {name}"))?;
+            *slot = rig.gltf.nodes.iter().position(|n| n.name.as_deref() == Some(name)).ok_or_else(|| format!("no bone {name}"))?;
         }
         Ok(Self { parts: rig.mesh, gltf: rig.gltf, skin: rig.skin, bones })
     }
@@ -106,6 +107,10 @@ impl Model {
         (joints, points)
     }
 }
+
+/// The Hellhound's model: its own, on a rig of its own.
+#[derive(Resource)]
+pub struct Hound(pub Model);
 
 /// Where on one of the dead a shot finds it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,6 +170,12 @@ impl Figure {
     /// it's drawn (none: it isn't).
     pub fn chest(&self) -> Option<Vec3> {
         (!self.joints.is_empty()).then(|| (self.points[HIPS] + self.points[NECK]) * 0.5)
+    }
+
+    /// Its hips, the root of its neck and its head, in the world, as it's
+    /// drawn.
+    pub fn spine(&self) -> Option<[Vec3; 3]> {
+        (!self.joints.is_empty()).then(|| [self.points[HIPS], self.points[NECK], self.points[HEAD]])
     }
 
     pub fn crown(&self) -> Option<Vec3> {
