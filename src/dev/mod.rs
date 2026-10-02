@@ -56,6 +56,8 @@ pub enum DevAction {
     /// nothing; and the player set down in front of it.
     Amplify,
     ToAmplifier,
+    /// A holdout's: the radio's signal, all of it.
+    Signal,
     /// To the middle of the place with this number.
     Teleport(usize),
     RevealExits,

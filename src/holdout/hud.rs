@@ -1,14 +1,15 @@
 //! The holdout's own over the run, top left: the round, chalked up in
 //! blood (tally marks for the first five, then its number), flaring as a
 //! new one begins and dim between; under it the points, and what was just
-//! earned rising off them; and in a breather, what the radio says is
-//! coming.
+//! earned rising off them; under them the radio's signal, with the key
+//! that pulls it out; and in a breather, what the radio says is coming.
 
 use lntrn_math::{Color, Rect, Vec2};
 use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
 use super::Holdout;
+use crate::radio::signal::Signal;
 use super::rounds::Wave;
 use crate::style;
 
@@ -19,9 +20,13 @@ const BLOOD: Color = Color::rgb(0.66, 0.08, 0.06);
 const FLARE: Color = Color::rgb(0.95, 0.85, 0.75);
 const FLARE_FOR: f64 = 2.5;
 
+/// The radio's signal's amber.
+const AMBER: Color = Color::rgb(0.98, 0.66, 0.18);
+
 /// The round and player `seat`'s points (and the others', smaller), over
-/// `screen`: their own part of the window.
-pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize) {
+/// `screen`: their own part of the window; and their radio's `signal`,
+/// with what pulls the radio out.
+pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize, signal: Option<(&Signal, &str)>) {
     let s = ui.m.scale;
     let left = screen.min.x + 60.0 * s;
     let top = screen.min.y + 50.0 * s;
@@ -63,6 +68,15 @@ pub fn draw(ui: &mut Ui, screen: Rect, h: &Holdout, seat: usize) {
         let at = Vec2::new(left + w + 20.0 * s + f64::from(k as u32) * 6.0 * s, y - f * 40.0 * s);
         let c = Color::rgba(0.95, 0.80, 0.30, 1.0 - f);
         ui.text_at(&pop, &small, at, pw + 8.0, c);
+    }
+    // The radio's signal: its bars, and the key that pulls it out.
+    if let Some((signal, key)) = signal {
+        let bars = 34.0 * s;
+        let foot = y + 54.0 * s + bars;
+        crate::radio::meter::draw(ui, Vec2::new(left, foot), bars, signal, AMBER, 1.0);
+        let kw = ui.measure(key, &small);
+        ui.text_at(key, &small, Vec2::new(left + crate::radio::meter::width(bars) + 14.0 * s, foot - f64::from(small.line_height()) * 0.86), kw + 8.0, style::DIM);
+        y += 46.0 * s;
     }
     // Playing together: the others' points, in their colours.
     if h.wallets.len() > 1 {

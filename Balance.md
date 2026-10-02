@@ -246,6 +246,24 @@ Down in the bunker's ops room (the signs lead to it from the yard): what's in ha
 - Its shots leave a streak and flash in its glow's colour.
 - Against round 20's Shambler (456 health) a tier-III gun does what the plain one does to round 1's (100).
 
+### The radio
+
+Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's put away and the keys that walk (a pad's d-pad) punch a code in; a whole code calls it in, paid for in **signal**.
+
+| Call-in | Code | Cost |
+|---|---|---|
+| AMMO DROP | ↓ ↓ ↑ → | 1 bar |
+| MEDIC DROP | ↓ ↑ → ← | 1 bar |
+| STRAFING RUN | ↑ → → | 2 bars |
+| GUNSHIP | ↑ ← → ↓ ↑ | 5 bars |
+| DOUBLE POINTS | ← → ← → | 2 bars |
+| ONE-HIT KILLS | → ↑ ↓ ↓ ← | 3 bars |
+| MAX AMMO | ← ↓ ↑ ↑ → | 2 bars |
+
+- Signal is each player's own, a meter of **5 bars** (a whole one shows green; the one being charged, amber). A kill charges **a tenth of a bar**; one to the head or by hand, half again as much (0.15); a Juggernaut, a whole bar on top of its kill.
+- It's spent as the call goes out (the talk button let go): put the radio away before that and nothing's spent. A code there isn't the signal for is refused.
+- It's kept through bleeding out.
+
 **Bleeding:** 1 health a second a cut, up to 3 cuts. It never stops on its own; a bandage or a medkit stops it. **Poison:** 3 a second for 10 s; a medkit clears it. Neither lets health come back.
 
 ---

@@ -70,6 +70,13 @@ impl Run {
         }
     }
 
+    /// (The dev's.) The first player's signal, all of it.
+    pub fn dev_signal(&mut self) {
+        if let Some(radio) = self.seats.first_mut().and_then(|s| s.radio.as_mut()) {
+            radio.signal.fill();
+        }
+    }
+
     /// The round a holdout ended on, once.
     pub fn take_holdout_round(&mut self) -> Option<u32> {
         self.holdout_over.take()
@@ -110,8 +117,14 @@ impl Run {
                         Wave::Dead { .. } => {}
                     }
                 }
-                // A Juggernaut down at last: the same, with its points.
-                Event::Felled(_) => refill = true,
+                // A Juggernaut down at last: the same, with its points;
+                // and a bar of signal for whoever felled it.
+                Event::Felled(by) => {
+                    refill = true;
+                    if let Some(radio) = by.and_then(|by| self.seats.iter_mut().find(|s| s.n == by)).and_then(|s| s.radio.as_mut()) {
+                        radio.signal.juggernaut();
+                    }
+                }
             }
         }
         if refill {
@@ -137,7 +150,7 @@ impl Run {
             ui.draw.push_clip(pane);
             if seat.out {
                 // Bled out: the round and the points, watching another.
-                crate::holdout::hud::draw(ui, pane, h, seat.n);
+                crate::holdout::hud::draw(ui, pane, h, seat.n, seat.signal_shown().as_ref().map(|(s, key)| (s, key.as_str())));
                 crate::mates::out(ui, pane, standing);
             } else {
                 seat.hold_out(ui, pane, cx, game, combat, icons, dt, h, alone);
@@ -213,7 +226,7 @@ impl Seat {
         };
         let picking_up = self.reviving.map(|(_, p)| p).filter(|&p| p > 0.0);
         self.hud(ui, pane, combat, game, prompt, h.nail_progress(self.n).or(picking_up));
-        crate::holdout::hud::draw(ui, pane, h, self.n);
+        crate::holdout::hud::draw(ui, pane, h, self.n, self.signal_shown().as_ref().map(|(s, key)| (s, key.as_str())));
         if let Some(d) = self.down {
             crate::mates::down(ui, pane, d.left, super::down::BLEED_OUT, d.revive);
         }

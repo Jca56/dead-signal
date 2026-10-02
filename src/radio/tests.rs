@@ -94,3 +94,23 @@ fn put_away_it_goes_down_from_where_it_is_and_a_code_half_in_is_forgotten() {
     assert!(run(&mut r, LOWER + DT).is_empty(), "cut short: nothing more's heard");
     assert!(!r.out());
 }
+
+#[test]
+fn its_signal_s_kept_through_being_pulled_out_put_away_and_dropped_and_a_refused_code_s_forgotten() {
+    let mut r = Radio::default();
+    r.signal.fill();
+    r.pull();
+    r.put_away();
+    r.pull();
+    run(&mut r, RAISE + 0.1);
+    assert!(r.signal.has(signal::BARS));
+    // A code there's no signal for, refused: not called in, shown as wrong.
+    for a in [U, R, R] {
+        r.press(a);
+    }
+    r.refuse();
+    assert!(r.calling().is_none() && r.dial().len() == 0 && r.wrong().is_some() && r.dialing());
+    assert!(run(&mut r, KEY + 0.1).is_empty(), "nothing's keyed");
+    r.drop_it();
+    assert!(!r.out() && r.signal.has(signal::BARS));
+}

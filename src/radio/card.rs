@@ -1,8 +1,10 @@
-//! The radio's card, drawn beside the handset while it's out: everything
-//! there is to call for, each with its code of arrows, amber on dark as
-//! the handset's display is. As a code's punched in, the lines it could
-//! still be stay lit, their arrows so far bright, and the rest go dim; a
-//! wrong arrow flashes it red; a whole code, and its line's lit across
+//! The radio's card, drawn beside the handset while it's out: the signal
+//! there is, and everything there is to call for, each with what it costs
+//! in bars and its code of arrows, amber on dark as the handset's display
+//! is. What there isn't the signal for is dim, its cost in red. As a
+//! code's punched in, the lines it could still be stay lit, their arrows
+//! so far bright, and the rest go dim; a wrong arrow (or a code there's
+//! not the signal for) flashes it red; a whole code, and its line's lit across
 //! while it's called in. It keeps to the left of the handset, clear of
 //! the middle of the view and of the health bottom left where there's
 //! room for that, its lines as tall as the pane allows.
@@ -12,7 +14,7 @@ use lntrn_text::TextStyle;
 use lntrn_ui::Ui;
 
 use super::codes::{Arrow, ENTRIES};
-use super::{Radio, WRONG_FOR};
+use super::{Radio, WRONG_FOR, meter};
 use crate::style;
 
 const AMBER: Color = Color::rgb(0.98, 0.66, 0.18);
@@ -37,12 +39,10 @@ const MIDDLE: f64 = 30.0;
 /// The most arrows a code's column holds.
 const COLUMN: usize = 5;
 
-/// What the foot of the card says: what dials, and what puts it away (a
-/// pad's is held).
+/// What the foot of the card says: what dials, and what puts it away.
 pub struct Hints {
     pub dial: String,
     pub away: String,
-    pub held: bool,
 }
 
 /// Where the card goes, and how tall each of its lines is.
@@ -62,11 +62,16 @@ fn column(row: f64) -> f64 {
     row * 0.8 * COLUMN as f64
 }
 
-/// How wide the card is with its lines `row` tall: its longest name
-/// (`names` wide for each pixel of its type's size) and a code's column,
-/// or its foot's words (`foot` wide) if they're wider.
+/// How wide the cost at the head of a line is, with the gap after it.
+fn cost_wide(row: f64) -> f64 {
+    row * 0.9
+}
+
+/// How wide the card is with its lines `row` tall: a cost, its longest
+/// name (`names` wide for each pixel of its type's size) and a code's
+/// column, or its foot's words (`foot` wide) if they're wider.
 fn width(row: f64, s: f64, names: f64, foot: f64) -> f64 {
-    (names * type_size(row, s) + 26.0 * s + column(row)).max(foot) + 2.0 * PAD * s
+    (cost_wide(row) + names * type_size(row, s) + 26.0 * s + column(row)).max(foot) + 2.0 * PAD * s
 }
 
 /// The card over `pane` of `window`, at scale `s` (`names` and `foot` as
@@ -139,7 +144,7 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     let tallest = words(ROW.1 * s);
     let names = ENTRIES.iter().map(|e| ui.measure(e.name, &tallest)).fold(0.0, f64::max) / type_size(ROW.1 * s, s);
     let small = TextStyle::new((SMALLEST.max(18.0 * s)) as f32).bold().family(style::FONT);
-    let foot = format!("{}  DIAL      {}{}  PUT AWAY", hints.dial, if hints.held { "HOLD " } else { "" }, hints.away);
+    let foot = format!("{}  DIAL      {}  PUT AWAY", hints.dial, hints.away);
     let Lay { card, row } = lay(pane, window, s, names, ui.measure(&foot, &small));
     let text = words(row);
     let pad = PAD * s;
@@ -147,8 +152,8 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     // A wrong arrow: red, fading back to amber.
     let wrong = radio.wrong().map_or(0.0, |t| 1.0 - t / WRONG_FOR);
     let edge = Color::rgb(AMBER.r + (style::SIGNAL.r - AMBER.r) * wrong, AMBER.g + (style::SIGNAL.g - AMBER.g) * wrong, AMBER.b + (style::SIGNAL.b - AMBER.b) * wrong);
-    // (Dark enough that the night's lamps don't read through its words.)
-    ui.draw.rounded_rect(card, 10.0 * s, Color::rgba(DARK.r, DARK.g, DARK.b, 0.98 * shows));
+    // (Solid: the night's lamps and marks would read through its words.)
+    ui.draw.rounded_rect(card, 10.0 * s, Color::rgba(DARK.r, DARK.g, DARK.b, shows));
     ui.draw.stroke_rect(card, 2.0 * s, 10.0 * s, faded(edge, (0.55 + 0.45 * wrong) * shows));
 
     // The header, ruled off.
@@ -156,6 +161,9 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     let title = if radio.calling().is_some() { "CALLING IN" } else { "CALL IN" };
     ui.text_at(title, &head, Vec2::new(card.min.x + pad, card.min.y + pad + (HEAD * s - f64::from(head.line_height())) * 0.4), card.width(), faded(edge, shows));
     let rule = card.min.y + pad + HEAD * s - 8.0 * s;
+    // The signal there is, at the header's right.
+    let bars = (HEAD - 22.0) * s;
+    meter::draw(ui, Vec2::new(card.max.x - pad - meter::width(bars), rule - 7.0 * s), bars, &radio.signal, AMBER, shows);
     ui.draw.hline(card.min.x + pad, card.max.x - pad, rule, 2.0 * s, faded(edge, 0.45 * shows));
 
     // Each line: its name, and its code.
@@ -166,9 +174,12 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
         let top = card.min.y + pad + HEAD * s + row * i as f64;
         let mid = top + row * 0.5;
         let called = radio.calling() == Some(e.call);
+        // (Lit: what the code so far could still be, and there's the
+        // signal for.)
+        let afford = radio.signal.has(e.cost);
         let live = match radio.calling() {
             Some(_) => called,
-            None => dial.begins(e.code),
+            None => afford && dial.begins(e.code),
         };
         let a = shows * if live { 1.0 } else { DIMMED };
         if called {
@@ -176,7 +187,14 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
             ui.draw.rounded_rect(bar, 5.0 * s, faded(AMBER, 0.92 * shows));
         }
         let ink = if called { DARK } else { AMBER };
-        ui.text_at(e.name, &text, Vec2::new(card.min.x + pad, mid - f64::from(text.line_height()) * 0.5), codes - card.min.x - pad, faded(ink, a));
+        // What it costs, in bars (red, where there aren't that many).
+        let cost = e.cost.to_string();
+        let name_at = card.min.x + pad + cost_wide(row);
+        let line = mid - f64::from(text.line_height()) * 0.5;
+        let short = !afford && !called;
+        let cost_at = card.min.x + pad + (cost_wide(row) * 0.6 - ui.measure(&cost, &text)) * 0.5;
+        ui.text_at(&cost, &text, Vec2::new(cost_at, line), cost_wide(row), if short { faded(style::SIGNAL, shows) } else { faded(ink, a) });
+        ui.text_at(e.name, &text, Vec2::new(name_at, line), codes - name_at, faded(ink, a));
         for (k, &which) in e.code.iter().enumerate() {
             // (Punched in already, on a line it's on the way to: bright.)
             let colour = if called { DARK } else if live && k < dial.len() { LIT } else { faded(AMBER, 0.8) };
@@ -261,7 +279,7 @@ mod tests {
     #[test]
     fn it_draws_whatever_the_radio_s_doing() {
         let mut h = lntrn_ui::testing::Harness::new(1280.0, 720.0);
-        let hints = Hints { dial: "WASD".into(), away: "Q".into(), held: false };
+        let hints = Hints { dial: "WASD".into(), away: "Q".into() };
         let mut radio = Radio::default();
         radio.pull();
         for arrow in [Arrow::Down, Arrow::Down, Arrow::Left, Arrow::Up, Arrow::Right, Arrow::Right] {

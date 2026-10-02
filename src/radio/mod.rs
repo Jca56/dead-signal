@@ -4,15 +4,19 @@
 //! to call for, and each one's code; `card.rs`: the card of them drawn
 //! beside it); a whole code keys it, brought to the mouth with the talk
 //! button pressed, and what was called for goes out as the button's let
-//! go; put away, it goes down and the gun comes back. A machine of
+//! go, paid for in signal (`signal.rs`: charged by kills; `meter.rs`: its
+//! bars drawn); put away, it goes down and the gun comes back. A machine of
 //! states, like the hands (`weapon`): it knows nothing of the world, and
 //! says what's to be heard at the moments its clips show them. How it's
 //! drawn is the viewmodel's (`viewmodel`), in the weapon's place.
 
 pub mod card;
 pub mod codes;
+pub mod meter;
+pub mod signal;
 
 use codes::{Arrow, Call, Dial, Dialed};
+use signal::Signal;
 
 /// How long it takes to come up and to go down, and how long keying it
 /// takes, seconds.
@@ -71,6 +75,8 @@ pub struct Radio {
     dial: Dial,
     calling: Option<Call>,
     wrong: Option<f64>,
+    /// What there is to call things in with.
+    pub signal: Signal,
 }
 
 impl Radio {
@@ -123,7 +129,7 @@ impl Radio {
     /// Pull it out (once the gun's away).
     pub fn pull(&mut self) {
         if self.state == State::Away {
-            *self = Self { state: State::Wanted, ..Self::default() };
+            *self = Self { state: State::Wanted, signal: self.signal, ..Self::default() };
         }
     }
 
@@ -134,7 +140,7 @@ impl Radio {
         match self.state {
             State::Away | State::Lower => return false,
             State::Wanted => {
-                *self = Self::default();
+                self.drop_it();
                 return false;
             }
             // (Half up, it goes down from there.)
@@ -148,6 +154,20 @@ impl Radio {
         self.dial.clear();
         self.calling = None;
         true
+    }
+
+    /// Away at once, wherever it was (they're down and out): its signal's
+    /// kept.
+    pub fn drop_it(&mut self) {
+        *self = Self { signal: self.signal, ..Self::default() };
+    }
+
+    /// What was just dialled can't be called in (there's not the signal
+    /// for it): forgotten, and shown as a wrong arrow is.
+    pub fn refuse(&mut self) {
+        self.dial.clear();
+        self.calling = None;
+        self.wrong = Some(0.0);
     }
 
     /// Punch `arrow` in, if arrows are being taken; what it came to. A

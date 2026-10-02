@@ -129,7 +129,7 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 **Stages**
 - [x] 1. The radio in hand. An army walkie-talkie on the arms rig (`assets/blender/radio.py` → `viewmodel_radio.glb`: an idle, and keyed, brought to the mouth with the thumb on the talk button; raised and lowered as the guns are). Q (hold View on a pad: a holdout has no map) pulls it out and puts it away. The gun's put away while it's out and comes back after; a shot, a blow, another weapon, a kit, a throw, the bag or going down puts the radio away. E (X) keys it. In a side by side pane it's moved over into view.
 - [x] 2. Its codes. Helldivers style: every call-in has a code of arrows (`src/radio/codes.rs`), and a card beside the radio (in the player's own pane, split screen too, big type) lists them. With the radio out W/A/S/D punch the arrows in and the feet stand still (a pad: the d-pad, and the stick still walks); the codes that still match stay lit as it's dialled, a wrong arrow starts it over, a whole code keys the radio and it's called in (for now, only its name's flashed: nothing comes of it till the stages below).
-- [ ] 3. Signal. Each player's meter, filled by kills (more for a headshot or a blade), shown on the HUD by the points. Entries greyed out till there's enough.
+- [x] 3. Signal. Each player's own meter of 5 bars (`src/radio/signal.rs`), a tenth of a bar a kill (half again for one to the head or by hand, a whole bar for a Juggernaut), shown by the points with the key that pulls the radio out, and on the card. Each call-in costs bars (1 / 2 / 3 / 5: `Balance.md`); what there isn't the signal for is dim on the card, its cost red, and its code's refused. Spent as the call goes out.
 - [ ] 4. Where it lands. A drop: the code puts a flare in the hand, thrown to where it's to come down. A strike: a red outlined zone on the ground (a strip for a strafing run, a circle for what falls on one spot), moved to where it's wanted and confirmed. Refused under a roof.
 - [ ] 5. Ammo drop and medic drop. A crate comes down on the flare; what's in it lies about it to be taken (the 30 s rule).
 - [ ] 6. Strafing run. A few seconds' warning (engines), then a line raked across the open ground through the flare: the dead in it cut down, glass broken, chips flying.
@@ -137,7 +137,7 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - [ ] 8. The gunship. A helicopter model, a slow circle over the compound for half a minute, its gun on the dead it can see in the open, its light, its rotor heard.
 - [ ] 9. Seen by the other player: the radio in the survivor figure's hand.
 
-**Still to ask** (before the stage that needs it): what each entry costs and how fast signal fills; whether a strafing run or the gunship can hurt players; how long drops and boosts last.
+**Still to ask** (before the stage that needs it): whether a strafing run or the gunship can hurt players; how long drops and boosts last.
 
 ---
 

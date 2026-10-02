@@ -1,7 +1,7 @@
 //! What the radio can call for, and the code of arrows each is punched in
 //! with: always the same, so they're learnt by the hands. No code begins
-//! another, so the last arrow of one is all it takes; the cheaper the
-//! help, the shorter its code.
+//! another, so the last arrow of one is all it takes. Each costs bars of
+//! signal (`signal.rs`).
 
 /// One press of the dial.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,25 +24,27 @@ pub enum Call {
     MaxAmmo,
 }
 
-/// A line of the radio's card: what's called for, its name, its code.
+/// A line of the radio's card: what's called for, its name, its code,
+/// and what it costs, in bars of signal.
 #[derive(Clone, Copy, Debug)]
 pub struct Entry {
     pub call: Call,
     pub name: &'static str,
     pub code: &'static [Arrow],
+    pub cost: u32,
 }
 
 use Arrow::{Down as D, Left as L, Right as R, Up as U};
 
 /// Everything on the card, in its order.
 pub const ENTRIES: [Entry; 7] = [
-    Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R] },
-    Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L] },
-    Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R] },
-    Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U] },
-    Entry { call: Call::DoublePoints, name: "DOUBLE POINTS", code: &[L, R, L, R] },
-    Entry { call: Call::OneHitKills, name: "ONE-HIT KILLS", code: &[R, U, D, D, L] },
-    Entry { call: Call::MaxAmmo, name: "MAX AMMO", code: &[L, D, U, U, R] },
+    Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 1 },
+    Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 1 },
+    Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 2 },
+    Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U], cost: 5 },
+    Entry { call: Call::DoublePoints, name: "DOUBLE POINTS", code: &[L, R, L, R], cost: 2 },
+    Entry { call: Call::OneHitKills, name: "ONE-HIT KILLS", code: &[R, U, D, D, L], cost: 3 },
+    Entry { call: Call::MaxAmmo, name: "MAX AMMO", code: &[L, D, U, U, R], cost: 2 },
 ];
 
 /// The longest code there is.
@@ -126,7 +128,7 @@ mod tests {
     #[test]
     fn no_code_begins_another_and_none_is_too_long_or_too_short() {
         for a in &ENTRIES {
-            assert!((3..=LONGEST).contains(&a.code.len()), "{}", a.name);
+            assert!((3..=LONGEST).contains(&a.code.len()) && (1..=super::super::signal::BARS).contains(&a.cost), "{}", a.name);
             assert_eq!(a.call.entry().name, a.name);
             for b in ENTRIES.iter().filter(|b| b.call != a.call) {
                 assert!(!b.code.starts_with(a.code), "{} begins {}", a.name, b.name);

@@ -158,7 +158,7 @@ impl DevPanel {
                 // What's had: points, the doors, rounds, the boards. Then the
                 // rounds: this one over (a Juggernaut stays), and what's next.
                 let rows: [(&str, &[(&str, DevAction)]); 3] = [
-                    ("TO HAND", &[("+ 5,000 POINTS", DevAction::Points(5000)), ("OPEN ALL DOORS", DevAction::OpenDoors), ("MAX AMMO", DevAction::MaxAmmo), ("BOARD UP EVERY WINDOW", DevAction::BoardUp)]),
+                    ("TO HAND", &[("+ 5,000 POINTS", DevAction::Points(5000)), ("OPEN ALL DOORS", DevAction::OpenDoors), ("MAX AMMO", DevAction::MaxAmmo), ("BOARD UP EVERY WINDOW", DevAction::BoardUp), ("FULL SIGNAL", DevAction::Signal)]),
                     ("ROUNDS", &[("END THIS ROUND", DevAction::Round(0, None)), ("HOUNDS NEXT", DevAction::Round(0, Some(Wave::Hounds))), ("JUGGERNAUT NEXT", DevAction::Round(0, Some(Wave::Dead { boss: 1 }))), ("SKIP 5 ROUNDS", DevAction::Round(5, None))]),
                     ("THE AMPLIFIER", &[("AMPLIFY WHAT'S IN HAND", DevAction::Amplify), ("GO TO THE AMPLIFIER", DevAction::ToAmplifier)]),
                 ];

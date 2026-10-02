@@ -9,8 +9,9 @@
 //! and the arms; none of the HUD) to `<dir>/<name>.png`. With
 //! `WILDS=<seed>` it's an extraction run's map by day instead, looked at
 //! from outside the buildings nearest where the run starts. With
-//! `RADIO=up` the player has the radio out in every view, its card drawn
-//! over the picture as the window's UI would (`RADIO=dial`: a code half
+//! `RADIO=up` the player has the radio out in every view, its card (and
+//! the round, the points and the signal) drawn over the picture as the
+//! window's UI would (`RADIO=dial`: a code half
 //! in; `RADIO=key`: a whole one, the handset at their mouth). `SIZE=1920x1080`
 //! draws them that big (1280x720 if not).
 
@@ -176,6 +177,9 @@ impl DeadSignal {
             // keyed near the end, if that's asked.)
             if let (Some(how), Some(seat)) = (&radio, self.run.seats.first_mut()) {
                 let r = seat.radio.get_or_insert_default();
+                // (Some signal to see: two bars, and most of a third.)
+                seat.stats.gun_kills = 27;
+                r.signal.charge(&seat.stats);
                 r.pull();
                 let code = crate::radio::codes::ENTRIES[0].code;
                 for &arrow in code.iter().take(if how == "key" { code.len() } else { 2 }).filter(|_| (how == "key" && k == 64) || (how == "dial" && k == 88)) {
@@ -200,8 +204,12 @@ impl DeadSignal {
             graph.execute(gpu, &mut pool, &mut encoder);
         }
         if let (Some(seat), (over, images)) = (self.run.seats.first().filter(|s| s.radio_out()), over) {
+            let holdout = self.run.holdout.as_ref();
             over.ui.frame(|ui| {
                 let window = ui.clip();
+                if let Some(h) = holdout {
+                    crate::holdout::hud::draw(ui, window, h, 0, seat.signal_shown().as_ref().map(|(s, key)| (s, key.as_str())));
+                }
                 seat.radio_card(ui, window, window);
             });
             over.pass.draw(gpu, &mut encoder, &view, SIZE, &over.ui.draw, &mut over.atlas, over.ui.text.atlas_mut(), images, None);

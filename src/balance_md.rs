@@ -87,6 +87,20 @@ fn balance_md_matches_the_game() {
         let held = f64::from(crate::weapon::amp::capacity(Weapon::Pistol, tier)) / f64::from(Weapon::Pistol.spec().mag);
         assert_eq!(num(&row["Rounds held"]), held, "tier {tier} rounds");
     }
+    // The radio: every call-in's code and cost, and what charges it.
+    let calls = table("| Call-in | Code |");
+    assert_eq!(calls.len(), crate::radio::codes::ENTRIES.len());
+    for e in &crate::radio::codes::ENTRIES {
+        use crate::radio::codes::Arrow;
+        let row = calls.iter().find(|r| r["Call-in"] == e.name).unwrap_or_else(|| panic!("no row for {}", e.name));
+        let code: Vec<&str> = e.code.iter().map(|a| match a { Arrow::Up => "↑", Arrow::Right => "→", Arrow::Down => "↓", Arrow::Left => "←" }).collect();
+        assert_eq!(row["Code"], code.join(" "), "{} code", e.name);
+        assert_eq!(num(&row["Cost"]), f64::from(e.cost), "{} cost", e.name);
+    }
+    let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Balance.md")).expect("Balance.md");
+    use crate::radio::signal;
+    assert!(text.contains(&format!("a meter of **{} bars**", signal::BARS)));
+    assert_eq!((signal::KILL * 10, signal::KEEN * 20), (signal::BAR, signal::BAR * 3), "a tenth of a bar a kill, half again to the head");
     // Everything worn.
     let gear = table("| Gear | Worn on |");
     for kind in crate::loot::ALL {

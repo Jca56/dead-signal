@@ -149,7 +149,7 @@ impl Seat {
         let n = self.n;
         if self.out {
             // Bled out: nothing to do but watch.
-            self.radio = self.radio.map(|_| Default::default());
+            self.radio.iter_mut().for_each(|r| r.drop_it());
             if let Some(mut c) = game.controls_mut(n) {
                 *c = Default::default();
             }

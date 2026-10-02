@@ -246,13 +246,13 @@ fn frame(state: &PadState, down: &[Button], pulled: &mut [bool; 2], labels: Labe
 
 /// A frame with nothing held but `down` gone down on it.
 #[cfg(test)]
-pub(super) fn frame_with(down: &[Button]) -> PadFrame {
+pub(crate) fn frame_with(down: &[Button]) -> PadFrame {
     frame(&PadState::default(), down, &mut [false; 2], Labels::Xbox)
 }
 
 /// A frame with `held` held down (and not just gone down).
 #[cfg(test)]
-pub(super) fn frame_holding(held: &[Button]) -> PadFrame {
+pub(crate) fn frame_holding(held: &[Button]) -> PadFrame {
     PadFrame { held: held.iter().fold(0, |bits, &b| bits | Control::Button(b).bit()), touched: true, ..PadFrame::default() }
 }
 
