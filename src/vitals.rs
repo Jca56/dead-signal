@@ -106,6 +106,9 @@ pub struct Vitals {
     pub max_stamina: f64,
     recover: f64,
     kit_time: f64,
+    /// How long a bandage or a medkit takes, a share of the usual (a
+    /// holdout's are quick: there's never a quiet moment for one).
+    mend_time: f64,
     kit_heals: f64,
     /// Cuts bleeding, and seconds of poison left.
     pub bleeding: u8,
@@ -127,7 +130,7 @@ impl Vitals {
     pub fn with(perks: &Perks) -> Self {
         let (max_hp, lungs) = (perks.max_hp(), perks.lungs());
         let max_stamina = 100.0 * lungs;
-        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), kit_heals: perks.kit_heals(), bleeding: 0, poison: 0.0, breath: 1.0, armor_room: 0 }
+        Self { hp: max_hp, stamina: max_stamina, winded: false, since_hurt: REGEN_DELAY, since_sprint: RECOVER_DELAY, healing: None, max_hp, max_stamina, recover: lungs, kit_time: perks.kit_time(), mend_time: 1.0, kit_heals: perks.kit_heals(), bleeding: 0, poison: 0.0, breath: 1.0, armor_room: 0 }
     }
 
     fn regen_cap(&self) -> f64 {
@@ -136,7 +139,12 @@ impl Vitals {
 
     /// How long `kit` takes, and heals, for this player.
     fn takes(&self, kit: Kit) -> f64 {
-        kit.takes() * self.kit_time
+        kit.takes() * self.kit_time * if kit == Kit::Plate { 1.0 } else { self.mend_time }
+    }
+
+    /// Bandages and medkits take `share` of the time they would.
+    pub fn quicken_mending(&mut self, share: f64) {
+        self.mend_time = share;
     }
 
     fn heals(&self, kit: Kit) -> f64 {
@@ -411,5 +419,13 @@ mod tests {
         assert!(v.start_heal(Kit::Bandage, 1));
         let mut v = Vitals { poison: 5.0, ..Vitals::default() };
         assert!(!v.start_heal(Kit::Bandage, 1) && v.start_heal(Kit::Medkit, 1));
+    }
+
+    #[test]
+    fn a_holdout_s_bandages_and_medkits_are_quick_and_its_plates_are_not() {
+        let mut v = Vitals::with(&Perks::default());
+        assert_eq!((v.takes(Kit::Bandage), v.takes(Kit::Medkit), v.takes(Kit::Plate)), (2.0, 4.0, 3.0));
+        v.quicken_mending(0.5);
+        assert_eq!((v.takes(Kit::Bandage), v.takes(Kit::Medkit), v.takes(Kit::Plate)), (1.0, 2.0, 3.0));
     }
 }

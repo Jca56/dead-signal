@@ -63,7 +63,7 @@ fn a_hound_round_tears_them_in_near_the_player_and_they_come() {
     // off (in health, and in how hard they bite); no boards touched.
     let (tough, might) = rounds::FIRST_PACK;
     let first = world.query::<&Zombie>().iter(&world).map(|z| (z.hp, z.might)).next();
-    assert_eq!(first, Some((rounds::toughness(1) * rounds::hardiness(Dead::Hound) * tough, might)));
+    assert_eq!(first, Some((rounds::health(1, Dead::Hound) * tough, might)));
     assert!(tough < 1.0 && might < 1.0);
     assert!(world.resource::<Barriers>().0.iter().all(|b| b.boards == BOARDS));
 }
@@ -97,7 +97,7 @@ fn shut_in_the_start_room_the_hounds_still_come_and_the_round_ends_with_full_gun
     // The next pack (the breather over) is let off nothing.
     hound_round(&mut world, &mut h, 16.0);
     let second = world.query::<&Zombie>().iter(&world).filter(|z| !z.dead()).map(|z| (z.hp, z.might)).next();
-    assert_eq!(second, Some((rounds::toughness(2) * rounds::hardiness(Dead::Hound), 1.0)));
+    assert_eq!(second, Some((rounds::health(2, Dead::Hound), 1.0)));
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn a_late_round_brings_rippers_to_the_player_and_a_juggernaut_in_by_a_hole_in_th
             match z.kind {
                 Dead::Ripper => ripper_near = ripper_near.min((b.pos - at).length()),
                 Dead::Juggernaut => {
-                    assert_eq!(z.hp, rounds::toughness(12) * rounds::hardiness(Dead::Juggernaut));
+                    assert_eq!(z.hp, rounds::health(12, Dead::Juggernaut));
                     boss_by = boss_by.or(z.barrier);
                     boss_in |= z.barrier.is_none();
                 }
@@ -154,7 +154,7 @@ fn a_juggernaut_stays_as_the_rounds_go_on_and_killing_it_pays_and_fills_the_guns
     assert_eq!(events, vec![Event::Began(Wave::Dead { boss: 1 }), Event::Cleared(Wave::Dead { boss: 1 }), Event::Began(Wave::Hounds)]);
     assert_eq!(h.rounds.round, 13);
     let (boss, hp) = world.query::<(Entity, &Zombie)>().iter(&world).find(|(_, z)| z.kind == Dead::Juggernaut && !z.dead()).map(|(e, z)| (e, z.hp)).expect("still up");
-    assert_eq!(hp, rounds::toughness(12) * 15.0, "as tough as the round it came with");
+    assert_eq!(hp, rounds::health(12, Dead::Juggernaut), "as tough as the round it came with");
     // Killed at last: whoever did it is paid, and it's told of.
     let before = h.wallets[0].points;
     world.get_mut::<Zombie>(boss).unwrap().by = Some(0);

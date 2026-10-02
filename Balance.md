@@ -202,7 +202,11 @@ The player walks at 6 m/s and sprints at 9. A Ripper is faster than walking but 
 
 ### HOLDOUT's rounds
 
-A round's Shambler has 150 health, 50 more each round to 600 at the tenth, then 8% more a round. The rest are a share of that: Ripper 0.5×, Spitter 0.75×, Hellhound 0.4×, Juggernaut 15× (9,000 at round 10; its front plate still lets through only a quarter).
+A round's Shambler has 100 health, 20 more each round to 280 at the tenth, then 5% more a round (round 20: 456). A Ripper has half of that and a Spitter three quarters. It's a horde: at round 6 (200) an SMG's magazine kills three with shots to the body.
+
+Hellhounds and the Juggernaut go by a steeper measure of their own (150 in the first round, 50 more each to 600 at the tenth, then 8% more a round): a Hellhound 0.4× of it (140 at round 5), a Juggernaut 15× (9,000 at round 10; its front plate still lets through only a quarter).
+
+Bandages and medkits take half as long in HOLDOUT (1 s and 2 s): there's never a quiet moment for one. Armor plates take what they take.
 
 - **Rippers** join from round 6 (6% of the round, 2% more each round, to 20%); **Spitters** from round 9 (4%, 1% more a round, to 10%).
 - **A Juggernaut** comes with round 10 (or 11), then no sooner than every 5 rounds; two from round 20. It comes in by the widest ways in, and tears boards off 2.5× as fast.

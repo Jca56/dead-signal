@@ -31,6 +31,7 @@ impl Run {
         self.seats = (0..players).map(|n| Seat::new(n, Holdout::loadout(), Perks::default(), seed, combat)).collect();
         for seat in &mut self.seats {
             (seat.fit, seat.unburdened) = (Holdout::fit(), true);
+            seat.vitals.quicken_mending(crate::holdout::MENDING);
         }
         game.world.insert_resource(crate::zombie::Stealth(1.0));
         game.world.insert_resource(crate::zombie::Heat::default());

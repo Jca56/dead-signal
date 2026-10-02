@@ -61,6 +61,9 @@ const NAIL_REACH: f64 = 1.6;
 const NAIL_LEVEL: f64 = 1.0;
 /// How high the eye is over the feet.
 const EYE: f64 = 1.6;
+/// A bandage or a medkit takes this share of its usual time in a holdout:
+/// with the dead always on you there, there's no quiet moment for one.
+pub const MENDING: f64 = 0.5;
 /// A holdout's pack and pockets: room for all the rounds bought.
 pub const PACK: (u8, u8) = (8, 8);
 const POCKETS: (u8, u8) = (4, 2);
