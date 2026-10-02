@@ -28,7 +28,7 @@ fn holding(weapon: Weapon, aimed: bool) -> Hands {
 }
 
 fn doing(hands: &Hands) -> Doing<'_> {
-    Doing { seat: 0, hands, winding: None, threw: None, lowered: 0.0, reviving: false, down: false, out: false }
+    Doing { seat: 0, hands, winding: None, threw: None, lowered: 0.0, reviving: false, down: false, out: false, radio: None }
 }
 
 /// A second of `now`, frame by frame, with `hands`: the pose, what's held.
@@ -253,7 +253,7 @@ fn poses() {
     shots.push(("fists_jog", 1, steady(Weapon::Fists), up(Vec3::new(0.0, 0.0, 6.0)), 0.0, false, None));
     for (name, seat, hands, now, pitch, sprinting, winding) in &shots {
         let mut m = Motion::default();
-        let d = Doing { seat: *seat, hands, winding: *winding, threw: None, lowered: 0.0, reviving: now.kneeling, down: now.down, out: now.out };
+        let d = Doing { seat: *seat, hands, winding: *winding, threw: None, lowered: 0.0, reviving: now.kneeling, down: now.down, out: now.out, radio: None };
         let mut held = Holding::default();
         let mut pose = rig.rest();
         for _ in 0..90 {
@@ -277,4 +277,48 @@ fn poses() {
         }
         std::fs::write(format!("{dir}/{name}.obj"), obj).expect("written");
     }
+}
+
+#[test]
+fn with_the_radio_out_the_handset_s_in_the_right_hand_and_a_flare_s_in_the_left_till_it_s_thrown() {
+    use crate::radio::Shown;
+    let rig = rig();
+    let hands = Hands::default();
+    let held = |shown: Shown| {
+        let mut m = Motion::default();
+        let mut pose = body::pose(&rig, &mut m, &up(Vec3::ZERO), 1.0 / 60.0);
+        let d = Doing { radio: Some(shown), ..doing(&hands) };
+        let held = hold::hands(&rig, &mut pose, &mut m, &d, (0.0, 0.0), false, 1.0 / 60.0);
+        (rig.world(&pose), held)
+    };
+    let hand = |world: &[lntrn_math::Mat4], side: Bone| world[rig.node(side)].translation();
+    // Up to be read: ahead of the chest, on the right; the right hand at
+    // it; no gun, no flare.
+    let (world, h) = held(Shown { clip: "Idle", t: None, stowed: 0.0 });
+    let radio = h.radio.expect("the handset").translation();
+    let chest = world[rig.node(Bone::Chest)].translation();
+    assert!(h.item.is_none() && h.flare.is_none());
+    assert!(radio.z < chest.z - 0.2 && radio.x > 0.05 && (radio.y - chest.y).abs() < 0.2, "{radio:?}");
+    assert!((hand(&world, Bone::HandR) - radio).length() < 0.12, "the hand's {} off it", (hand(&world, Bone::HandR) - radio).length());
+    // Keyed: at the mouth. Put away: down at the hip.
+    let (world, h) = held(Shown { clip: "Key", t: Some(0.5), stowed: 0.0 });
+    let at_mouth = h.radio.unwrap().translation();
+    assert!((at_mouth - rig.eyes(&world)).length() < 0.2 && at_mouth.y > radio.y + 0.1, "{at_mouth:?}");
+    let (_, h) = held(Shown { clip: "Idle", t: None, stowed: 1.0 });
+    assert!(h.radio.unwrap().translation().y < radio.y - 0.25);
+    // A flare: up in the left hand, its tip up; thrown, it's in hand only
+    // till it's let go.
+    let (world, h) = held(Shown { clip: "Flare", t: None, stowed: 0.0 });
+    let flare = h.flare.expect("the flare");
+    let (foot, tip) = (flare.translation(), flare.transform_point(Vec3::new(0.0, 0.0, -0.22)));
+    assert!(foot.x < -0.15 && (tip - foot - Vec3::new(0.0, 0.22, 0.0)).length() < 1e-6, "{foot:?} to {tip:?}");
+    assert!((hand(&world, Bone::HandL) - foot).length() < 0.12 && h.radio.is_some());
+    assert!(held(Shown { clip: "Throw", t: Some(0.1), stowed: 0.0 }).1.flare.is_some());
+    assert!(held(Shown { clip: "Throw", t: Some(0.3), stowed: 0.0 }).1.flare.is_none());
+    // Down, there's only the gun in hand: no radio.
+    let mut m = Motion::default();
+    let mut pose = body::pose(&rig, &mut m, &up(Vec3::ZERO), 1.0 / 60.0);
+    let d = Doing { radio: Some(Shown { clip: "Idle", t: None, stowed: 0.0 }), down: true, ..doing(&hands) };
+    assert!(hold::hands(&rig, &mut pose, &mut m, &d, (0.0, 0.0), false, 1.0 / 60.0).radio.is_none());
+    let _ = Side::Left;
 }

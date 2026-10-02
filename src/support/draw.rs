@@ -18,8 +18,15 @@ use super::{Drop, Flare, SETTLES, STANDS};
 use crate::render::{Draw, Light, MeshId, Renderer, Vertex};
 use crate::world::Solid;
 
-/// A flare's flame: how big, in the air and burning on the ground.
+/// A flare's flame: how big, in the air and burning on the ground (and
+/// in a hand); and its stick, from its foot to its tip, in its own space.
 const FLAME: (f64, f64) = (0.45, 0.8);
+const HELD: f64 = 0.3;
+const STICK: Vec3 = Vec3::new(0.0, 0.0, -0.22);
+/// The handset's display, as it glows in another player's hand: where on
+/// it, how big, and its amber.
+const DISPLAY: (Vec3, Vec3) = (Vec3::new(0.0, 0.075, 0.02), Vec3::new(0.046, 0.028, 0.004));
+const AMBER: [f32; 3] = [0.95, 0.56, 0.10];
 /// Its light, and how far it reaches.
 const GLOW: [f32; 3] = [1.0, 0.10, 0.12];
 const REACH: f64 = 11.0;
@@ -77,6 +84,9 @@ pub struct Meshes {
     refused: MeshId,
     port: MeshId,
     starboard: MeshId,
+    /// The handset, and its display's glow: in another player's hand.
+    radio: MeshId,
+    display: MeshId,
 }
 
 /// Load what they look like, for `world`'s runs.
@@ -91,14 +101,14 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
                 Some(renderer.add_mesh(&seen))
             };
             let (plane, heli, rotor) = (flying("Plane"), flying("Heli"), flying("Rotor"));
-            match (find("Flare"), find("Crate"), find("Open"), find("Chute"), plane, heli, rotor) {
-                (Some(flare), Some(shut), Some(open), Some(chute), Some(plane), Some(heli), Some(rotor)) => {
+            match (find("Flare"), find("Crate"), find("Open"), find("Chute"), plane, heli, rotor, find("Radio")) {
+                (Some(flare), Some(shut), Some(open), Some(chute), Some(plane), Some(heli), Some(rotor), Some(radio)) => {
                     let puff = renderer.add_mesh(&crate::motes::ball());
                     let shaft = renderer.add_mesh(&cone());
                     // (What glows is its own colour, whatever it's tinted:
                     // a block of each.)
                     let mut block = |glow: [f32; 3]| renderer.add_mesh(&crate::motes::speck([1.0; 3], glow, glow));
-                    let (marked, refused, port, starboard) = (block(MARKED), block(REFUSED), block(PORT), block(STARBOARD));
+                    let (marked, refused, port, starboard, display) = (block(MARKED), block(REFUSED), block(PORT), block(STARBOARD), block(AMBER));
                     // A fire's flame, made a flare's: red, its heart
                     // white-hot.
                     let Some(flame) = crate::assets::load(renderer, "effects").ok().and_then(|fx| {
@@ -109,9 +119,9 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
                         log_error!("airdrop: no Flame to make a flare's of");
                         return;
                     };
-                    world.insert_resource(Meshes { flare, shut, open, chute, plane, heli, rotor, puff, shaft, flame, marked, refused, port, starboard });
+                    world.insert_resource(Meshes { flare, shut, open, chute, plane, heli, rotor, puff, shaft, flame, marked, refused, port, starboard, radio, display });
                 }
-                _ => log_error!("airdrop: no Flare, Crate, Open, Chute, Plane, Heli or Rotor"),
+                _ => log_error!("airdrop: no Flare, Crate, Open, Chute, Plane, Heli, Rotor or Radio"),
             }
         }
         Err(e) => log_error!("airdrop: {e}"),
@@ -155,17 +165,13 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
     for f in world.query::<&Flare>().iter(world) {
         let at = f.prev + (f.pos - f.prev) * alpha;
         let own = f.pos.x * 1.7 + f.pos.z;
-        // In the air it tumbles; at rest it lies flat, its tip burning.
-        let (turn, tip, size) = match f.rest {
-            None => {
-                let turn = Quat::from_rotation_y(f.age * 3.0) * Quat::from_rotation_x(f.spin);
-                (turn, at + turn * Vec3::new(0.0, 0.22, 0.0), FLAME.0)
-            }
-            Some(_) => {
-                let turn = Quat::from_rotation_y(own) * Quat::from_rotation_x(std::f64::consts::FRAC_PI_2 * 0.93);
-                (turn, at + turn * Vec3::new(0.0, 0.22, 0.0), FLAME.1)
-            }
+        // In the air it tumbles; at rest it lies flat (its tip a little
+        // up), burning. (The stick runs along its own -Z.)
+        let (turn, size) = match f.rest {
+            None => (Quat::from_rotation_y(f.age * 3.0) * Quat::from_rotation_x(f.spin), FLAME.0),
+            Some(_) => (Quat::from_rotation_y(own) * Quat::from_rotation_x(0.14), FLAME.1),
         };
+        let tip = at + turn * STICK;
         renderer.draw(lit(m.flare, Mat4::from_translation(at) * Mat4::from_quat(turn)));
         let high = size * flutter(time, own);
         let flame = Mat4::from_translation(tip - Vec3::new(0.0, 0.03, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(time * 5.0 + own)) * Mat4::from_scale(Vec3::new(size * 0.8, high, size * 0.8));
@@ -219,6 +225,24 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
             }
         }
     }
+}
+
+/// The handset in another player's hand, placed by `model`, its display
+/// glowing: in `pane`.
+pub fn handset(world: &World, renderer: &mut Renderer, pane: usize, model: Mat4) {
+    let Some(m) = world.get_resource::<Meshes>().copied() else { return };
+    renderer.draw_in(pane, Draw { mesh: m.radio, model, emissive: 0.0, fog: 1.0, tint: [1.0; 3] });
+    renderer.draw_in(pane, Draw { mesh: m.display, model: model * Mat4::from_translation(DISPLAY.0) * Mat4::from_scale(DISPLAY.1), emissive: 1.0, fog: 1.0, tint: [1.0; 3] });
+}
+
+/// A lit flare in another player's hand, placed by `model` (its foot,
+/// its stick along its own -Z), its flame spitting at `time`: in `pane`.
+pub fn held_flare(world: &World, renderer: &mut Renderer, pane: usize, model: Mat4, time: f64) {
+    let Some(m) = world.get_resource::<Meshes>().copied() else { return };
+    renderer.draw_in(pane, Draw { mesh: m.flare, model, emissive: 0.0, fog: 1.0, tint: [1.0; 3] });
+    let tip = model.transform_point(STICK);
+    let flame = Mat4::from_translation(tip - Vec3::new(0.0, 0.02, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(time * 5.0)) * Mat4::from_scale(Vec3::new(HELD * 0.8, HELD * flutter(time, tip.x), HELD * 0.8));
+    renderer.draw_in(pane, Draw { mesh: m.flame, model: flame, emissive: 1.0, fog: 1.0, tint: [1.0; 3] });
 }
 
 /// A strip's outline, on the ground it lies over, at `time`: in `pane`

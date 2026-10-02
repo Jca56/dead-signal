@@ -23,6 +23,9 @@
             rotor, on skids
     Rotor   its blades, 11 m across, about their hub (which is 1.75 m over
             the cabin's middle): turned by the game
+    Radio   the handset, as it's seen in another player's hand: upright
+            about where the fist holds it, its face to -Y (back at
+            whoever holds it), its antenna up
 
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/airdrop.py
@@ -262,6 +265,17 @@ def heli(mat):
     s.finish("Rotor", mat)
 
 
+def radio(mat):
+    s = Shape()
+    s.box((0, 0, 0.02), (0.068, 0.036, 0.167), (0.27, 0.31, 0.17))
+    s.box((0, 0, -0.058), (0.072, 0.040, 0.012), GUN)
+    s.box((0, 0, 0.108), (0.072, 0.040, 0.008), GUN)
+    s.box((-0.022, 0, 0.165), (0.014, 0.014, 0.11), GUN)
+    s.box((0.02, 0, 0.12), (0.016, 0.016, 0.016), (0.36, 0.37, 0.33))
+    s.box((0, -0.0185, 0.0), (0.05, 0.003, 0.08), (0.06, 0.07, 0.05))
+    s.finish("Radio", mat)
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mat = material()
@@ -270,6 +284,7 @@ def main():
     chute(mat)
     plane(mat)
     heli(mat)
+    radio(mat)
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"airdrop: {len(bpy.data.objects)} objects -> {os.path.abspath(OUT)}")
 

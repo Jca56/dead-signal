@@ -2,13 +2,14 @@
 //! each (the first in a cap and a field jacket, the second with a
 //! ponytail, in a hoodie; each in their own colour), moving as they move
 //! and holding what they hold, where they aim. Its legs and body
-//! (`body.rs`), what its hands do (`hold.rs`, with a gun `gun.rs`), all on
-//! its rig (`rig.rs`). A player's own pane never shows their own figure
+//! (`body.rs`), what its hands do (`hold.rs`, with a gun `gun.rs`, with
+//! the radio out `radio.rs`), all on its rig (`rig.rs`). A player's own pane never shows their own figure
 //! (`render/figures.rs`), nor what's in their hands (`draw`).
 
 mod body;
 mod gun;
 mod hold;
+mod radio;
 mod rig;
 #[cfg(test)]
 mod tests;
@@ -111,14 +112,19 @@ pub struct Doing<'a> {
     pub reviving: bool,
     pub down: bool,
     pub out: bool,
+    /// The radio out: how it's shown (as their own eyes see it).
+    pub radio: Option<crate::radio::Shown>,
 }
 
 /// What's in a player's hands, and a shot's flash, where (the world's
-/// space): for the others to see.
+/// space): for the others to see. The radio out: the handset, and a lit
+/// flare in the other hand.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct Held {
     pub item: Option<(Kind, Mat4)>,
     pub flash: Option<Mat4>,
+    pub radio: Option<Mat4>,
+    pub flare: Option<Mat4>,
 }
 
 /// Every player given a figure, to be seen by the others.
@@ -160,7 +166,7 @@ pub fn pose(world: &mut World, doing: &[Doing]) {
             figure.joints = rig.joints(&rig.world(&pose));
             figure.model = place;
             figure.solid = false;
-            *held = Held { item: holding.item.map(|(kind, at)| (kind, place * at)), flash: holding.flash.map(|at| place * at) };
+            *held = Held { item: holding.item.map(|(kind, at)| (kind, place * at)), flash: holding.flash.map(|at| place * at), radio: holding.radio.map(|at| place * at), flare: holding.flare.map(|at| place * at) };
         }
     });
 }
@@ -169,6 +175,18 @@ pub fn pose(world: &mut World, doing: &[Doing]) {
 /// that don't look through their eyes (`eyes`: whose each pane's are).
 pub fn draw(world: &mut World, renderer: &mut Renderer, eyes: &[usize]) {
     let held: Vec<(usize, Held)> = world.query::<(&Player, &Held)>().iter(world).map(|(p, h)| (p.0, *h)).collect();
+    let time = world.resource::<Clock>().time;
+    // The radio, and its flare.
+    for (seat, held) in &held {
+        for pane in eyes.iter().enumerate().filter(|&(_, e)| e != seat).map(|(pane, _)| pane) {
+            if let Some(model) = held.radio {
+                crate::support::draw::handset(world, renderer, pane, model);
+            }
+            if let Some(model) = held.flare {
+                crate::support::draw::held_flare(world, renderer, pane, model, time);
+            }
+        }
+    }
     let Some(items) = world.get_resource::<crate::items::Meshes>() else { return };
     let flash = world.get_resource::<crate::throw::draw::Meshes>().map(|m| m.flash);
     for (seat, held) in held {

@@ -18,7 +18,8 @@
 //! yard, and another down and open, what it held about it. `BOOSTS=1`:
 //! both boosts up. `STRAFE=mark`: a strafing run's strip being placed
 //! ahead; `STRAFE=run`: one coming in along it, its rounds half way. `GUNSHIP=1`:
-//! the gunship over the yard, shooting.
+//! the gunship over the yard, shooting. `BUDDY=up|key|flare`: a second
+//! player stood ahead, the radio out, as the first sees them.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -203,6 +204,15 @@ impl DeadSignal {
                 h.boosts.gunship = left;
             }
         }
+        // (A second player ahead with the radio out, asked for: stood a
+        // few metres off, turned to the first.)
+        let buddy = std::env::var("BUDDY").ok();
+        if buddy.is_some() {
+            let at = feet + Vec3::new(-yaw.sin(), 0.0, -yaw.cos()) * 2.6 + Vec3::new(yaw.cos(), 0.0, -yaw.sin()) * 0.4;
+            self.game.spawn_player(1, at.x, at.z, yaw + std::f64::consts::PI * 0.85);
+            self.game.teleport(1, at);
+            crate::survivor::dress(&mut self.game.world);
+        }
         let gunship = std::env::var("GUNSHIP").is_ok();
         let strafe = std::env::var("STRAFE").ok();
         for k in 0..90 {
@@ -227,6 +237,19 @@ impl DeadSignal {
             }
             if gunship {
                 self.run.supported(&mut self.game, &mut self.combat);
+            }
+            if let Some(how) = &buddy {
+                use crate::radio::Shown;
+                let mut hands = crate::weapon::Hands::default();
+                hands.stow();
+                hands.update(Default::default(), 2.0);
+                let shown = match how.as_str() {
+                    "key" => Shown { clip: "Key", t: Some(0.5), stowed: 0.0 },
+                    "flare" => Shown { clip: "Flare", t: None, stowed: 0.0 },
+                    _ => Shown { clip: "Idle", t: None, stowed: 0.0 },
+                };
+                let doing = crate::survivor::Doing { seat: 1, hands: &hands, winding: None, threw: None, lowered: 0.0, reviving: false, down: false, out: false, radio: Some(shown) };
+                crate::survivor::pose(&mut self.game.world, &[doing]);
             }
             // (Their hands come up, as in a run: the last quarter second
             // of it the trigger's pulled, `firing`.)

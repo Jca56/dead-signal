@@ -1,7 +1,7 @@
 //! What a survivor's doing with their hands, over what their legs are:
 //! a blade or an axe held ready and swung, fists up and punching (a right,
 //! then a left), something wound up and thrown overarm (the body's clips);
-//! a gun held where they aim (`gun.rs`). Their body leans with the aim,
+//! a gun held where they aim (`gun.rs`); the radio, out (`radio.rs`). Their body leans with the aim,
 //! bladed to a long gun at the shoulder.
 
 use lntrn_math::{Mat4, Quat, Vec3};
@@ -24,11 +24,13 @@ const LEAN_DOWN: [f64; 4] = [0.0, 0.25, 0.25, 0.3];
 const LET_GO: f64 = 0.13;
 
 /// What's in hand this frame, in the figure's space: what, and where; a
-/// shot's flash, where.
+/// shot's flash, where; the radio's handset, and its flare.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Holding {
     pub item: Option<(Kind, Mat4)>,
     pub flash: Option<Mat4>,
+    pub radio: Option<Mat4>,
+    pub flare: Option<Mat4>,
 }
 
 /// A blade's or an axe's grip (its own space: the blade along +X, its edge
@@ -143,12 +145,17 @@ pub fn hands(rig: &Rig, pose: &mut Pose, m: &mut Motion, d: &Doing, (yaw, pitch)
     if throwing {
         let what = d.winding.or(d.threw.filter(|&(_, since)| since < LET_GO).map(|(what, _)| what));
         let item = what.map(|what| (what.kind(), rig.in_hand(&rig.world(pose), thrown_grip(what))));
-        return Holding { item, flash: None };
+        return Holding { item, ..Holding::default() };
+    }
+    // The radio out: the handset in the right hand, a flare in the left.
+    if let Some(shown) = d.radio.filter(|_| !d.down) {
+        let (handset, flare) = super::radio::hold(rig, pose, shown);
+        return Holding { radio: Some(handset), flare, ..Holding::default() };
     }
     if let Some(g) = gun {
         let (item, flash) = gun::hold(rig, pose, m, g, d, &Aim::new(yaw, pitch));
-        return Holding { item: item.map(|at| (gun::kind(g), at)), flash };
+        return Holding { item: item.map(|at| (gun::kind(g), at)), flash, ..Holding::default() };
     }
     let item = blade(hands.weapon).filter(|_| hands.stowed_amount() < 0.9 && d.lowered < 0.5).map(|(kind, grip)| (kind, rig.in_hand(&rig.world(pose), grip)));
-    Holding { item, flash: None }
+    Holding { item, ..Holding::default() }
 }

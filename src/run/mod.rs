@@ -120,6 +120,7 @@ impl Run {
                 reviving: s.reviving.is_some_and(|(_, p)| p > 0.0),
                 down: s.down.is_some(),
                 out: s.out,
+                radio: s.radio_shown(),
             })
             .collect()
     }

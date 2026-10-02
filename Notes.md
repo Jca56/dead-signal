@@ -136,7 +136,7 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - [x] 6. Strafing run (`src/support/strafe.rs`). Three seconds' warning (the plane heard coming, the strip pulsing red for everyone), then its guns rake the strip end to end: the dead in it under open sky cut down, a player in it badly hurt, glass broken, dirt flying, tracers down the sky; the plane seen going over. Its kills are whoever called it's, but charge no signal.
 - [x] 7. Boosts as entries (`src/holdout/boosts.rs`): 2X POINTS and INSTAKILL, on for everyone for 30 s (called again, as long again), each shown top middle with its time. INSTAKILL kills all but a Juggernaut (3× damage), and what's killed while it's up charges no signal.
 - [x] 8. The gunship (`src/support/gunship.rs`). A helicopter in over the compound, a slow circle round it for 45 s, its door gun on the dead it can see in the open (nearest a player first), its searchlight's shaft on whichever it's at, its rotor heard; never a player hurt. Called again, it stays as long again. Its time's shown with the boosts'.
-- [ ] 9. Seen by the other player: the radio in the survivor figure's hand.
+- [x] 9. Seen by the other player (`src/survivor/radio.rs`): the handset in the survivor figure's right hand, up before the chest, at the mouth when it's keyed, down at the hip as it's pulled out and put away; a drop's flare lit in the left hand, wound back and flung.
 
 
 ---
