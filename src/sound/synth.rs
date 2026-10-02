@@ -95,7 +95,7 @@ fn sweep_phase(t: f32, from: f32, to: f32, tau: f32) -> f32 {
 pub(super) fn synth(sfx: Sfx) -> Vec<f32> {
     match sfx {
         // The guns', and what's thrown and burns (`guns.rs`).
-        Sfx::Shot | Sfx::Blast | Sfx::Pump | Sfx::ShellIn | Sfx::RifleShot | Sfx::SmgShot | Sfx::ArShot | Sfx::LmgShot | Sfx::Shot45 | Sfx::MagnumShot | Sfx::UziShot | Sfx::AkShot | Sfx::BullpupShot | Sfx::Flame | Sfx::Shatter | Sfx::Ignite | Sfx::Crackle | Sfx::Beep | Sfx::Explosion | Sfx::Bolt | Sfx::DryFire | Sfx::MagOut | Sfx::MagIn | Sfx::SlideRack => guns::make(sfx),
+        Sfx::Shot | Sfx::Blast | Sfx::Pump | Sfx::ShellIn | Sfx::RifleShot | Sfx::SmgShot | Sfx::ArShot | Sfx::LmgShot | Sfx::Shot45 | Sfx::MagnumShot | Sfx::UziShot | Sfx::AkShot | Sfx::BullpupShot | Sfx::SniperShot | Sfx::Flame | Sfx::Shatter | Sfx::Ignite | Sfx::Crackle | Sfx::Beep | Sfx::Explosion | Sfx::Bolt | Sfx::DryFire | Sfx::MagOut | Sfx::MagIn | Sfx::SlideRack => guns::make(sfx),
         Sfx::Bark | Sfx::Growl | Sfx::Yelp | Sfx::Howl | Sfx::Zap => hound::make(sfx),
         Sfx::RadioOn | Sfx::RadioTalk | Sfx::RadioOver | Sfx::DialUp | Sfx::DialRight | Sfx::DialDown | Sfx::DialLeft | Sfx::DialWrong | Sfx::Flyover | Sfx::Thud | Sfx::Boost | Sfx::Jet | Sfx::Brrt | Sfx::Whistle | Sfx::Impact | Sfx::Mystery | Sfx::Prize | Sfx::Jab | Sfx::Jolt => radio::make(sfx),
         Sfx::Whoosh => {

@@ -10,7 +10,7 @@ use crate::loot::{Dice, Kind, Stack};
 
 /// What can be in one, and how likely each is against the rest. (No
 /// pistol: everyone's begun with one.)
-pub const ODDS: [(Kind, u32); 12] = [
+pub const ODDS: [(Kind, u32); 13] = [
     (Kind::Rifle, 6),
     (Kind::Shotgun, 6),
     (Kind::Smg, 6),
@@ -20,6 +20,7 @@ pub const ODDS: [(Kind, u32); 12] = [
     (Kind::Ak47, 4),
     (Kind::Magnum, 3),
     (Kind::Bullpup, 3),
+    (Kind::Sniper, 3),
     (Kind::Flamethrower, 2),
     (Kind::Lmg, 2),
     (Kind::Rpk, 2),

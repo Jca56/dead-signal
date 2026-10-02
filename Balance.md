@@ -23,6 +23,7 @@ The tables of stats (guns, melee, the dead) are checked by the test `balance_md_
 | AK-47 | Primary | 7.62 | 52 | 1 | 30 | 0.11 s (550/min) | auto / semi (B) | 2.5 s | 100 m | 1 more (60%) |
 | BULLPUP | Primary | 5.56 | 36 | 1 | 30 | 0.07 s (860/min) | auto / semi (B) | 2.7 s | 85 m | 1 more (40%) |
 | RPK | Primary | 7.62 | 52 | 1 | 75 | 0.11 s (550/min) | auto | 3.4 s | 105 m | 2 more (60%, 30%) |
+| SNIPER RIFLE | Primary | .308 | 320 | 1 | 5 | 1.25 s (bolt) | semi | 0.6 s a round | 140 m | 3 more (80%, 60%, 40%) |
 
 Headshots do **3×**. Shots under a roof are heard **60%** as far.
 
@@ -40,7 +41,7 @@ Headshots do **3×**. Shots under a roof are heard **60%** as far.
 |---|---|---|---|
 | PISTOL | 1.5 / 2.2 / 4.0 | 0 / 0.5 / 3.0 | 0.8× |
 | SHOTGUN | 3.6 / 4.4 / 7.0 | 2.4 / 3.2 / 6.0 | 0.85× |
-| HUNTING RIFLE | 3.0 / 5.0 / 8.0 | 0 / 1.5 / 5.0 | 0.25× (4× scope) |
+| HUNTING RIFLE | 3.0 / 5.0 / 8.0 | 0 / 1.5 / 5.0 | 0.7× (iron sights) |
 | SMG | 2.6 / 3.5 / 6.0 | 0.8 / 1.6 / 4.0 | 0.8× |
 | ASSAULT RIFLE | 2.4 / 3.4 / 6.0 | 0.15 / 1.0 / 4.0 | 0.7× (red dot) |
 | LMG | 3.4 / 4.8 / 8.0 | 0.5 / 1.8 / 5.0 | 0.75× |
@@ -51,6 +52,7 @@ Headshots do **3×**. Shots under a roof are heard **60%** as far.
 | AK-47 | 2.8 / 3.9 / 6.5 | 0.5 / 1.4 / 4.5 | 0.8× |
 | BULLPUP | 1.6 / 2.4 / 5.0 | 0.1 / 0.8 / 3.5 | 0.6× (red dot) |
 | RPK | 3.0 / 4.2 / 7.0 | 0.4 / 1.5 / 4.5 | 0.78× |
+| SNIPER RIFLE | 5.0 / 7.0 / 10.0 | 0 / 1.2 / 5.0 | 0.17× (6× scope) |
 
 ### Damage per shot with distance
 
@@ -70,6 +72,7 @@ Aimed at a Shambler's chest, standing still. Hip / aimed:
 | AK-47 | 52 / 52 | 51 / 52 | 35 / 52 | 20 / 52 | 9 / 52 |
 | BULLPUP | 36 / 36 | 36 / 36 | 36 / 36 | 27 / 36 | 14 / 36 |
 | RPK | 52 / 52 | 49 / 52 | 32 / 52 | 19 / 52 | 7 / 52 |
+| SNIPER RIFLE | 320 / 320 | 203 / 320 | 101 / 320 | 45 / 320 | 17 / 320 |
 
 ### Damage per second at 6 m, aimed
 
@@ -89,9 +92,10 @@ MINI UZI       291 ███████████████████▍ 
 AK-47          473 ███████████████████████████████▌    269 █████████████████▉
 BULLPUP        514 ██████████████████████████████████▎ 225 ███████████████
 RPK            473 ███████████████████████████████▌    335 ██████████████████████▎
+SNIPER RIFLE   256 █████████████████                   155 ██████████▎
 ```
 
-The hunting rifle's number undersells it: every round is a kill, and it goes on through two more. The bullpup fires hardest and feeds worst; the RPK gives up a little of the LMG's rate and its belt for a reload a third shorter.
+The hunting rifle's number undersells it: every round is a kill, and it goes on through two more. The sniper rifle is the same and more: twice the round, through four of them, a 6× scope, and nothing at all from the hip. The bullpup fires hardest and feeds worst; the RPK gives up a little of the LMG's rate and its belt for a reload a third shorter.
 
 ### Shots to kill (aimed at the chest; headshots in brackets)
 
@@ -109,6 +113,7 @@ The hunting rifle's number undersells it: every round is a kill, and it goes on 
 | AK-47 | 3 (1) | 2 (1) | 3 (1) | 18 | 70 |
 | BULLPUP | 5 (2) | 2 (1) | 4 (2) | 25 | 100 |
 | RPK | 3 (1) | 2 (1) | 3 (1) | 18 | 70 |
+| SNIPER RIFLE | 1 | 1 | 1 | 3 | 12 |
 
 A dazed Juggernaut takes **2×** from any side, plate or not.
 
@@ -288,6 +293,7 @@ A gun off the wall comes loaded, with a full carry of its rounds; bought again a
 | PISTOL | 250 | control room |
 | .45 PISTOL | 600 | control room, the alley by the barracks |
 | HUNTING RIFLE | 500 | motor pool's mezzanine |
+| SNIPER RIFLE | 2000 | barracks' dorm |
 | MACHETE | 600 | by the gate |
 | SHOTGUN | 900 | the yard, motor pool's bay |
 | FIRE AXE | 1000 | generator pen |
@@ -335,15 +341,16 @@ Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's
 
 | In a mystery drop | Chance |
 |---|---|
-| HUNTING RIFLE | 13% |
-| SHOTGUN | 13% |
-| SMG | 13% |
+| HUNTING RIFLE | 12% |
+| SHOTGUN | 12% |
+| SMG | 12% |
 | .45 PISTOL | 10% |
 | MINI UZI | 10% |
 | ASSAULT RIFLE | 8% |
 | AK-47 | 8% |
 | .44 MAGNUM | 6% |
 | BULLPUP | 6% |
+| SNIPER RIFLE | 6% |
 | FLAMETHROWER | 4% |
 | LMG | 4% |
 | RPK | 4% |

@@ -39,7 +39,7 @@ const fn at(x: f64, y: f64, z: f64) -> Vec3 {
 
 const PISTOL: Gun = Gun { kind: Kind::Pistol, grip: at(-0.075, 0.017, -0.075), fore: at(-0.07, 0.055, -0.09), sight: at(-0.07, 0.017, 0.032), muzzle: at(0.13, 0.017, 0.0), well: at(-0.085, 0.017, -0.15), rack: at(-0.06, 0.017, 0.02), ads: 0.36, long: false };
 const SHOTGUN: Gun = Gun { kind: Kind::Shotgun, grip: at(-0.10, 0.024, -0.012), fore: at(0.30, 0.024, -0.045), sight: at(0.06, 0.024, 0.04), muzzle: at(0.82, 0.024, 0.012), well: at(0.10, 0.024, -0.04), rack: at(0.30, 0.024, -0.045), ads: 0.20, long: true };
-const RIFLE: Gun = Gun { kind: Kind::Rifle, grip: at(-0.16, 0.024, -0.02), fore: at(0.20, 0.024, -0.035), sight: at(-0.13, 0.024, 0.07), muzzle: at(0.93, 0.024, 0.012), well: at(0.0, 0.024, 0.035), rack: at(-0.03, 0.034, -0.03), ads: 0.12, long: true };
+const RIFLE: Gun = Gun { kind: Kind::Rifle, grip: at(-0.16, 0.024, -0.02), fore: at(0.20, 0.024, -0.035), sight: at(0.12, 0.024, 0.04), muzzle: at(0.93, 0.024, 0.012), well: at(0.0, 0.024, 0.035), rack: at(-0.03, 0.034, -0.03), ads: 0.3, long: true };
 const SMG: Gun = Gun { kind: Kind::Smg, grip: at(-0.07, 0.022, -0.07), fore: at(0.12, 0.022, -0.035), sight: at(-0.09, 0.022, 0.038), muzzle: at(0.335, 0.022, 0.008), well: at(0.05, 0.022, -0.1), rack: at(-0.08, 0.022, 0.03), ads: 0.24, long: true };
 const ASSAULT_RIFLE: Gun = Gun { kind: Kind::AssaultRifle, grip: at(-0.07, 0.026, -0.07), fore: at(0.25, 0.026, -0.04), sight: at(0.0, 0.026, 0.065), muzzle: at(0.66, 0.026, 0.004), well: at(0.05, 0.026, -0.1), rack: at(-0.12, 0.026, 0.04), ads: 0.18, long: true };
 
@@ -52,6 +52,8 @@ const MINI_UZI: Gun = Gun { kind: Kind::MiniUzi, grip: at(0.0, 0.024, -0.07), fo
 const AK47: Gun = Gun { kind: Kind::Ak47, grip: at(-0.07, 0.026, -0.07), fore: at(0.24, 0.026, -0.035), sight: at(0.12, 0.026, 0.05), muzzle: at(0.64, 0.026, 0.002), well: at(0.05, 0.026, -0.1), rack: at(0.02, 0.05, 0.01), ads: 0.22, long: true };
 const BULLPUP: Gun = Gun { kind: Kind::Bullpup, grip: at(-0.01, 0.028, -0.07), fore: at(0.20, 0.028, -0.065), sight: at(0.13, 0.028, 0.083), muzzle: at(0.47, 0.028, 0.008), well: at(-0.155, 0.028, -0.10), rack: at(0.02, 0.0, 0.02), ads: 0.24, long: true };
 const RPK: Gun = Gun { kind: Kind::Rpk, grip: at(-0.07, 0.034, -0.07), fore: at(0.24, 0.034, -0.04), sight: at(0.12, 0.034, 0.05), muzzle: at(0.80, 0.034, 0.002), well: at(0.075, 0.034, -0.11), rack: at(0.02, 0.058, 0.01), ads: 0.22, long: true };
+
+const SNIPER: Gun = Gun { kind: Kind::Sniper, grip: at(-0.16, 0.028, -0.02), fore: at(0.20, 0.028, -0.04), sight: at(-0.17, 0.028, 0.078), muzzle: at(1.08, 0.028, 0.012), well: at(0.0, 0.028, 0.035), rack: at(-0.03, 0.04, -0.03), ads: 0.1, long: true };
 
 /// The gun `weapon` is, if it's one.
 pub(super) fn of(weapon: Weapon) -> Option<&'static Gun> {
@@ -69,6 +71,7 @@ pub(super) fn of(weapon: Weapon) -> Option<&'static Gun> {
         Weapon::Ak47 => &AK47,
         Weapon::Bullpup => &BULLPUP,
         Weapon::Rpk => &RPK,
+        Weapon::Sniper => &SNIPER,
         _ => return None,
     })
 }

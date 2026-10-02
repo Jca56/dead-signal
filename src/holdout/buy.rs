@@ -32,6 +32,7 @@ pub fn price(kind: Kind) -> u32 {
         Kind::Ak47 => 2200,
         Kind::Bullpup => 2400,
         Kind::Rpk => 2800,
+        Kind::Sniper => 2000,
         Kind::Molotov => 400,
         Kind::PipeBomb => 600,
         Kind::Bandage => 200,

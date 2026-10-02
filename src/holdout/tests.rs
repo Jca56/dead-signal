@@ -264,6 +264,7 @@ fn the_cheap_guns_are_by_the_start_and_twice_over_and_the_dear_ones_deep_in_once
     assert_eq!(zones(Kind::Shotgun), ["THE YARD", "MOTOR POOL"]);
     assert_eq!(zones(Kind::Smg), ["STATION HOUSE", "GENERATOR PEN"]);
     assert_eq!(zones(Kind::Rifle), ["MOTOR POOL"]);
+    assert_eq!(zones(Kind::Sniper), ["BARRACKS"]);
     assert_eq!(zones(Kind::AssaultRifle), ["BROADCAST FLOOR"]);
     assert_eq!(zones(Kind::Ak47), ["THE BUNKER"]);
     // Where a holdout starts there are the two pistols, and no other gun;

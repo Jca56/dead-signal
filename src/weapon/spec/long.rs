@@ -54,7 +54,8 @@ pub(super) const RIFLE: Spec = Spec {
     ammo: Some(Kind::RifleRounds),
     shot: Some(Shot {
         // One to anywhere drops one of the dead; the round goes on through
-        // two more, weaker.
+        // two more, weaker. Plain iron sights: the glass is the sniper
+        // rifle's.
         damage: 160.0,
         pellets: 1,
         falloff: None,
@@ -66,9 +67,9 @@ pub(super) const RIFLE: Spec = Spec {
         pierce: &[0.7, 0.4],
         hip: Spread { still: 3.0, moving: 5.0, air: 8.0 },
         aimed: Spread { still: 0.0, moving: 1.5, air: 5.0 },
-        aim_time: 0.35,
-        zoom: 0.25,
-        scope: true,
+        aim_time: 0.3,
+        zoom: 0.7,
+        scope: false,
         // The bolt is worked before it fires again.
         gap: 1.1,
         time: 1.1,
@@ -319,4 +320,44 @@ pub(super) const RPK: Spec = Spec {
     bash: Bash { time: 0.6, swing_at: 0.1, damage: 58.0, reach: 1.9, stamina: 12.0, ..BLOW },
     draw: 0.65,
     holster: 0.5,
+};
+
+// The marksman's: the hunting rifle's round from a heavy barrel, under a
+// 6× scope. Twice what the hunting rifle does, through one of the dead
+// and the three behind it; hopeless from the hip.
+pub(super) const SNIPER: Spec = Spec {
+    name: "SNIPER RIFLE",
+    slot: Some(Slot::Primary),
+    model: "sniper",
+    mag: 5,
+    ammo: Some(Kind::RifleRounds),
+    shot: Some(Shot {
+        damage: 320.0,
+        pellets: 1,
+        falloff: None,
+        range: 600.0,
+        sound: Sfx::SniperShot,
+        heard: 140.0,
+        shove: 4.0,
+        stumble: true,
+        pierce: &[0.8, 0.6, 0.4],
+        hip: Spread { still: 5.0, moving: 7.0, air: 10.0 },
+        aimed: Spread { still: 0.0, moving: 1.2, air: 5.0 },
+        aim_time: 0.45,
+        zoom: 1.0 / 6.0,
+        scope: true,
+        // The bolt is worked before it fires again.
+        gap: 1.25,
+        time: 1.1,
+        auto: false,
+        select: false,
+        kick: 8.0,
+        kick_side: 1.5,
+        marks: &[(14.0 / 30.0, Act::Bolt)],
+        stream: None,
+    }),
+    reload: Some(Reload::Rounds { start: 0.5, start_marks: &[(6.0 / 30.0, Act::Bolt)], each: 0.6, insert_at: 10.0 / 30.0, end: 0.55, end_marks: &[(9.0 / 30.0, Act::Bolt)] }),
+    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 12.0, ..BLOW },
+    draw: 0.6,
+    holster: 0.45,
 };

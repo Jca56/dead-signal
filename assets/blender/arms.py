@@ -51,6 +51,7 @@ import rifle  # noqa: E402
 import rpk  # noqa: E402
 import shotgun  # noqa: E402
 import smg  # noqa: E402
+import sniper  # noqa: E402
 import stim  # noqa: E402
 import uzi  # noqa: E402
 from kit import Builder, banded, norm, rotate  # noqa: E402
@@ -59,7 +60,7 @@ MODELS = os.path.join(HERE, "..", "models")
 # Every weapon's viewmodel (and the radio's and the injector's, held as
 # they are): its name
 # in the file's, and its module.
-WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("smg", smg), ("ar", ar), ("lmg", lmg), ("flamethrower", flamethrower), ("pistol45", pistol45), ("magnum", magnum), ("uzi", uzi), ("ak", ak), ("bullpup", bullpup), ("rpk", rpk), ("knife", knife), ("machete", machete), ("axe", axe), ("radio", radio), ("stim", stim)]
+WEAPONS = [("fists", fists), ("pistol", pistol), ("shotgun", shotgun), ("rifle", rifle), ("smg", smg), ("ar", ar), ("lmg", lmg), ("flamethrower", flamethrower), ("pistol45", pistol45), ("magnum", magnum), ("uzi", uzi), ("ak", ak), ("bullpup", bullpup), ("rpk", rpk), ("sniper", sniper), ("knife", knife), ("machete", machete), ("axe", axe), ("radio", radio), ("stim", stim)]
 
 # Colours (sRGB, as in the title scene).
 SLEEVE = (0.30, 0.29, 0.20)

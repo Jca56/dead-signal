@@ -246,7 +246,7 @@ impl DevPanel {
 const GROUPS: [(&str, &[Kind]); 14] = [
     ("SIDEARMS", &[Kind::Pistol, Kind::Pistol45, Kind::Magnum, Kind::Smg, Kind::MiniUzi]),
     ("LONG GUNS", &[Kind::Shotgun, Kind::Rifle, Kind::AssaultRifle, Kind::Ak47, Kind::Bullpup]),
-    ("HEAVY", &[Kind::Lmg, Kind::Rpk, Kind::Flamethrower]),
+    ("HEAVY", &[Kind::Lmg, Kind::Rpk, Kind::Flamethrower, Kind::Sniper]),
     ("AMMO", &[Kind::Rounds, Kind::Rounds45, Kind::Rounds44, Kind::Shells, Kind::RifleRounds]),
     ("MORE AMMO", &[Kind::Rounds556, Kind::RoundsAk, Kind::Rounds762, Kind::FlameFuel]),
     ("THROWABLES", &[Kind::Molotov, Kind::PipeBomb]),

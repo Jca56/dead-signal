@@ -321,12 +321,14 @@ fn on_gun(g: &Gltf, anim: &str, t: f64, p: Vec3) -> Vec3 {
 }
 
 #[test]
-fn aimed_the_rifles_scope_is_on_the_middle_of_the_view() {
-    let g = viewmodel(Weapon::Rifle);
-    assert_eq!(g.skins[0].joints.len(), 23, "19 for the arms, 4 for the rifle");
-    for (anim, t) in [("Aim", 0.0), ("Aim", 2.0), ("AimFire", 1.09)] {
-        let (x, y) = on_screen(painted(&g, anim, t, "gun", lens)).expect("in front");
-        assert!(x.abs() < 0.01 && y.abs() < 0.01, "{anim} at {t}: the lens at {x:.3}, {y:.3}");
+fn aimed_the_sniper_s_scope_and_the_hunting_rifle_s_bead_are_on_the_middle_of_the_view() {
+    for (weapon, pick) in [(Weapon::Sniper, lens as fn([f32; 4]) -> bool), (Weapon::Rifle, orange)] {
+        let g = viewmodel(weapon);
+        assert_eq!(g.skins[0].joints.len(), 23, "19 for the arms, 4 for the rifle");
+        for (anim, t) in [("Aim", 0.0), ("Aim", 2.0), ("AimFire", 1.09)] {
+            let (x, y) = on_screen(painted(&g, anim, t, "gun", pick)).expect("in front");
+            assert!(x.abs() < 0.01 && y.abs() < 0.01, "{weapon:?}, {anim} at {t}: its sight at {x:.3}, {y:.3}");
+        }
     }
 }
 

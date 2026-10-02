@@ -51,6 +51,7 @@ pub fn name(weapon: Weapon, tier: u8) -> &'static str {
         Weapon::Ak47 => ["SHORTWAVE", "OVERDRIVE", "PIRATE RADIO"],
         Weapon::Bullpup => ["FINE TUNING", "CLEAR CHANNEL", "PERFECT PITCH"],
         Weapon::Rpk => ["HEAVY TRAFFIC", "FEEDBACK LOOP", "ROLLING THUNDER"],
+        Weapon::Sniper => ["LONG DISTANCE", "FAR SIGNAL", "FINAL TRANSMISSION"],
         Weapon::Knife => ["SHARP NOTE", "STATIC SHOCK", "CUT SIGNAL"],
         Weapon::Machete => ["CLEAN CUT", "HARD CUT", "CUT TO BLACK"],
         Weapon::Axe => ["BREAKING NEWS", "HARD RESET", "FINAL CUT"],

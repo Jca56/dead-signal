@@ -159,6 +159,19 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
                 (crack * 1.1 + thump * 0.9 + roll * 2.4).tanh()
             })
         }
+        Sfx::SniperShot => {
+            // The hunting rifle's, bigger: a whip of a crack, a deep
+            // thump, and the hills giving it back three times.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(2.2, 1.0, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 4600.0, 0.5).2 * env(t, 0.0003, 0.008);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 150.0, 36.0, 0.04)).sin() * env(t, 0.001, 0.12);
+                let echo = |at: f32| env((t - at).max(0.0), 0.02, 0.3) * f32::from(t > at);
+                let roll = tail.run(x, 440.0, 1.0).0 * (env(t, 0.004, 0.26) + 0.55 * echo(0.5) + 0.3 * echo(1.0) + 0.15 * echo(1.5));
+                (crack * 1.3 + thump * 1.4 + roll * 3.0).tanh()
+            })
+        }
         Sfx::Flame => {
             // A breath of the stream: a roar of burning air, swelling and
             // gone (one on another, they're the stream).

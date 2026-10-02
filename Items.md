@@ -22,7 +22,7 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | PISTOL | 2×1 | 1 | Uncommon | $150 | locker, car, desk, wardrobe, gun cabinet, ammo cage, gun rack, display case, police locker, police armory, cops | Twelve rounds of argument. Whatever's left in the magazine comes with it. |
 | SHOTGUN | 4×1 | 1 | Rare | $320 | car, cage, wardrobe, gun cabinet, hunter's cabinet, ammo cage, juggernaut, gun rack, gun cage, police armory, patrol car | Five shells and a very loud opinion. Rack it and they all come running. |
 | 12GA SHELLS | 1×1 | 20 | Common | $4 | crate, locker, car, cage, wardrobe, shelf, gun cabinet, hunter's cabinet, tool locker, ammo cage, zombies, soldiers, juggernaut, gun rack, display case, police locker, police armory, patrol car, cops | Red paper, brass base, a fistful of lead. Loaded one at a time. |
-| HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage, juggernaut, gun rack, gun cage | Bolt-action, 4× glass. One round, one less of them, and often the one behind it. |
+| HUNTING RIFLE | 5×1 | 1 | Epic | $480 | cage, gun cabinet, hunter's cabinet, ammo cage, juggernaut, gun rack, gun cage | Bolt-action, iron sights. One round, one less of them, and often the one behind it. |
 | .308 ROUNDS | 1×1 | 20 | Uncommon | $8 | cage, gun cabinet, hunter's cabinet, supply case, ammo cage, soldiers, juggernaut, gun rack, display case | Heavy brass. Every one of them should count. |
 | SMG | 3×1 | 1 | Rare | $380 | locker, cage, supply case, ammo cage, gun cage, police armory | Thirty rounds of 9mm and an opinion about all of them. Hold the trigger and mean it. |
 | ASSAULT RIFLE | 5×1 | 1 | Epic | $650 | cage, ammo cage, juggernaut, gun cage, police armory | The soldiers didn't need it anymore. B switches between full auto and a round a pull. |
@@ -40,6 +40,7 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | 7.62 ROUNDS | 1×1 | 30 | Uncommon | $6 | ammo cage, soldiers, juggernaut, gun cage | Lacquered steel in a paper box. Feeds the AK and the RPK alike. |
 | BULLPUP | 4×1 | 1 | Legendary | $900 | ammo cage, police armory | Short, quick and it points where you look. Drinks 5.56 like water. B switches between full auto and a round a pull. |
 | RPK | 5×2 | 1 | Legendary | $1000 | ammo cage, juggernaut | An AK that ate its vegetables: a long barrel and a drum of seventy-five. |
+| SNIPER RIFLE | 5×1 | 1 | Legendary | $1200 | hunter's cabinet, ammo cage, juggernaut | A heavy barrel under 6× glass. Takes the hunting rifle's rounds and sends each through four of them. Useless from the hip. |
 | MOLOTOV | 2×1 | 2 | Uncommon | $45 | crate, car, drawers, tool locker, ammo cage | A bottle, a rag, and a bad idea done well. Hold G to aim, let go to throw: a pool of fire that the dead walk into and keep burning after. |
 | PIPE BOMB | 2×1 | 2 | Rare | $90 | cage, tool locker, supply case, ammo cage, soldiers, gun cage, police armory | It beeps, and every one of the dead near enough drops what it's doing to go and listen. Then it stops beeping. |
 | BIKE HELMET | 2×2 | 1 | Common | $40 | crate, locker, car, wardrobe, shelf, student locker | Worn on the head: 15 armor. Better than a bare skull; not by a lot. |

@@ -61,8 +61,8 @@ def shells():
 
 
 def rifle():
-    """A scoped bolt-action rifle lying on its side, muzzle along +X, the
-    scope away from the eye (up, in the gun's frame, is -Y here)."""
+    """A bolt-action rifle lying on its side, muzzle along +X, its iron
+    sights away from the eye (up, in the gun's frame, is -Y here)."""
     p = Part("ITEM_Rifle")
     z = 0.024
     # (Each box by its middle and its size.) The stock, the wrist, the
@@ -75,12 +75,10 @@ def rifle():
     p.box((0.62, -0.012, z), (0.62, 0.022, 0.024), BLUED)
     # The bolt's handle, out and down.
     p.box((-0.03, 0.04, z + 0.01), (0.014, 0.06, 0.012), SILVER)
-    # The scope on its rings, its lens at the front.
-    for x in (-0.05, 0.08):
-        p.box((x, -0.04, z), (0.02, 0.03, 0.03), BLACK)
-    p.box((0.02, -0.07, z), (0.34, 0.032, 0.034), SCOPE_BLACK)
-    p.box((0.19, -0.07, z), (0.06, 0.046, 0.046), SCOPE_BLACK)
-    p.box((0.222, -0.07, z), (0.004, 0.038, 0.038), LENS)
+    # The sights: a notch over the action, a bead at the muzzle.
+    p.box((0.12, -0.032, z), (0.03, 0.016, 0.022), BLACK)
+    p.box((0.90, -0.03, z), (0.04, 0.012, 0.012), BLACK)
+    p.box((0.905, -0.04, z), (0.008, 0.01, 0.008), BEAD)
     p.finish()
 
 

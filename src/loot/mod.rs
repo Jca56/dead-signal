@@ -104,9 +104,10 @@ pub enum Kind {
     RoundsAk,
     Bullpup,
     Rpk,
+    Sniper,
 }
 
-pub const ALL: [Kind; 56] = [
+pub const ALL: [Kind; 57] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -163,6 +164,7 @@ pub const ALL: [Kind; 56] = [
     Kind::RoundsAk,
     Kind::Bullpup,
     Kind::Rpk,
+    Kind::Sniper,
 ];
 
 impl Kind {
@@ -226,6 +228,7 @@ impl Kind {
             Kind::RoundsAk => "rounds_762x39",
             Kind::Bullpup => "bullpup",
             Kind::Rpk => "rpk",
+            Kind::Sniper => "sniper_rifle",
         }
     }
 
@@ -252,6 +255,7 @@ impl Kind {
             Kind::Ak47 => Some(Weapon::Ak47),
             Kind::Bullpup => Some(Weapon::Bullpup),
             Kind::Rpk => Some(Weapon::Rpk),
+            Kind::Sniper => Some(Weapon::Sniper),
             _ => None,
         }
     }
@@ -332,6 +336,7 @@ impl Kind {
             Kind::RoundsAk => d("7.62 ROUNDS", (1, 1), 30, Uncommon, 6, "ITEM_RoundsAk"),
             Kind::Bullpup => d("BULLPUP", (4, 1), 1, Legendary, 900, "ITEM_Bullpup"),
             Kind::Rpk => d("RPK", (5, 2), 1, Legendary, 1000, "ITEM_Rpk"),
+            Kind::Sniper => d("SNIPER RIFLE", (5, 1), 1, Legendary, 1200, "ITEM_Sniper"),
         }
     }
 }

@@ -47,6 +47,8 @@ pub enum Sfx {
     UziShot,
     AkShot,
     BullpupShot,
+    /// The sniper rifle's: the hunting rifle's crack, bigger, further.
+    SniperShot,
     /// Thrown things: a bottle bursting, what's in it catching, a fire
     /// crackling, a pipe bomb's beep, and its blast.
     Shatter,
@@ -152,7 +154,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 85] = [
+const ALL: [Sfx; 86] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -167,6 +169,7 @@ const ALL: [Sfx; 85] = [
     Sfx::UziShot,
     Sfx::AkShot,
     Sfx::BullpupShot,
+    Sfx::SniperShot,
     Sfx::Flame,
     Sfx::Shatter,
     Sfx::Ignite,

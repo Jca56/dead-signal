@@ -199,6 +199,7 @@ pub(super) const HUNTER_CABINET: &[Line] = &[
     (Kind::Bandolier, 6, (1, 1)),
     (Kind::Magnum, 4, (1, 1)),
     (Kind::Rounds44, 10, (6, 12)),
+    (Kind::Sniper, 2, (1, 1)),
 ];
 
 // A barn's: what the farm cut with, and what it ran on.
@@ -264,6 +265,7 @@ pub(super) const AMMO_CAGE: &[Line] = &[
     (Kind::RoundsAk, 18, (20, 30)),
     (Kind::Bullpup, 3, (1, 1)),
     (Kind::Rpk, 2, (1, 1)),
+    (Kind::Sniper, 2, (1, 1)),
 ];
 
 pub(super) const SOLDIER: &[Line] = &[
@@ -303,6 +305,7 @@ pub(super) const JUGGERNAUT: &[Line] = &[
     (Kind::Ak47, 4, (1, 1)),
     (Kind::RoundsAk, 8, (15, 30)),
     (Kind::Rpk, 2, (1, 1)),
+    (Kind::Sniper, 2, (1, 1)),
 ];
 
 // The gun store's: long guns on the wall, a gun more often than not

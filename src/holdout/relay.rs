@@ -107,6 +107,8 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(29, -14.0), 0, Face::N, Wares::Weapon(Item::Machete)),
         BuyAt(ns(-15, -13.0), 0, Face::W, Wares::Weapon(Item::FireAxe)),
         BuyAt(ew(-18, -32.25), 0, Face::S, Wares::Kit(Item::Bandage)),
+        // Up in the barracks' dorm, over the yard: the sniper rifle.
+        BuyAt(ew(-29, 27.333), 1, Face::S, Wares::Weapon(Item::Sniper)),
         BuyAt(ns(23, -25.25), 0, Face::E, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-9, 33.111), 0, Face::N, Wares::Kit(Item::Bandage)),
         // The motor pool's: a shotgun in its bay, the hunting rifle up on

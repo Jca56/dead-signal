@@ -1,10 +1,12 @@
 """The hunting rifle, built into the arms' mesh: a walnut stock in the
 right hand, a blued receiver and a long barrel, the forestock in the left
-hand, a 4× scope on two rings over the action, a bolt with its handle out
-to the right; a round the left hand carries to load it; the flash. Bones
-for its moving parts:
+hand, iron sights (a notch over the action, a bead on a ramp at the
+muzzle), a bolt with its handle out to the right; a round the left hand
+carries to load it; the flash. Its bolt and its clips are every
+bolt-action's (the sniper rifle's too, `sniper.py`: it gives its own
+measurements as a `Design`). Bones for its moving parts:
 
-    gun    the stock, receiver, barrel, scope; follows the right hand
+    gun    the stock, receiver, barrel, sights; follows the right hand
     bolt   the bolt and its handle: turned up about the barrel, drawn back
     round  a round in the left hand, only there while loading
     flash  a star at the muzzle, the frame a shot goes off
@@ -21,11 +23,12 @@ right hand leaves the stock to work the bolt:
     ReloadEnd    0.55 s the left hand back under it, the bolt closed
     Bash         0.6 s  a shove with the side of the gun, landing on
                         frame 8
-    Aim          3 s    shouldered, the scope to the eye
+    Aim          3 s    shouldered, the sights (or a scope) to the eye
     AimFire      1.1 s  the kick and the bolt from there
 """
 
 import math
+from dataclasses import dataclass
 
 import bpy
 from mathutils import Matrix, Vector
@@ -39,29 +42,64 @@ BLUED = (0.12, 0.13, 0.15)
 BLUED_DARK = (0.07, 0.07, 0.08)
 STEEL = (0.50, 0.50, 0.48)
 PAD = (0.06, 0.06, 0.06)
-SCOPE = (0.09, 0.09, 0.10)
-LENS = (0.22, 0.42, 0.52)
+DOT = (0.92, 0.91, 0.87)
+BEAD = (0.95, 0.45, 0.08)
 BRASS = (0.78, 0.60, 0.26)
 COPPER = (0.66, 0.36, 0.20)
 
 # Where things are, in the gun's frame, metres: the muzzle, the middle of
 # the forestock (where the left hand holds), the open action (where a
 # round goes in), the bolt's handle (its knob), how far the bolt draws
-# back, and how high the scope's middle stands (the sight line).
+# back, and how high the tops of its sights stand (the sight line).
 MUZZLE = Vector((0.0, 0.965, 0.045))
-FOREND = 0.38
 PORT = Vector((0.0, 0.09, 0.06))
 KNOB = Vector((0.06, 0.035, 0.03))
 BOLT_BACK = 0.075
 # (Turned this way about the barrel, the handle comes up.)
 BOLT_UP = -60.0
 BOLT_AXIS = Vector((0.0, 0.0, 0.05))
-SIGHT_LINE = 0.105
-# Where it's held at the hip, and how far ahead of the eye shouldered.
-HIP = Vector((0.11, 0.04, -0.15))
-AIM_DISTANCE = 0.17
 LEFT_SHOULDER = Vector((0.06, 0.15, 0.02))
 RIGHT_SHOULDER = Vector((0.0, 0.05, 0.0))
+
+
+@dataclass
+class Design:
+    """A bolt-action's measurements, in its own frame, metres: how far
+    down its barrel the left hand holds it, how high its sight line
+    stands, where it's held at the hip and how far ahead of the eye
+    shouldered, and how hard it kicks (degrees) from the hip and
+    shouldered."""
+    forend: float
+    sight_line: float
+    hip: Vector
+    aim_distance: float
+    kick: float
+    aim_kick: float
+
+
+D = Design(forend=0.38, sight_line=0.082, hip=Vector((0.11, 0.04, -0.15)), aim_distance=0.17, kick=14.0, aim_kick=8.0)
+FOREND = D.forend
+
+
+def action(b, to_rig, left):
+    """What every bolt-action has: the bolt (its body along the action,
+    the handle out to the right), and a round across the left palm.
+    Their bones (the caller adds `gun` and `flash`), and the way the
+    barrel runs."""
+    box(b, to_rig, Vector((0.0, 0.075, 0.05)), (0.02, 0.11, 0.02), STEEL, "bolt")
+    box(b, to_rig, Vector((0.035, 0.035, 0.042)), (0.05, 0.01, 0.01), STEEL, "bolt")
+    box(b, to_rig, KNOB, (0.02, 0.02, 0.02), BLUED_DARK, "bolt")
+    l_wrist, l_fwd, l_back = left
+    l_across = l_fwd.cross(l_back).normalized()
+    at = l_wrist + l_fwd * 0.06 - l_back * 0.03
+    cylinder(b, at, l_across, 0.006, 0.05, BRASS, "round")
+    cylinder(b, at + l_across * 0.033, l_across, 0.004, 0.016, COPPER, "round")
+    at_gun = lambda v: to_rig @ v  # noqa: E731
+    barrel = (to_rig.to_3x3() @ Vector((0.0, 1.0, 0.0))).normalized()
+    return {
+        "bolt": (at_gun(BOLT_AXIS + Vector((0.0, 0.02, 0.0))), at_gun(BOLT_AXIS + Vector((0.0, 0.12, 0.0))), "gun"),
+        "round": (at, at + l_across * 0.03, "hand.L"),
+    }, barrel
 
 
 def build(b, wrist, fwd, back, across, hand, left=None):
@@ -83,35 +121,20 @@ def build(b, wrist, fwd, back, across, hand, left=None):
     box(b, to_rig, Vector((0.0, FOREND - 0.02, 0.02)), (0.045, 0.34, 0.04), WALNUT, "gun")
     box(b, to_rig, Vector((0.0, FOREND + 0.13, 0.004)), (0.04, 0.02, 0.02), WALNUT_DARK, "gun")
     box(b, to_rig, Vector((0.0, 0.58, 0.045)), (0.02, 0.76, 0.02), BLUED, "gun")
-    # The scope on its rings: the tube, the bell at its front, the
-    # eyepiece at its back, a turret on top, the lens.
-    for y in (0.035, 0.165):
-        box(b, to_rig, Vector((0.0, y, 0.083)), (0.03, 0.02, 0.04), BLUED_DARK, "gun")
-    box(b, to_rig, Vector((0.0, 0.10, SIGHT_LINE)), (0.03, 0.30, 0.03), SCOPE, "gun")
-    box(b, to_rig, Vector((0.0, 0.27, SIGHT_LINE)), (0.044, 0.06, 0.044), SCOPE, "gun")
-    box(b, to_rig, Vector((0.0, -0.075, SIGHT_LINE)), (0.038, 0.05, 0.038), SCOPE, "gun")
-    box(b, to_rig, Vector((0.0, 0.10, SIGHT_LINE + 0.022)), (0.018, 0.018, 0.016), BLUED_DARK, "gun")
-    box(b, to_rig, Vector((0.0, 0.301, SIGHT_LINE)), (0.036, 0.004, 0.036), LENS, "gun")
-    # The bolt: its body along the action, the handle out to the right.
-    box(b, to_rig, Vector((0.0, 0.075, 0.05)), (0.02, 0.11, 0.02), STEEL, "bolt")
-    box(b, to_rig, Vector((0.035, 0.035, 0.042)), (0.05, 0.01, 0.01), STEEL, "bolt")
-    box(b, to_rig, KNOB, (0.02, 0.02, 0.02), BLUED_DARK, "bolt")
+    # The sights: a notch over the action (two ears, a white dot on each),
+    # a bead on its ramp at the muzzle; their tops make the sight line.
+    top = D.sight_line
+    box(b, to_rig, Vector((0.0, 0.215, 0.061)), (0.024, 0.03, 0.012), BLUED_DARK, "gun")
+    for side in (-1.0, 1.0):
+        box(b, to_rig, Vector((side * 0.0075, 0.205, top - 0.008)), (0.007, 0.008, 0.016), BLUED_DARK, "gun")
+        box(b, to_rig, Vector((side * 0.0075, 0.2004, top - 0.005)), (0.0035, 0.0012, 0.0035), DOT, "gun")
+    box(b, to_rig, Vector((0.0, 0.925, 0.06)), (0.012, 0.05, 0.012), BLUED_DARK, "gun")
+    box(b, to_rig, Vector((0.0, 0.93, top - 0.008)), (0.005, 0.005, 0.016), BLUED_DARK, "gun")
+    box(b, to_rig, Vector((0.0, 0.9295, top - 0.0015)), (0.005, 0.005, 0.005), BEAD, "gun")
     flash(b, to_rig, "flash", MUZZLE, 1.4)
-
-    # A round across the left palm, under the knuckles.
-    l_wrist, l_fwd, l_back = left
-    l_across = l_fwd.cross(l_back).normalized()
-    at = l_wrist + l_fwd * 0.06 - l_back * 0.03
-    cylinder(b, at, l_across, 0.006, 0.05, BRASS, "round")
-    cylinder(b, at + l_across * 0.033, l_across, 0.004, 0.016, COPPER, "round")
-
-    at_gun = lambda v: to_rig @ v  # noqa: E731
-    bones = {
-        "gun": (origin, origin + barrel * 0.08, hand),
-        "bolt": (at_gun(BOLT_AXIS + Vector((0.0, 0.02, 0.0))), at_gun(BOLT_AXIS + Vector((0.0, 0.12, 0.0))), "gun"),
-        "flash": (at_gun(MUZZLE), at_gun(MUZZLE) + barrel * 0.04, "gun"),
-        "round": (at, at + l_across * 0.03, "hand.L"),
-    }
+    bones, barrel = action(b, to_rig, left)
+    bones["gun"] = (origin, origin + barrel * 0.08, hand)
+    bones["flash"] = (to_rig @ MUZZLE, to_rig @ MUZZLE + barrel * 0.04, "gun")
     return bones, (origin, right, barrel, up)
 
 
@@ -135,8 +158,9 @@ def loading(gun, dx=0.0, dy=0.0, dz=0.0):
     return wrist, fwd, back
 
 
-def animate(rig, gun_rest, left_rest):
-    """Every clip, posed and baked; their names."""
+def animate(rig, gun_rest, left_rest, d=D):
+    """Every clip, posed and baked; their names (for a bolt-action of
+    measurements `d`: this one's, if none are given)."""
     r = poses.Rig(rig, gun_rest, left_rest)
     r.add_ik()
     bpy.context.view_layer.objects.active = rig
@@ -157,13 +181,13 @@ def animate(rig, gun_rest, left_rest):
         poses.shoulder(rig, "upper_arm.R", frame, RIGHT_SHOULDER)
 
     def hip(offset=Vector(), pitch=0.0, roll=0.0, yaw=0.0):
-        return poses.gun_pose(offset, pitch, roll, yaw, grip=HIP)
+        return poses.gun_pose(offset, pitch, roll, yaw, grip=d.hip)
 
     def aimed(offset=Vector(), pitch=0.0):
-        return poses.aim_pose(SIGHT_LINE, AIM_DISTANCE, offset, pitch)
+        return poses.aim_pose(d.sight_line, d.aim_distance, offset, pitch)
 
     def held(g):
-        return poses.forend(g, FOREND)
+        return poses.forend(g, d.forend)
 
     spans = {}
     base = hip()
@@ -198,7 +222,7 @@ def animate(rig, gun_rest, left_rest):
             steady(start + f, flash=fl, back=back, up=up)
 
     # Fire: frames 101..134.
-    fire(101, lambda o, p: hip(o, pitch=p), base, 14.0)
+    fire(101, lambda o, p: hip(o, pitch=p), base, d.kick)
     spans["Fire"] = (101, 134)
 
     # ReloadStart: frames 201..216: the bolt opened, the left hand down.
@@ -267,7 +291,7 @@ def animate(rig, gun_rest, left_rest):
     spans["Aim"] = (start, start + 90)
 
     # AimFire: frames 701..734.
-    fire(701, lambda o, p: aimed(o, p), up, 8.0)
+    fire(701, lambda o, p: aimed(o, p), up, d.aim_kick)
     spans["AimFire"] = (701, 734)
 
     # The flash pops for one frame, and a round is there or it isn't.

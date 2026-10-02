@@ -159,6 +159,7 @@ Decided 2026-10-02: six more guns, some on HOLDOUT's walls and the best only in 
 - [x] The dead leave rounds only for guns carried (`holdout/drops.rs::Wanted`), and rarely a Molotov or a pipe bomb; both are on walls too (the motor pool's workshop, the barracks' kitchen).
 - [x] All six in the mystery drop's odds; in extraction's loot tables too (gun cabinets, the police armory, the ammo cage, a Juggernaut).
 - [x] The walls redone: the pistol and the .45 where a holdout starts; the shotgun, the SMG and the Mini Uzi (and the .45 again) each in two places about the middle; the hunting rifle (the motor pool's mezzanine), the assault rifle (the broadcast floor) and the AK (the bunker's armory) once each, deep in. The LMG and the flamethrower are off the walls: a mystery drop's, with the Magnum, the bullpup and the RPK. No ammo bench: ammo's plentiful enough (an ammo drop, the dead, the hounds, a Juggernaut).
+- [x] The sniper rifle (`assets/blender/sniper.py`): the hunting rifle's .308 from a heavy barrel under a 6× scope, 320 a round through one of the dead and three behind it, hopeless from the hip; on the wall up in the barracks' dorm (2000). And the hunting rifle's scope is off: iron sights (`rifle.py` is now every bolt-action's kit).
 
 
 ---

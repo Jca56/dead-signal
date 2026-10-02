@@ -311,7 +311,7 @@ fn the_rifle_works_its_bolt_after_a_shot_and_to_load() {
 #[test]
 fn only_a_scoped_gun_goes_to_its_scope_and_only_at_the_last() {
     let mut r = Hands { spare: 10, ..Hands::default() };
-    r.take_up(Some(Slot::Primary), Weapon::Rifle, 5);
+    r.take_up(Some(Slot::Primary), Weapon::Sniper, 5);
     idle(&mut r);
     let mut seen_half = false;
     for _ in 0..60 {

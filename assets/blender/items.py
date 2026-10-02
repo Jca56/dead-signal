@@ -293,6 +293,7 @@ def main():
     items_more.rounds_ak()
     items_more.bullpup()
     items_more.rpk()
+    items_more.sniper()
     items_throw.molotov()
     items_throw.pipe_bomb()
     items_gear.all_gear()

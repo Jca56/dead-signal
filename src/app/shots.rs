@@ -29,6 +29,8 @@
 //! stim's injector in their arm, every stim in their blood, and their
 //! own HUD drawn over the picture. `GUN=<save key>` (`ak47`, `magnum_44`):
 //! that gun in hand (and, with `BUDDY=gun`, in the second player's).
+//! `AIM=1`: its sights up (and the player's own HUD drawn: a scope's
+//! lens).
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -106,6 +108,8 @@ const SHOTS: &[Shot] = &[
     Shot("wall_shed", -27.4, -24.0, 0, 90.0, 0.0),
     Shot("wall_molotov", -59.0, 25.6, 0, 180.0, 0.0),
     Shot("wall_pipe_bomb", 42.0, -23.4, 0, 180.0, 0.0),
+    // The sniper rifle, up in the barracks' dorm.
+    Shot("wall_sniper", 27.3, -25.6, 1, 0.0, 0.0),
 ];
 
 impl DeadSignal {
@@ -318,7 +322,7 @@ impl DeadSignal {
             }
             // (Their hands come up, as in a run: the last quarter second
             // of it the trigger's pulled, `firing`.)
-            let trigger = crate::weapon::Trigger { fire: firing && k == 86, ..Default::default() };
+            let trigger = crate::weapon::Trigger { fire: firing && k == 86, aim: std::env::var("AIM").is_ok(), ..Default::default() };
             self.combat.update(1.0 / 60.0);
             self.combat.frame(&mut self.game, 0, trigger, 1.0 / 60.0, &mut crate::stats::Stats::default());
             // (The radio out, asked for: the gun put away for it, and
@@ -363,7 +367,7 @@ impl DeadSignal {
             self.render(&mut cx);
             graph.execute(gpu, &mut pool, &mut encoder);
         }
-        let stim = std::env::var("STIM").is_ok();
+        let stim = std::env::var("STIM").is_ok() || std::env::var("AIM").is_ok();
         if let (Some(seat), (over, images)) = (self.run.seats.first().filter(|s| s.radio_out() || stim), over) {
             let holdout = self.run.holdout.as_ref();
             let (game, combat) = (&mut self.game, &self.combat);

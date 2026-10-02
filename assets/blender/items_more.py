@@ -1,6 +1,6 @@
 """More guns that can be carried, and their rounds (ITEM_Pistol45,
 ITEM_Rounds45, ITEM_Magnum, ITEM_Rounds44, ITEM_Uzi, ITEM_Ak,
-ITEM_RoundsAk, ITEM_Bullpup, ITEM_Rpk), for `items.py` to write with the
+ITEM_RoundsAk, ITEM_Bullpup, ITEM_Rpk, ITEM_Sniper), for `items.py` to write with the
 rest: each gun lying on its side, muzzle along +X, its underside towards
 the front.
 """
@@ -218,4 +218,40 @@ def rpk():
     p.box((0.075, 0.125, z), (0.13, 0.13, 0.062), COVER)
     p.box((0.075, 0.125, z), (0.094, 0.094, 0.064), BLACK, turn=0.785)
     p.box((0.075, 0.125, z), (0.03, 0.03, 0.068), SILVER)
+    p.finish()
+
+
+STOCK = (0.16, 0.19, 0.15)
+STOCK_DARK = (0.10, 0.12, 0.10)
+
+
+def sniper():
+    """A sniper rifle lying on its side, muzzle along +X: a dark synthetic
+    stock, a heavy barrel with a brake on it, a bipod folded back, and a
+    long scope away from the eye."""
+    p = Part("ITEM_Sniper")
+    z = 0.028
+    # The stock (its comb raised, its pad), the wrist, the receiver, the
+    # fore end, the barrel and its brake.
+    p.box((-0.40, 0.03, z), (0.36, 0.085, 0.046), STOCK, turn=0.08)
+    p.box((-0.36, -0.02, z), (0.18, 0.02, 0.036), STOCK_DARK)
+    p.box((-0.585, 0.044, z), (0.024, 0.115, 0.048), BLACK, turn=0.08)
+    p.box((-0.15, 0.02, z), (0.14, 0.055, 0.042), STOCK, turn=0.3)
+    p.box((0.02, 0.0, z), (0.24, 0.05, 0.044), BLUED)
+    p.box((0.30, 0.014, z), (0.36, 0.046, 0.05), STOCK)
+    p.box((0.66, -0.012, z), (0.80, 0.026, 0.026), BLUED)
+    p.box((1.05, -0.012, z), (0.06, 0.03, 0.036), SILVER)
+    # The bolt's handle, the bipod folded back.
+    p.box((-0.03, 0.04, z + 0.012), (0.014, 0.06, 0.012), SILVER)
+    for dz in (-0.016, 0.016):
+        p.box((0.40, 0.045, z + dz), (0.24, 0.008, 0.008), SILVER)
+    # The scope on its rings: its tube, its bell, its eyepiece, a turret,
+    # the lens.
+    for x in (-0.05, 0.11):
+        p.box((x, -0.042, z), (0.02, 0.034, 0.032), BLACK)
+    p.box((0.03, -0.078, z), (0.40, 0.034, 0.036), SCOPE_BLACK)
+    p.box((0.25, -0.078, z), (0.09, 0.054, 0.054), SCOPE_BLACK)
+    p.box((-0.16, -0.078, z), (0.06, 0.042, 0.042), SCOPE_BLACK)
+    p.box((0.03, -0.102, z), (0.02, 0.018, 0.02), BLACK)
+    p.box((0.297, -0.078, z), (0.004, 0.046, 0.046), LENS)
     p.finish()

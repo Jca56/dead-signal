@@ -28,13 +28,14 @@ pub enum Weapon {
     Ak47,
     Bullpup,
     Rpk,
+    Sniper,
     Knife,
     Machete,
     Axe,
 }
 
 impl Weapon {
-    pub const ALL: [Weapon; 17] = [
+    pub const ALL: [Weapon; 18] = [
         Weapon::Fists,
         Weapon::Pistol,
         Weapon::Shotgun,
@@ -49,6 +50,7 @@ impl Weapon {
         Weapon::Ak47,
         Weapon::Bullpup,
         Weapon::Rpk,
+        Weapon::Sniper,
         Weapon::Knife,
         Weapon::Machete,
         Weapon::Axe,
@@ -249,6 +251,7 @@ impl Weapon {
             Weapon::Ak47 => &long::AK47,
             Weapon::Bullpup => &long::BULLPUP,
             Weapon::Rpk => &long::RPK,
+            Weapon::Sniper => &long::SNIPER,
             Weapon::Knife => &KNIFE,
             Weapon::Machete => &MACHETE,
             Weapon::Axe => &AXE,
