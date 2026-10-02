@@ -15,7 +15,7 @@ use crate::world::{Clock, Look, Model, OnMap, Placed};
 /// it reaches.
 const ROOM: ([f32; 3], f64) = ([0.60, 0.50, 0.34], 9.0);
 const BUNKER: ([f32; 3], f64) = ([0.62, 0.09, 0.06], 9.5);
-const FLOOD: ([f32; 3], f64) = ([0.95, 0.58, 0.28], 14.0);
+const FLOOD: ([f32; 3], f64) = ([0.95, 0.58, 0.28], 19.0);
 /// A lamp hung high (over a room two storeys tall) reaches this much
 /// further, and is this much brighter.
 const HIGH: (f64, f32) = (1.7, 1.7);

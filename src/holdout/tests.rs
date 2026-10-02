@@ -338,13 +338,13 @@ fn reach_the_player_at(at: Vec3, seconds: f64) -> usize {
 
 #[test]
 fn out_in_the_yard_by_the_mast_they_come_for_the_player_round_everything_in_it() {
-    let got = reach_the_player_at(Vec3::new(0.5, 0.0, 12.5), 60.0);
+    let got = reach_the_player_at(Vec3::new(0.5, 0.0, 18.5), 60.0);
     assert!(got >= 2, "only {got} got to the player in the yard");
 }
 
 #[test]
 fn up_in_the_bunkhouse_dorm_they_come_for_the_player_up_the_stairs() {
-    let got = reach_the_player_at(Vec3::new(20.5, 0.25 + crate::map::building::plan::STOREY, -12.5), 60.0);
+    let got = reach_the_player_at(Vec3::new(30.5, 0.25 + crate::map::building::plan::STOREY, -19.5), 60.0);
     assert!(got >= 2, "only {got} got up to the dorm");
 }
 
@@ -355,19 +355,19 @@ fn indoors(x: f64, z: f64, level: i8) -> Vec3 {
 
 #[test]
 fn up_on_the_motor_pools_mezzanine_they_come_for_the_player_up_its_stairs() {
-    let got = reach_the_player_at(indoors(-37.0, 15.0, 1), 90.0);
+    let got = reach_the_player_at(indoors(-56.0, 23.0, 1), 90.0);
     assert!(got >= 2, "only {got} got up to the mezzanine");
 }
 
 #[test]
 fn up_in_the_stations_studio_they_come_for_the_player() {
-    let got = reach_the_player_at(indoors(41.0, 15.0, 1), 90.0);
+    let got = reach_the_player_at(indoors(62.0, 23.0, 1), 90.0);
     assert!(got >= 2, "only {got} got up to the studio");
 }
 
 #[test]
 fn down_in_the_bunker_they_come_for_the_player_by_the_stairs_alone() {
-    let got = reach_the_player_at(indoors(41.0, 9.0, -1), 90.0);
+    let got = reach_the_player_at(indoors(62.0, 14.0, -1), 90.0);
     assert!(got >= 2, "only {got} got down to the ops room");
     // There's no way in under the ground: every one of them came down
     // the stairs.
@@ -379,7 +379,7 @@ fn down_in_the_bunker_they_come_for_the_player_by_the_stairs_alone() {
 
 #[test]
 fn out_in_the_lots_either_side_they_come_for_the_player() {
-    for (what, at) in [("the west lot", Vec3::new(-36.5, 0.0, -10.5)), ("the east court", Vec3::new(45.5, 0.0, -11.5))] {
+    for (what, at) in [("the west lot", Vec3::new(-55.5, 0.0, -16.5)), ("the east court", Vec3::new(68.5, 0.0, -17.5))] {
         let got = reach_the_player_at(at, 60.0);
         assert!(got >= 2, "only {got} got to the player in {what}");
     }

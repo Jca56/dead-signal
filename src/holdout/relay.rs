@@ -4,20 +4,20 @@
 //! that came for them wrecked in the yard. Then the broadcast went dead.
 //!
 //! ```text
-//!     x -50          -24      -10      8  12            36          54
-//! z -19 +-------------+---+----+--------+--+-------------+-----------+
+//!     x -75          -36      -15     12  18            54          81
+//! z -29 +-------------+---+----+--------+--+-------------+-----------+
 //!       |             |SHD|    | EQUIP. |al|  BARRACKS   |           |
 //!       |  WEST LOT   +---+PEN |CONTROL |le|  (the dorm  | EAST COURT|
 //!       |             |        +--------+y |   upstairs) |           |
-//! z  -6 |             +==heap==+           +------+------+           |
-//! z  -3 +-----[  ]----+                           #   .   .   .   .  |
-//!       |             |                           +-----------[  ]---+ z -1
+//! z  -9 |             +==heap==+           +------+------+           |
+//! z  -5 +-----[  ]----+                           #   .   .   .   .  |
+//!       |             |                           +-----------[  ]---+ z -2
 //!       | MOTOR POOL [ ]       THE YARD          [ ] STATION HOUSE   |
 //!       | (the bay,   |       (the mast)          | (the broadcast   |
 //!       |  two storeys|                           |  floor upstairs, |
 //!       +------+------+                           |  the bunker      |
 //!       | WORK | PARTS|                the chopper|  under it)       |
-//! z  19 +------+------+--------[ gate ]-----------+------------------+
+//! z  29 +------+------+--------[ gate ]-----------+------------------+
 //! ```
 //!
 //! The control room is the start: two windows on the woods, the pistol
@@ -63,190 +63,190 @@ const HEAP: f64 = 2.4;
 
 pub const RELAY_STATION: Layout = Layout {
     zones: &["CONTROL ROOM", "EQUIPMENT ROOM", "THE YARD", "GENERATOR PEN", "BARRACKS", "MOTOR POOL", "WEST LOT", "EAST COURT", "STATION HOUSE", "BROADCAST FLOOR", "THE BUNKER"],
-    start: (3.0, -15.0, 0.0),
-    bounds: (-50, -19, 54, 19),
+    start: (4.5, -23.0, 0.0),
+    bounds: (-75, -29, 81, 29),
     houses: &[core::TRANSMITTER, core::SHED, core::BARRACKS_BLOCK, wings::MOTOR_POOL, wings::STATION_HOUSE],
     runs: &[
         // The compound's wall, between the buildings on its north side and
         // round its corners: holes for the dead, the gate on the road.
-        Run { along_x: true, at: -19, from: -50, to: -24, build: Build::Perimeter, gaps: &[Gap::Hole(-37.0)] },
-        Run { along_x: true, at: -19, from: -16, to: -10, build: Build::Perimeter, gaps: &[Gap::Hole(-13.0)] },
-        Run { along_x: true, at: -19, from: 8, to: 12, build: Build::Perimeter, gaps: &[Gap::Hole(10.0)] },
-        Run { along_x: true, at: -19, from: 36, to: 54, build: Build::Perimeter, gaps: &[Gap::Hole(45.0)] },
-        Run { along_x: false, at: -50, from: -19, to: -3, build: Build::Perimeter, gaps: &[Gap::Hole(-11.0)] },
-        Run { along_x: false, at: 54, from: -19, to: -1, build: Build::Perimeter, gaps: &[Gap::Hole(-10.0)] },
-        Run { along_x: true, at: 19, from: -24, to: 24, build: Build::Perimeter, gaps: &[Gap::Hole(-15.0), Gap::Gate(0.0, 6.0), Gap::Hole(15.0)] },
+        Run { along_x: true, at: -29, from: -75, to: -36, build: Build::Perimeter, gaps: &[Gap::Hole(-56.0)] },
+        Run { along_x: true, at: -29, from: -24, to: -15, build: Build::Perimeter, gaps: &[Gap::Hole(-20.0)] },
+        Run { along_x: true, at: -29, from: 12, to: 18, build: Build::Perimeter, gaps: &[Gap::Hole(15.0)] },
+        Run { along_x: true, at: -29, from: 54, to: 81, build: Build::Perimeter, gaps: &[Gap::Hole(68.0)] },
+        Run { along_x: false, at: -75, from: -29, to: -5, build: Build::Perimeter, gaps: &[Gap::Hole(-17.0)] },
+        Run { along_x: false, at: 81, from: -29, to: -2, build: Build::Perimeter, gaps: &[Gap::Hole(-16.0)] },
+        Run { along_x: true, at: 29, from: -36, to: 36, build: Build::Perimeter, gaps: &[Gap::Hole(-23.0), Gap::Gate(0.0, 6.0), Gap::Hole(23.0)] },
         // The generator pen's walls, heaped shut from the yard and from the
         // west lot.
-        Run { along_x: true, at: -6, from: -24, to: -10, build: Build::Inner, gaps: &[Gap::Heap(-17.5, HEAP, 1000)] },
-        Run { along_x: false, at: -10, from: -11, to: -6, build: Build::Inner, gaps: &[] },
-        Run { along_x: false, at: -24, from: -12, to: -3, build: Build::Inner, gaps: &[Gap::Heap(-9.0, HEAP, 1000)] },
+        Run { along_x: true, at: -9, from: -36, to: -15, build: Build::Inner, gaps: &[Gap::Heap(-25.5, HEAP, 1000)] },
+        Run { along_x: false, at: -15, from: -17, to: -9, build: Build::Inner, gaps: &[] },
+        Run { along_x: false, at: -36, from: -18, to: -5, build: Build::Inner, gaps: &[Gap::Heap(-14.0, HEAP, 1000)] },
         // The east court's, heaped shut from the yard.
-        Run { along_x: false, at: 24, from: -6, to: -1, build: Build::Inner, gaps: &[Gap::Heap(-3.5, HEAP, 1250)] },
+        Run { along_x: false, at: 36, from: -9, to: -2, build: Build::Inner, gaps: &[Gap::Heap(-5.5, HEAP, 1250)] },
     ],
     yards: &[
-        Yard(-24, -19, -10, -6, PEN),
-        Yard(-50, -19, -24, -3, WEST_LOT),
-        Yard(36, -19, 54, -6, EAST_COURT),
-        Yard(24, -6, 54, -1, EAST_COURT),
-        Yard(-24, -19, 24, 19, YARD),
+        Yard(-36, -29, -15, -9, PEN),
+        Yard(-75, -29, -36, -5, WEST_LOT),
+        Yard(54, -29, 81, -9, EAST_COURT),
+        Yard(36, -9, 81, -2, EAST_COURT),
+        Yard(-36, -29, 36, 29, YARD),
     ],
     buys: &[
         // The old station's.
-        BuyAt(ns(8, -12.5), 0, Face::W, Wares::Weapon(Item::Rifle)),
-        BuyAt(ew(-19, 3.0), 0, Face::S, Wares::Weapon(Item::Pistol)),
-        BuyAt(ns(-2, -17.5), 0, Face::E, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(-19, -8.0), 0, Face::S, Wares::Weapon(Item::Smg)),
-        BuyAt(ew(-11, -3.5), 0, Face::N, Wares::Kit(Item::Medkit)),
-        BuyAt(ew(-11, -1.0), 0, Face::S, Wares::Weapon(Item::Shotgun)),
-        BuyAt(ew(19, -9.0), 0, Face::N, Wares::Weapon(Item::Machete)),
-        BuyAt(ns(-10, -8.5), 0, Face::W, Wares::Weapon(Item::FireAxe)),
-        BuyAt(ew(-12, -21.5), 0, Face::S, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(-19, 18.0), 1, Face::S, Wares::Weapon(Item::AssaultRifle)),
-        BuyAt(ns(15, -16.5), 0, Face::E, Wares::Kit(Item::Medkit)),
-        BuyAt(ew(-6, 22.0), 0, Face::N, Wares::Kit(Item::Bandage)),
+        BuyAt(ns(12, -19.5), 0, Face::W, Wares::Weapon(Item::Rifle)),
+        BuyAt(ew(-29, 4.5), 0, Face::S, Wares::Weapon(Item::Pistol)),
+        BuyAt(ns(-3, -27.5), 0, Face::E, Wares::Kit(Item::Bandage)),
+        BuyAt(ew(-29, -12.0), 0, Face::S, Wares::Weapon(Item::Smg)),
+        BuyAt(ew(-17, -4.5), 0, Face::N, Wares::Kit(Item::Medkit)),
+        BuyAt(ew(-17, -2.0), 0, Face::S, Wares::Weapon(Item::Shotgun)),
+        BuyAt(ew(29, -14.0), 0, Face::N, Wares::Weapon(Item::Machete)),
+        BuyAt(ns(-15, -13.0), 0, Face::W, Wares::Weapon(Item::FireAxe)),
+        BuyAt(ew(-18, -32.25), 0, Face::S, Wares::Kit(Item::Bandage)),
+        BuyAt(ew(-29, 27.333), 1, Face::S, Wares::Weapon(Item::AssaultRifle)),
+        BuyAt(ns(23, -25.25), 0, Face::E, Wares::Kit(Item::Medkit)),
+        BuyAt(ew(-9, 33.111), 0, Face::N, Wares::Kit(Item::Bandage)),
         // The motor pool's, the flamethrower in its parts store, the rifle
         // up on its mezzanine; the west lot's, on the motor pool's wall.
-        BuyAt(ew(-3, -44.0), 0, Face::S, Wares::Weapon(Item::Shotgun)),
-        BuyAt(ew(12, -40.0), 0, Face::S, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(19, -26.0), 0, Face::N, Wares::Kit(Item::Medkit)),
-        BuyAt(ns(-24, 15.5), 0, Face::W, Wares::Weapon(Item::Flamethrower)),
-        BuyAt(ew(19, -30.0), 1, Face::N, Wares::Weapon(Item::Rifle)),
-        BuyAt(ew(-3, -31.0), 0, Face::N, Wares::Kit(Item::Medkit)),
+        BuyAt(ew(-5, -66.231), 0, Face::S, Wares::Weapon(Item::Shotgun)),
+        BuyAt(ew(18, -60.385), 0, Face::S, Wares::Kit(Item::Bandage)),
+        BuyAt(ew(29, -39.077), 0, Face::N, Wares::Kit(Item::Medkit)),
+        BuyAt(ns(-36, 23.75), 0, Face::W, Wares::Weapon(Item::Flamethrower)),
+        BuyAt(ew(29, -45.231), 1, Face::N, Wares::Weapon(Item::Rifle)),
+        BuyAt(ew(-5, -46.769), 0, Face::N, Wares::Kit(Item::Medkit)),
         // The east court's, on the compound's wall.
-        BuyAt(ns(54, -15.0), 0, Face::W, Wares::Weapon(Item::Rifle)),
+        BuyAt(ns(81, -23.0), 0, Face::W, Wares::Weapon(Item::Rifle)),
         // The station house's: its lobby, its corridor, its newsroom, its
         // rear hall; upstairs, the studio and the booth.
-        BuyAt(ns(32, 3.0), 0, Face::W, Wares::Weapon(Item::Smg)),
-        BuyAt(ew(7, 41.0), 0, Face::S, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(19, 41.0), 0, Face::N, Wares::Weapon(Item::Shotgun)),
-        BuyAt(ns(50, 11.5), 0, Face::E, Wares::Kit(Item::Medkit)),
-        BuyAt(ew(19, 41.0), 1, Face::N, Wares::Weapon(Item::AssaultRifle)),
-        BuyAt(ns(41, 1.0), 1, Face::W, Wares::Kit(Item::Medkit)),
+        BuyAt(ns(48, 4.667), 0, Face::W, Wares::Weapon(Item::Smg)),
+        BuyAt(ew(11, 62.0), 0, Face::S, Wares::Kit(Item::Bandage)),
+        BuyAt(ew(29, 62.0), 0, Face::N, Wares::Weapon(Item::Shotgun)),
+        BuyAt(ns(75, 17.5), 0, Face::E, Wares::Kit(Item::Medkit)),
+        BuyAt(ew(29, 62.0), 1, Face::N, Wares::Weapon(Item::AssaultRifle)),
+        BuyAt(ns(62, 1.333), 1, Face::W, Wares::Kit(Item::Medkit)),
         // The bunker's: the armory (the LMG), the ops room, the bunk room.
-        BuyAt(ew(19, 36.5), -1, Face::N, Wares::Weapon(Item::Lmg)),
-        BuyAt(ew(13, 41.0), -1, Face::N, Wares::Kit(Item::Medkit)),
-        BuyAt(ew(-1, 36.5), -1, Face::S, Wares::Kit(Item::Bandage)),
+        BuyAt(ew(29, 54.5), -1, Face::N, Wares::Weapon(Item::Lmg)),
+        BuyAt(ew(20, 62.0), -1, Face::N, Wares::Kit(Item::Medkit)),
+        BuyAt(ew(-2, 54.5), -1, Face::S, Wares::Kit(Item::Bandage)),
         // And in the ops room, between its doors: the Amplifier.
-        BuyAt(ew(5, 41.0), -1, Face::S, Wares::Amplifier),
+        BuyAt(ew(8, 62.0), -1, Face::S, Wares::Amplifier),
         // Armor: a bike helmet in the control room, a vest on the
         // transmitter's wall on the yard, the army's helmet in its mess
         // hall, and its plate carrier down in the armory; plates to mend
         // them by the gate, in the motor pool's bay and the station's lobby.
-        BuyAt(ns(-2, -12.0), 0, Face::E, Wares::Gear(Item::BikeHelmet)),
-        BuyAt(ew(-11, -8.5), 0, Face::S, Wares::Gear(Item::LightVest)),
-        BuyAt(ew(-19, 23.5), 0, Face::S, Wares::Gear(Item::MilitaryHelmet)),
-        BuyAt(ns(32, 16.0), -1, Face::E, Wares::Gear(Item::PlateCarrier)),
-        BuyAt(ew(19, 9.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
-        BuyAt(ns(-24, 0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
-        BuyAt(ns(32, 15.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
+        BuyAt(ns(-3, -18.0), 0, Face::E, Wares::Gear(Item::BikeHelmet)),
+        BuyAt(ew(-17, -13.5), 0, Face::S, Wares::Gear(Item::LightVest)),
+        BuyAt(ew(-29, 35.5), 0, Face::S, Wares::Gear(Item::MilitaryHelmet)),
+        BuyAt(ns(48, 24.5), -1, Face::E, Wares::Gear(Item::PlateCarrier)),
+        BuyAt(ew(29, 13.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
+        BuyAt(ns(-36, -0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
+        BuyAt(ns(48, 23.75), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
     ],
     // The way to the Amplifier: on the station house by its doors on the
     // yard, in its lobby over the flight down, and at the foot of that by
     // the blast door.
-    signs: &[SignAt(ns(24, 7.0), 0, Face::W, Way::Right), SignAt(ew(19, 26.0), 0, Face::N, Way::Down), SignAt(ns(32, 11.5), -1, Face::W, Way::Left)],
+    signs: &[SignAt(ns(36, 11.0), 0, Face::W, Way::Right), SignAt(ew(29, 39.0), 0, Face::N, Way::Down), SignAt(ns(48, 17.5), -1, Face::W, Way::Left)],
     // Floods: over the transmitter's doors on the yard, either side of the
     // gate, on the motor pool and the station house where they face the
     // yard, on the barracks' wall, and one each out in the lots.
     floods: &[
-        FloodAt(3.5, -10.6, 3.0),
-        FloodAt(-6.5, -10.6, 3.0),
-        FloodAt(-5.0, 18.4, 3.2),
-        FloodAt(5.0, 18.4, 3.2),
-        FloodAt(-23.6, 5.5, 3.6),
-        FloodAt(23.6, 9.0, 3.4),
-        FloodAt(19.5, -5.6, 3.0),
-        FloodAt(-37.0, -3.4, 3.4),
-        FloodAt(45.0, -1.4, 3.4),
+        FloodAt(5.25, -16.6, 3.0),
+        FloodAt(-9.75, -16.6, 3.0),
+        FloodAt(-7.5, 28.4, 3.2),
+        FloodAt(7.5, 28.4, 3.2),
+        FloodAt(-35.6, 8.5, 3.6),
+        FloodAt(35.6, 14.0, 3.4),
+        FloodAt(29.5, -8.6, 3.0),
+        FloodAt(-56.0, -5.4, 3.4),
+        FloodAt(68.0, -2.4, 3.4),
     ],
     props: &[
-        Prop::Tower(0.0, 4.0),
+        Prop::Tower(0.0, 7.0),
         // The army's last stand: the checkpoint at the gate, their tents,
         // their supplies.
-        Prop::Fixture(Fixture::Sandbags, -6.0, 15.0, 180.0),
-        Prop::Fixture(Fixture::Sandbags, 6.0, 15.0, 180.0),
-        Prop::Fixture(Fixture::Sandbags, -8.4, 12.6, 270.0),
-        Prop::Fixture(Fixture::CommandTent, -16.0, 2.0, 90.0),
-        Prop::Fixture(Fixture::Tent, -18.0, 12.0, 90.0),
-        Prop::Fixture(Fixture::Sandbags, -12.5, 9.0, 90.0),
-        Prop::Thing(Source::Crate, -12.0, -1.5, 10.0, 3.0),
-        Prop::Thing(Source::SupplyCase, -11.5, 0.3, 95.0, 3.0),
-        Prop::Thing(Source::Crate, -20.5, 15.8, 0.0, 3.0),
-        Prop::Thing(Source::Car, -9.0, 6.0, 350.0, 3.0),
+        Prop::Fixture(Fixture::Sandbags, -7.0, 24.0, 180.0),
+        Prop::Fixture(Fixture::Sandbags, 7.0, 24.0, 180.0),
+        Prop::Fixture(Fixture::Sandbags, -9.4, 21.6, 270.0),
+        Prop::Fixture(Fixture::CommandTent, -24.0, 3.0, 90.0),
+        Prop::Fixture(Fixture::Tent, -27.0, 18.0, 90.0),
+        Prop::Fixture(Fixture::Sandbags, -18.75, 14.0, 90.0),
+        Prop::Thing(Source::Crate, -18.0, -2.5, 10.0, 3.0),
+        Prop::Thing(Source::SupplyCase, -17.5, -0.7, 95.0, 3.0),
+        Prop::Thing(Source::Crate, -30.75, 24.2, 0.0, 3.0),
+        Prop::Thing(Source::Car, -14.0, 9.0, 350.0, 3.0),
         // The chopper that came for them.
-        Prop::Fixture(Fixture::HeliFront, 16.0, 10.0, 60.0),
-        Prop::Fixture(Fixture::HeliRear, 13.0, 14.5, 70.0),
-        Prop::Fixture(Fixture::HeliTail, 19.5, 15.5, 100.0),
-        Prop::Fixture(Fixture::Rotor, 9.0, 8.0, 30.0),
-        Prop::Fixture(Fixture::Rotor, 20.5, 3.0, 150.0),
-        Prop::Thing(Source::SupplyCase, 14.0, 6.5, 40.0, 3.0),
-        Prop::Thing(Source::SupplyCase, 11.5, 10.0, 200.0, 3.0),
+        Prop::Fixture(Fixture::HeliFront, 24.0, 16.0, 60.0),
+        Prop::Fixture(Fixture::HeliRear, 19.0, 21.5, 70.0),
+        Prop::Fixture(Fixture::HeliTail, 29.5, 23.75, 100.0),
+        Prop::Fixture(Fixture::Rotor, 13.0, 12.0, 30.0),
+        Prop::Fixture(Fixture::Rotor, 31.0, 4.5, 150.0),
+        Prop::Thing(Source::SupplyCase, 22.0, 10.5, 40.0, 3.0),
+        Prop::Thing(Source::SupplyCase, 17.5, 16.0, 200.0, 3.0),
         // The pen: the generator, and what's kept by it.
-        Prop::Fixture(Fixture::Generator, -14.0, -9.5, 180.0),
-        Prop::Furn(Furn::Workbench, -15.55, -15.0, 90.0),
-        Prop::Thing(Source::Crate, -20.5, -7.8, 0.0, 3.0),
-        Prop::Thing(Source::Crate, -19.3, -7.6, 15.0, 3.0),
+        Prop::Fixture(Fixture::Generator, -21.0, -15.5, 180.0),
+        Prop::Furn(Furn::Workbench, -23.55, -23.0, 90.0),
+        Prop::Thing(Source::Crate, -30.75, -11.9, 0.0, 3.0),
+        Prop::Thing(Source::Crate, -29.55, -11.7, 15.0, 3.0),
         // The motor pool's bay: two trucks nose to the roller door, a lane
         // between them; their loads.
-        Prop::Fixture(Fixture::ArmyTruck, -33.0, 0.5, 90.0),
-        Prop::Fixture(Fixture::ArmyTruck, -41.0, 8.5, 90.0),
-        Prop::Thing(Source::Crate, -27.0, 10.6, 20.0, 2.0),
-        Prop::Thing(Source::Crate, -28.3, 10.9, 80.0, 2.0),
-        Prop::Thing(Source::SupplyCase, -46.5, -1.6, 5.0, 2.0),
+        Prop::Fixture(Fixture::ArmyTruck, -50.0, -0.5, 90.0),
+        Prop::Fixture(Fixture::ArmyTruck, -62.0, 12.5, 90.0),
+        Prop::Thing(Source::Crate, -40.6, 16.6, 20.0, 2.0),
+        Prop::Thing(Source::Crate, -41.9, 16.9, 80.0, 2.0),
+        Prop::Thing(Source::SupplyCase, -70.0, -2.6, 5.0, 2.0),
         // The west lot: a truck left by the wall, what never got driven
         // out.
-        Prop::Fixture(Fixture::ArmyTruck, -44.0, -15.0, 180.0),
-        Prop::Thing(Source::Car, -30.0, -14.0, 200.0, 3.0),
-        Prop::Thing(Source::Car, -33.5, -7.5, 80.0, 3.0),
-        Prop::Thing(Source::Crate, -26.0, -17.2, 0.0, 3.0),
-        Prop::Fixture(Fixture::Sandbags, -45.5, -8.0, 0.0),
+        Prop::Fixture(Fixture::ArmyTruck, -66.0, -23.0, 180.0),
+        Prop::Thing(Source::Car, -45.0, -21.0, 200.0, 3.0),
+        Prop::Thing(Source::Car, -50.5, -10.5, 80.0, 3.0),
+        Prop::Thing(Source::Crate, -39.0, -26.3, 0.0, 3.0),
+        Prop::Fixture(Fixture::Sandbags, -68.5, -12.2, 0.0),
         // The east court: where the last of them camped.
-        Prop::Fixture(Fixture::ArmyTruck, 49.5, -15.5, 0.0),
-        Prop::Fixture(Fixture::Tent, 41.0, -15.0, 180.0),
-        Prop::Fixture(Fixture::Sandbags, 48.0, -8.0, 90.0),
-        Prop::Thing(Source::SupplyCase, 39.5, -8.2, 30.0, 3.0),
-        Prop::Thing(Source::Crate, 33.0, -5.2, 0.0, 3.0),
-        Prop::Thing(Source::Crate, 34.2, -5.1, 20.0, 3.0),
+        Prop::Fixture(Fixture::ArmyTruck, 74.5, -23.75, 0.0),
+        Prop::Fixture(Fixture::Tent, 62.0, -23.0, 180.0),
+        Prop::Fixture(Fixture::Sandbags, 72.0, -12.2, 90.0),
+        Prop::Thing(Source::SupplyCase, 60.5, -12.5, 30.0, 3.0),
+        Prop::Thing(Source::Crate, 49.0, -8.2, 0.0, 3.0),
+        Prop::Thing(Source::Crate, 50.2, -8.1, 20.0, 3.0),
         // The barracks: tables down the mess hall; upstairs, bunks back to
         // back down the middle of the dorm.
-        Prop::Furn(Furn::Table, 19.0, -14.5, 0.0),
-        Prop::Furn(Furn::Table, 23.0, -14.5, 0.0),
-        Prop::Furn(Furn::Table, 19.0, -10.5, 0.0),
-        Prop::Furn(Furn::Table, 23.0, -10.5, 0.0),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 19.0, -13.55, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 19.0, -11.45, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 23.5, -13.55, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 23.5, -11.45, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 28.0, -13.55, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 28.0, -11.45, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 32.5, -13.55, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::Bunk, 32.5, -11.45, 90.0)),
+        Prop::Furn(Furn::Table, 29.0, -21.5, 0.0),
+        Prop::Furn(Furn::Table, 35.0, -21.5, 0.0),
+        Prop::Furn(Furn::Table, 29.0, -16.5, 0.0),
+        Prop::Furn(Furn::Table, 35.0, -16.5, 0.0),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 28.8, -20.55, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 28.8, -18.45, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 35.5, -20.55, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 35.5, -18.45, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 42.0, -20.55, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 42.0, -18.45, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 48.5, -20.55, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::Bunk, 48.5, -18.45, 90.0)),
         // The station house's lobby: a barricade facing its doors. Its
         // newsroom: desks pushed together.
-        Prop::Fixture(Fixture::Sandbags, 28.5, 9.0, 90.0),
-        Prop::Thing(Source::SupplyCase, 30.4, 12.6, 20.0, 2.0),
-        Prop::Thing(Source::Crate, 26.6, 5.6, 70.0, 2.0),
-        Prop::Thing(Source::Desk, 40.2, 14.4, 0.0, 2.0),
-        Prop::Thing(Source::Desk, 41.8, 14.4, 0.0, 2.0),
-        Prop::Thing(Source::Desk, 40.2, 15.3, 180.0, 2.0),
-        Prop::Thing(Source::Desk, 41.8, 15.3, 180.0, 2.0),
+        Prop::Fixture(Fixture::Sandbags, 42.75, 14.0, 90.0),
+        Prop::Thing(Source::SupplyCase, 45.6, 19.6, 20.0, 2.0),
+        Prop::Thing(Source::Crate, 39.6, 8.6, 70.0, 2.0),
+        Prop::Thing(Source::Desk, 61.2, 21.4, 0.0, 2.0),
+        Prop::Thing(Source::Desk, 62.8, 21.4, 0.0, 2.0),
+        Prop::Thing(Source::Desk, 61.2, 22.3, 180.0, 2.0),
+        Prop::Thing(Source::Desk, 62.8, 22.3, 180.0, 2.0),
         // Upstairs, the studio's desk, a console either side of it; the
         // server room's racks, back to back.
-        Prop::On(1, &Prop::Furn(Furn::Console, 41.0, 14.0, 0.0)),
-        Prop::On(1, &Prop::Furn(Furn::Console, 41.0, 14.9, 180.0)),
-        Prop::On(1, &Prop::Furn(Furn::Table, 36.5, 15.5, 90.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 43.65, 2.55, 0.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 44.35, 2.55, 0.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 45.05, 2.55, 0.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 45.75, 2.55, 0.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 43.65, 3.45, 180.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 44.35, 3.45, 180.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 45.05, 3.45, 180.0)),
-        Prop::On(1, &Prop::Furn(Furn::ServerRack, 45.75, 3.45, 180.0)),
+        Prop::On(1, &Prop::Furn(Furn::Console, 62.0, 21.0, 0.0)),
+        Prop::On(1, &Prop::Furn(Furn::Console, 62.0, 21.9, 180.0)),
+        Prop::On(1, &Prop::Furn(Furn::Table, 54.5, 23.75, 90.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 65.8, 3.9, 0.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 66.5, 3.9, 0.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 67.2, 3.9, 0.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 67.9, 3.9, 0.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 65.8, 4.8, 180.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 66.5, 4.8, 180.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 67.2, 4.8, 180.0)),
+        Prop::On(1, &Prop::Furn(Furn::ServerRack, 67.9, 4.8, 180.0)),
         // The bunker's air plant: its own generator. Its ops room: the
         // map tables.
-        Prop::On(-1, &Prop::Fixture(Fixture::Generator, 28.0, 2.5, 180.0)),
-        Prop::On(-1, &Prop::Furn(Furn::Table, 39.9, 9.0, 0.0)),
-        Prop::On(-1, &Prop::Furn(Furn::Table, 42.1, 9.0, 0.0)),
+        Prop::On(-1, &Prop::Fixture(Fixture::Generator, 42.0, 4.0, 180.0)),
+        Prop::On(-1, &Prop::Furn(Furn::Table, 60.9, 14.0, 0.0)),
+        Prop::On(-1, &Prop::Furn(Furn::Table, 63.1, 14.0, 0.0)),
     ],
 };

@@ -13,7 +13,7 @@ use lntrn_math::Vec3;
 use crate::map::build::build_holdout;
 
 /// How far out from the middle the ground's kept (x, z).
-const REACH: (f32, f32) = (78.0, 52.0);
+const REACH: (f32, f32) = (105.0, 62.0);
 
 /// Light as it looks.
 fn srgb(c: f32) -> u8 {

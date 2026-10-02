@@ -28,7 +28,7 @@ const FROM: f64 = 170.0;
 /// reaches, and how often it looks for something nearer the players.
 pub const EVERY: f64 = 0.08;
 pub const ROUND: f64 = 60.0;
-const REACH: f64 = 75.0;
+const REACH: f64 = 95.0;
 const LOOKS: f64 = 0.3;
 /// How high the sky's looked for over one of the dead, and how wide of
 /// its mark a round lands.

@@ -54,37 +54,37 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 struct Shot(&'static str, f64, f64, i8, f64, f64);
 
 const SHOTS: &[Shot] = &[
-    Shot("start_room", 3.0, -15.0, 0, 200.0, -5.0),
-    Shot("yard_from_door", 3.5, -9.5, 0, 170.0, 0.0),
-    Shot("yard_mast", -8.0, 10.0, 0, 60.0, 8.0),
-    Shot("yard_to_station", 10.0, 6.0, 0, 90.0, 2.0),
-    Shot("motor_bay", -30.0, 4.0, 0, 250.0, 6.0),
-    Shot("barracks_mess", 21.0, -12.0, 0, 80.0, 0.0),
-    Shot("station_lobby", 28.0, 12.0, 0, 20.0, 0.0),
-    Shot("bunker_ops", 36.0, 10.0, -1, 80.0, 0.0),
-    Shot("bunker_armory", 37.0, 16.0, -1, 200.0, 0.0),
-    Shot("west_lot", -36.0, -10.0, 0, 120.0, 4.0),
-    Shot("dead_room", 33.0, -9.0, 0, 290.0, 0.0),
-    Shot("mezzanine", -30.0, 16.0, 1, 330.0, -12.0),
-    Shot("treeline", 0.0, 14.0, 0, 180.0, 3.0),
-    Shot("mist", -18.0, 12.0, 0, 75.0, -4.0),
-    Shot("dead_room_shot", 33.0, -9.0, 0, 290.0, 0.0),
+    Shot("start_room", 4.5, -23.0, 0, 200.0, -5.0),
+    Shot("yard_from_door", 5.0, -15.5, 0, 170.0, 0.0),
+    Shot("yard_mast", -12.0, 16.0, 0, 60.0, 8.0),
+    Shot("yard_to_station", 15.0, 9.0, 0, 90.0, 2.0),
+    Shot("motor_bay", -45.0, 7.0, 0, 250.0, 6.0),
+    Shot("barracks_mess", 31.5, -18.0, 0, 80.0, 0.0),
+    Shot("station_lobby", 42.0, 18.0, 0, 20.0, 0.0),
+    Shot("bunker_ops", 54.0, 16.0, -1, 80.0, 0.0),
+    Shot("bunker_armory", 55.0, 24.5, -1, 200.0, 0.0),
+    Shot("west_lot", -55.0, -16.0, 0, 120.0, 4.0),
+    Shot("dead_room", 49.0, -14.0, 0, 290.0, 0.0),
+    Shot("mezzanine", -45.0, 24.5, 1, 330.0, -12.0),
+    Shot("treeline", 0.0, 21.0, 0, 180.0, 3.0),
+    Shot("mist", -27.0, 18.0, 0, 75.0, -4.0),
+    Shot("dead_room_shot", 49.0, -14.0, 0, 290.0, 0.0),
     // The control room's window on the yard: from inside, from the yard,
     // and shot out.
-    Shot("window_in", 6.0, -14.5, 0, 180.0, 4.0),
-    Shot("window_out", 6.0, -7.5, 0, 0.0, 4.0),
-    Shot("window_side", 3.5, -12.3, 0, 100.0, 4.0),
-    Shot("window_in_shot", 6.0, -14.5, 0, 180.0, 4.0),
+    Shot("window_in", 9.0, -21.5, 0, 180.0, 4.0),
+    Shot("window_out", 9.0, -10.5, 0, 0.0, 4.0),
+    Shot("window_side", 5.0, -18.5, 0, 100.0, 4.0),
+    Shot("window_in_shot", 9.0, -21.5, 0, 180.0, 4.0),
     // The Amplifier, down in the bunker's ops room, and the signs to it:
     // on the yard, in the lobby, at the foot of the stairs.
-    Shot("amp", 41.0, 9.5, -1, 0.0, 0.0),
-    Shot("amp_near", 40.4, 7.2, -1, 15.0, -6.0),
-    Shot("amp_shot", 46.0, 10.5, -1, 270.0, 0.0),
-    Shot("sign_yard", 18.5, 6.5, 0, 90.0, 6.0),
-    Shot("sign_lobby", 27.5, 13.5, 0, 180.0, 8.0),
-    Shot("sign_foot", 27.0, 11.0, -1, 90.0, 6.0),
+    Shot("amp", 62.0, 15.5, -1, 0.0, 0.0),
+    Shot("amp_near", 61.5, 11.0, -1, 15.0, -6.0),
+    Shot("amp_shot", 69.0, 16.5, -1, 270.0, 0.0),
+    Shot("sign_yard", 28.0, 10.5, 0, 90.0, 6.0),
+    Shot("sign_lobby", 40.5, 20.5, 0, 180.0, 8.0),
+    Shot("sign_foot", 40.0, 17.0, -1, 90.0, 6.0),
     // What the dead left in the yard, marked.
-    Shot("drops", 3.5, -9.5, 0, 175.0, -14.0),
+    Shot("drops", 5.0, -15.5, 0, 175.0, -14.0),
 ];
 
 impl DeadSignal {
@@ -187,11 +187,11 @@ impl DeadSignal {
             crate::support::clear(&mut self.game.world);
             crate::items::clear(&mut self.game.world);
             let yard = |x: f64, z: f64| Vec3::new(x + 0.5, 0.0, z + 0.5);
-            crate::support::drop_at(&mut self.game.world, Call::AmmoDrop, yard(-1.0, 1.0), 13.0);
-            crate::support::drop_at(&mut self.game.world, Call::MedicDrop, yard(5.5, -4.0), 0.0);
+            crate::support::drop_at(&mut self.game.world, Call::AmmoDrop, yard(3.0, -7.0), 13.0);
+            crate::support::drop_at(&mut self.game.world, Call::MedicDrop, yard(9.5, -12.0), 0.0);
             for (i, kind) in [crate::loot::Kind::Medkit, crate::loot::Kind::Bandage, crate::loot::Kind::Bandage, crate::loot::Kind::ArmorPlate].into_iter().enumerate() {
                 let a = i as f64 * 2.4;
-                crate::items::set_down(&mut self.game.world, crate::loot::Stack::one(kind), yard(5.5, -4.0) + Vec3::new(a.cos() * 1.3, 0.6, a.sin() * 1.3), a);
+                crate::items::set_down(&mut self.game.world, crate::loot::Stack::one(kind), yard(9.5, -12.0) + Vec3::new(a.cos() * 1.3, 0.6, a.sin() * 1.3), a);
             }
         }
         // (The gunship over the compound, asked for: a little way round
@@ -380,12 +380,12 @@ fn shots() {
     app.holdout_off_screen(&gpu, &mut images);
     // Something to see the light on: a few of the dead about the yard, a
     // hound, a fire.
-    for (x, z, kind) in [(2.0, 2.0, Kind::Shambler), (4.5, 3.0, Kind::Shambler), (-3.0, 8.0, Kind::Ripper), (6.0, 9.0, Kind::Hound), (14.0, 7.0, Kind::Juggernaut)] {
+    for (x, z, kind) in [(6.0, -6.0, Kind::Shambler), (8.5, -5.0, Kind::Shambler), (1.0, 0.0, Kind::Ripper), (10.0, 1.0, Kind::Hound), (18.0, -1.0, Kind::Juggernaut)] {
         zombie::spawn_kind(&mut app.game.world, Vec3::new(x + 0.5, 0.0, z + 0.5), 0.0, kind, Theme::Drifter);
     }
-    crate::throw::pyre(&mut app.game.world, Vec3::new(-4.5, 0.0, 3.5), 0);
+    crate::throw::pyre(&mut app.game.world, Vec3::new(-0.5, 0.0, -4.5), 0);
     // And what the dead leave, lying marked in the yard by the door.
-    for (x, z, stack) in [(2.5, -6.0, crate::loot::Stack::new(crate::loot::Kind::Rounds, 24)), (4.5, -5.0, crate::loot::Stack::one(crate::loot::Kind::Bandage)), (3.2, -3.5, crate::loot::Stack::one(crate::loot::Kind::ArmorPlate)), (5.6, -7.0, crate::loot::Stack::gun(crate::loot::Kind::Shotgun, 5))] {
+    for (x, z, stack) in [(6.5, -14.0, crate::loot::Stack::new(crate::loot::Kind::Rounds, 24)), (8.5, -13.0, crate::loot::Stack::one(crate::loot::Kind::Bandage)), (7.2, -11.5, crate::loot::Stack::one(crate::loot::Kind::ArmorPlate)), (9.6, -15.0, crate::loot::Stack::gun(crate::loot::Kind::Shotgun, 5))] {
         crate::items::set_down(&mut app.game.world, stack, Vec3::new(x + 0.5, 1.0, z + 0.5), 0.6);
     }
     for lamp in app.game.world.query::<&crate::holdout::lamps::Lamp>().iter(&app.game.world).filter(|l| l.mood != crate::holdout::lamps::Mood::Steady) {
