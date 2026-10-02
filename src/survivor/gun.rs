@@ -46,6 +46,13 @@ const ASSAULT_RIFLE: Gun = Gun { kind: Kind::AssaultRifle, grip: at(-0.07, 0.026
 const LMG: Gun = Gun { kind: Kind::Lmg, grip: at(-0.07, 0.03, -0.07), fore: at(0.24, 0.03, -0.045), sight: at(0.0, 0.03, 0.07), muzzle: at(0.77, 0.03, 0.0), well: at(0.06, 0.042, -0.11), rack: at(-0.02, 0.03, 0.045), ads: 0.16, long: true };
 const FLAMETHROWER: Gun = Gun { kind: Kind::Flamethrower, grip: at(-0.07, 0.045, -0.07), fore: at(0.26, 0.045, -0.075), sight: at(0.0, 0.045, 0.03), muzzle: at(0.755, 0.045, 0.0), well: at(0.09, 0.045, -0.11), rack: at(0.01, 0.045, 0.035), ads: 0.2, long: true };
 
+const PISTOL_45: Gun = Gun { kind: Kind::Pistol45, grip: at(-0.075, 0.017, -0.075), fore: at(-0.07, 0.055, -0.09), sight: at(-0.08, 0.017, 0.034), muzzle: at(0.15, 0.017, 0.0), well: at(-0.085, 0.017, -0.15), rack: at(-0.06, 0.017, 0.02), ads: 0.36, long: false };
+const MAGNUM: Gun = Gun { kind: Kind::Magnum, grip: at(-0.07, 0.022, -0.07), fore: at(-0.065, 0.06, -0.085), sight: at(-0.04, 0.022, 0.032), muzzle: at(0.25, 0.022, 0.004), well: at(0.03, 0.022, 0.0), rack: at(-0.05, 0.022, 0.03), ads: 0.36, long: false };
+const MINI_UZI: Gun = Gun { kind: Kind::MiniUzi, grip: at(0.0, 0.024, -0.07), fore: at(0.005, 0.062, -0.085), sight: at(-0.07, 0.024, 0.046), muzzle: at(0.215, 0.024, 0.0), well: at(-0.01, 0.024, -0.2), rack: at(0.03, 0.024, 0.036), ads: 0.34, long: false };
+const AK47: Gun = Gun { kind: Kind::Ak47, grip: at(-0.07, 0.026, -0.07), fore: at(0.24, 0.026, -0.035), sight: at(0.12, 0.026, 0.05), muzzle: at(0.64, 0.026, 0.002), well: at(0.05, 0.026, -0.1), rack: at(0.02, 0.05, 0.01), ads: 0.22, long: true };
+const BULLPUP: Gun = Gun { kind: Kind::Bullpup, grip: at(-0.01, 0.028, -0.07), fore: at(0.20, 0.028, -0.065), sight: at(0.13, 0.028, 0.083), muzzle: at(0.47, 0.028, 0.008), well: at(-0.155, 0.028, -0.10), rack: at(0.02, 0.0, 0.02), ads: 0.24, long: true };
+const RPK: Gun = Gun { kind: Kind::Rpk, grip: at(-0.07, 0.034, -0.07), fore: at(0.24, 0.034, -0.04), sight: at(0.12, 0.034, 0.05), muzzle: at(0.80, 0.034, 0.002), well: at(0.075, 0.034, -0.11), rack: at(0.02, 0.058, 0.01), ads: 0.22, long: true };
+
 /// The gun `weapon` is, if it's one.
 pub(super) fn of(weapon: Weapon) -> Option<&'static Gun> {
     Some(match weapon {
@@ -56,6 +63,12 @@ pub(super) fn of(weapon: Weapon) -> Option<&'static Gun> {
         Weapon::AssaultRifle => &ASSAULT_RIFLE,
         Weapon::Lmg => &LMG,
         Weapon::Flamethrower => &FLAMETHROWER,
+        Weapon::Pistol45 => &PISTOL_45,
+        Weapon::Magnum => &MAGNUM,
+        Weapon::MiniUzi => &MINI_UZI,
+        Weapon::Ak47 => &AK47,
+        Weapon::Bullpup => &BULLPUP,
+        Weapon::Rpk => &RPK,
         _ => return None,
     })
 }

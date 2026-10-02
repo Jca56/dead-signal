@@ -10,7 +10,20 @@ use crate::loot::{Dice, Kind, Stack};
 
 /// What can be in one, and how likely each is against the rest. (No
 /// pistol: everyone's begun with one.)
-pub const ODDS: [(Kind, u32); 6] = [(Kind::Rifle, 6), (Kind::Shotgun, 6), (Kind::Smg, 6), (Kind::AssaultRifle, 4), (Kind::Flamethrower, 2), (Kind::Lmg, 2)];
+pub const ODDS: [(Kind, u32); 12] = [
+    (Kind::Rifle, 6),
+    (Kind::Shotgun, 6),
+    (Kind::Smg, 6),
+    (Kind::Pistol45, 5),
+    (Kind::MiniUzi, 5),
+    (Kind::AssaultRifle, 4),
+    (Kind::Ak47, 4),
+    (Kind::Magnum, 3),
+    (Kind::Bullpup, 3),
+    (Kind::Flamethrower, 2),
+    (Kind::Lmg, 2),
+    (Kind::Rpk, 2),
+];
 /// One in this many has been through the Amplifier, once.
 pub const JACKPOT: u32 = 6;
 
@@ -77,7 +90,7 @@ mod tests {
     #[test]
     fn the_better_guns_are_rarer_and_one_in_six_comes_amplified() {
         let mut dice = Dice(0xC0FFEE);
-        let rolls: Vec<Stack> = (0..6000).map(|_| roll(&mut dice, None)).collect();
+        let rolls: Vec<Stack> = (0..12_000).map(|_| roll(&mut dice, None)).collect();
         let share = |kind| rolls.iter().filter(|g| g.kind == kind).count() as f64 / rolls.len() as f64;
         let total: u32 = ODDS.iter().map(|(_, odds)| odds).sum();
         for (kind, odds) in ODDS {
@@ -104,9 +117,11 @@ mod tests {
             let gun = roll(&mut dice, Some(&bag));
             assert!(!matches!(gun.kind, Kind::Smg | Kind::Shotgun), "{gun:?}");
         }
-        // Every one of them carried: any of them, then.
+        // Every one of them carried (in a pack big enough for it): any of
+        // them, then.
+        let mut bag = Bag::sized((12, 12), (4, 2));
         for (kind, _) in ODDS {
-            bag.add(Stack::gun(kind, 0));
+            assert_eq!(bag.add(Stack::gun(kind, 0)).count, 0, "room for {kind:?}");
         }
         let got: Vec<Kind> = (0..200).map(|_| roll(&mut dice, Some(&bag)).kind).collect();
         assert!(ODDS.iter().all(|(kind, _)| got.contains(kind)), "{got:?}");
@@ -144,5 +159,26 @@ mod tests {
         assert!(full.count > 0, "the pack's full");
         h.take(0, &mut bag, Stack::one(Kind::Rifle));
         assert_eq!(h.spilled.iter().map(|(seat, s)| (*seat, s.kind)).collect::<Vec<_>>(), [(0, Kind::Shotgun)]);
+    }
+
+    #[test]
+    fn the_best_of_the_new_guns_are_on_no_wall_and_the_rest_are_where_they_re_said_to_be() {
+        use crate::holdout::arena::Wares;
+        let arena = crate::holdout::tests_built();
+        let zone = |wares: Wares| arena.buys.iter().find(|b| b.wares == wares).map(|b| arena.zones[b.zone]);
+        for kind in [Kind::Magnum, Kind::Bullpup, Kind::Rpk] {
+            assert_eq!(zone(Wares::Weapon(kind)), None, "{kind:?} is a mystery drop's alone");
+            assert!(ODDS.iter().any(|(k, _)| *k == kind));
+        }
+        assert_eq!(zone(Wares::Weapon(Kind::Pistol45)), Some("THE YARD"));
+        assert_eq!(zone(Wares::Weapon(Kind::MiniUzi)), Some("EAST COURT"));
+        assert_eq!(zone(Wares::Weapon(Kind::Ak47)), Some("GENERATOR PEN"));
+        assert_eq!(zone(Wares::Kit(Kind::Molotov)), Some("MOTOR POOL"));
+        assert_eq!(zone(Wares::Kit(Kind::PipeBomb)), Some("BARRACKS"));
+        // Every gun there is but the pistol everyone begins with can come
+        // in a drop.
+        let guns: Vec<Kind> = crate::loot::ALL.into_iter().filter(|k| k.weapon().is_some_and(|w| w.spec().shot.is_some()) && *k != Kind::Pistol).collect();
+        assert!(guns.iter().all(|kind| ODDS.iter().any(|(k, _)| k == kind)), "{guns:?}");
+        assert_eq!(guns.len(), ODDS.len());
     }
 }

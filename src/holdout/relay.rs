@@ -141,6 +141,15 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(29, 13.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(-36, -0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(48, 23.75), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
+        // More guns: a .45 in the alley by the barracks, a Mini Uzi on the
+        // barracks' wall on the east court, an AK in the generator shed.
+        // And what's thrown: Molotovs in the motor pool's workshop, pipe
+        // bombs in the barracks' kitchen.
+        BuyAt(ns(18, -20.5), 0, Face::W, Wares::Weapon(Item::Pistol45)),
+        BuyAt(ns(54, -19.0), 0, Face::E, Wares::Weapon(Item::MiniUzi)),
+        BuyAt(ns(-24, -24.0), 0, Face::W, Wares::Weapon(Item::Ak47)),
+        BuyAt(ew(29, -59.0), 0, Face::N, Wares::Kit(Item::Molotov)),
+        BuyAt(ew(-20, 42.0), 0, Face::N, Wares::Kit(Item::PipeBomb)),
         // The med stations, one a stim: Lazarus in the control room, Rush
         // at the far end of the motor pool's bay, Bulwark in the barracks'
         // showers, Twitch up on the broadcast floor among the servers.

@@ -13,16 +13,23 @@ The tables of stats (guns, melee, the dead) are checked by the test `balance_md_
 | PISTOL | Sidearm | 9mm | 25 | 1 | 12 | as fast as you click | semi | 1.4 s | 40 m | no |
 | SHOTGUN | Primary | 12ga | 22 | 10 | 5 | 0.6 s (pump) | semi | 0.43 s a shell | 100 m | no |
 | HUNTING RIFLE | Primary | .308 | 160 | 1 | 5 | 1.1 s (bolt) | semi | 0.6 s a round | 120 m | 2 more (70%, 40%) |
-| SMG | Primary | 9mm | 20 | 1 | 30 | 0.075 s (800/min) | auto | 2.0 s | 60 m | no |
+| SMG | Sidearm | 9mm | 20 | 1 | 30 | 0.075 s (800/min) | auto | 2.0 s | 60 m | no |
 | ASSAULT RIFLE | Primary | 5.56 | 42 | 1 | 30 | 0.1 s (600/min) | auto / semi (B) | 2.3 s | 90 m | 1 more (50%) |
 | LMG | Primary | 7.62 belt | 55 | 1 | 100 | 0.11 s (550/min) | auto | 5.0 s | 110 m | 2 more (60%, 30%) |
 | FLAMETHROWER | Primary | flame fuel | 8 | 1 | 200 | 0.05 s (20 puffs a second) | auto | 3.0 s | 35 m | all in its cone |
+| .45 PISTOL | Sidearm | .45 | 45 | 1 | 8 | 0.16 s | semi | 1.5 s | 55 m | no |
+| .44 MAGNUM | Sidearm | .44 | 130 | 1 | 6 | 0.45 s | semi | 2.6 s | 95 m | 1 more (50%) |
+| MINI UZI | Sidearm | 9mm | 16 | 1 | 32 | 0.055 s (1100/min) | auto | 1.6 s | 55 m | no |
+| AK-47 | Primary | 7.62 | 52 | 1 | 30 | 0.11 s (550/min) | auto / semi (B) | 2.5 s | 100 m | 1 more (60%) |
+| BULLPUP | Primary | 5.56 | 36 | 1 | 30 | 0.07 s (860/min) | auto / semi (B) | 2.7 s | 85 m | 1 more (40%) |
+| RPK | Primary | 7.62 | 52 | 1 | 75 | 0.11 s (550/min) | auto | 3.4 s | 105 m | 2 more (60%, 30%) |
 
 Headshots do **3×**. Shots under a roof are heard **60%** as far.
 
 **Falloff** (the share of damage left with distance):
 - **Shotgun:** full to 12 m, down to 40% by 32 m.
 - **SMG:** full to 20 m, down to 60% by 60 m.
+- **Mini Uzi:** full to 12 m, down to 50% by 40 m.
 - **The rest:** none.
 
 **The flamethrower** shoots no rounds: each puff scorches everything in a 22° cone out to 9 m that isn't behind a wall (8 a puff, so 160 a second to each), and sets it burning (30 a second, for 3 s after the stream's off it). Where the stream ends, on the ground or run down a wall, it leaves a fire 1.1 m across for 4 s. It burns another player the same way (15 a second while alight), and anyone who stands in its fires. A tank is 10 s of stream. Its hits pay no points in HOLDOUT; its kills do.
@@ -38,6 +45,12 @@ Headshots do **3×**. Shots under a roof are heard **60%** as far.
 | ASSAULT RIFLE | 2.4 / 3.4 / 6.0 | 0.15 / 1.0 / 4.0 | 0.7× (red dot) |
 | LMG | 3.4 / 4.8 / 8.0 | 0.5 / 1.8 / 5.0 | 0.75× |
 | FLAMETHROWER | a 22° cone | the same | 0.9× |
+| .45 PISTOL | 1.8 / 2.6 / 4.5 | 0 / 0.6 / 3.2 | 0.8× |
+| .44 MAGNUM | 2.0 / 3.0 / 5.0 | 0 / 0.8 / 3.5 | 0.75× |
+| MINI UZI | 3.4 / 4.4 / 7.0 | 1.4 / 2.2 / 4.5 | 0.85× |
+| AK-47 | 2.8 / 3.9 / 6.5 | 0.5 / 1.4 / 4.5 | 0.8× |
+| BULLPUP | 1.6 / 2.4 / 5.0 | 0.1 / 0.8 / 3.5 | 0.6× (red dot) |
+| RPK | 3.0 / 4.2 / 7.0 | 0.4 / 1.5 / 4.5 | 0.78× |
 
 ### Damage per shot with distance
 
@@ -51,6 +64,12 @@ Aimed at a Shambler's chest, standing still. Hip / aimed:
 | SMG | 20 / 20 | 20 / 20 | 14 / 20 | 9 / 20 | 3 / 17 |
 | ASSAULT RIFLE | 42 / 42 | 42 / 42 | 32 / 42 | 21 / 42 | 10 / 42 |
 | LMG | 55 / 55 | 47 / 55 | 31 / 55 | 15 / 55 | 6 / 55 |
+| .45 PISTOL | 45 / 45 | 45 / 45 | 42 / 45 | 31 / 45 | 16 / 45 |
+| .44 MAGNUM | 130 / 130 | 130 / 130 | 114 / 130 | 81 / 130 | 40 / 130 |
+| MINI UZI | 16 / 16 | 14 / 16 | 9 / 16 | 5 / 13 | 1 / 6 |
+| AK-47 | 52 / 52 | 51 / 52 | 35 / 52 | 20 / 52 | 9 / 52 |
+| BULLPUP | 36 / 36 | 36 / 36 | 36 / 36 | 27 / 36 | 14 / 36 |
+| RPK | 52 / 52 | 49 / 52 | 32 / 52 | 19 / 52 | 7 / 52 |
 
 ### Damage per second at 6 m, aimed
 
@@ -58,15 +77,21 @@ Aimed at a Shambler's chest, standing still. Hip / aimed:
 
 ```
                  firing                                  sustained
-PISTOL         125 ████████                             79 █████
-SHOTGUN        367 ████████████████████████            181 ████████████
-HUNTING RIFLE  145 █████████▌                           84 █████▌
-SMG            267 █████████████████▌                  141 █████████▍
+PISTOL         125 ████████▎                            79 █████▎
+SHOTGUN        367 ████████████████████████▍           181 ████████████
+HUNTING RIFLE  145 █████████▋                           84 █████▌
+SMG            267 █████████████████▊                  141 █████████▍
 ASSAULT RIFLE  420 ████████████████████████████        238 ███████████████▊
 LMG            500 █████████████████████████████████▎  344 ██████████████████████▉
+.45 PISTOL     225 ███████████████                     116 ███████▋
+.44 MAGNUM     289 ███████████████████▎                147 █████████▊
+MINI UZI       291 ███████████████████▍                152 ██████████▏
+AK-47          473 ███████████████████████████████▌    269 █████████████████▉
+BULLPUP        514 ██████████████████████████████████▎ 225 ███████████████
+RPK            473 ███████████████████████████████▌    335 ██████████████████████▎
 ```
 
-The hunting rifle's number undersells it: every round is a kill, and it goes on through two more.
+The hunting rifle's number undersells it: every round is a kill, and it goes on through two more. The bullpup fires hardest and feeds worst; the RPK gives up a little of the LMG's rate and its belt for a reload a third shorter.
 
 ### Shots to kill (aimed at the chest; headshots in brackets)
 
@@ -78,6 +103,12 @@ The hunting rifle's number undersells it: every round is a kill, and it goes on 
 | SMG | 8 (3) | 4 (2) | 6 (2) | 45 | 180 |
 | ASSAULT RIFLE | 4 (2) | 2 (1) | 3 (1) | 22 | 86 |
 | LMG | 3 (1) | 2 (1) | 2 (1) | 17 | 66 |
+| .45 PISTOL | 4 (2) | 2 (1) | 3 (1) | 20 | 80 |
+| .44 MAGNUM | 2 (1) | 1 | 1 | 7 | 28 |
+| MINI UZI | 10 (4) | 5 (2) | 7 (3) | 57 | 225 |
+| AK-47 | 3 (1) | 2 (1) | 3 (1) | 18 | 70 |
+| BULLPUP | 5 (2) | 2 (1) | 4 (2) | 25 | 100 |
+| RPK | 3 (1) | 2 (1) | 3 (1) | 18 | 70 |
 
 A dazed Juggernaut takes **2×** from any side, plate or not.
 
@@ -220,10 +251,12 @@ One of a holdout's dead, killed, may leave something where it fell:
 
 | Left | Chance | What |
 |---|---|---|
-| Rounds | 10% | of any kind at all (9mm 24, shells 8, .308 8, 5.56 30, a belt of 50, flame fuel 100) |
+| Rounds | 10% | for a gun one of the players has, in hand or put away, never for one nobody carries (9mm 24, shells 8, .308 8, 5.56 30, a belt of 50, flame fuel 100, .45 16, .44 12, 7.62 30) |
 | Bandage | 5% | one |
 | Medkit | 2% | one |
 | Armor plate | 2% | one |
+| Molotov | 1.5% | one |
+| Pipe bomb | 1% | one |
 
 - That's a Shambler's. A Ripper is 1.75× as likely to leave something and a Spitter 1.5×; a Hellhound never does; a Juggernaut always leaves two things.
 - Whatever is set down in a holdout lies there **30 seconds** (blinking for the last six), then it's gone: what the dead leave, what a player drops out of their bag, and all a player had when they bled out. It's marked by a ring and a beam of light: amber for rounds, green for what mends, blue for armor, white for anything else.
@@ -245,6 +278,29 @@ Down in the bunker's ops room (the signs lead to it from the yard): what's in ha
 - Each tier has a name of its own (the pistol: HOT MIC, DEAD AIR, LAST BROADCAST), shown with its tier where the weapon's named.
 - Its shots leave a streak and flash in its glow's colour.
 - Against round 20's Shambler (456 health) a tier-III gun does what the plain one does to round 1's (100).
+
+### On HOLDOUT's walls
+
+A gun off the wall comes loaded, with a full carry of its rounds; bought again at the same place, its rounds are topped up for half. A kit or a throwable is one of it.
+
+| On the wall | Cost | Where |
+|---|---|---|
+| PISTOL | 250 | control room |
+| HUNTING RIFLE | 500 | control room, motor pool's mezzanine, east court |
+| .45 PISTOL | 600 | the alley by the barracks |
+| MACHETE | 600 | by the gate |
+| SHOTGUN | 900 | the yard, motor pool's bay, station house |
+| FIRE AXE | 1000 | generator pen |
+| MINI UZI | 1000 | east court, on the barracks' wall |
+| SMG | 1200 | equipment room, station house's lobby |
+| ASSAULT RIFLE | 1800 | barracks' dorm, broadcast floor |
+| AK-47 | 2200 | generator shed |
+| FLAMETHROWER | 2500 | motor pool's parts store |
+| LMG | 3000 | the bunker's armory |
+| BANDAGE | 200 | here and there |
+| MEDKIT | 600 | here and there |
+| MOLOTOV | 400 | motor pool's workshop |
+| PIPE BOMB | 600 | barracks' kitchen |
 
 ### Stims
 
@@ -281,12 +337,20 @@ Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's
 
 | In a mystery drop | Chance |
 |---|---|
-| HUNTING RIFLE | 23% |
-| SHOTGUN | 23% |
-| SMG | 23% |
-| ASSAULT RIFLE | 15% |
-| FLAMETHROWER | 8% |
-| LMG | 8% |
+| HUNTING RIFLE | 13% |
+| SHOTGUN | 13% |
+| SMG | 13% |
+| .45 PISTOL | 10% |
+| MINI UZI | 10% |
+| ASSAULT RIFLE | 8% |
+| AK-47 | 8% |
+| .44 MAGNUM | 6% |
+| BULLPUP | 6% |
+| FLAMETHROWER | 4% |
+| LMG | 4% |
+| RPK | 4% |
+
+The .44 Magnum, the bullpup and the RPK are on no wall: a mystery drop is the only way to one.
 
 - A **strafing run** is marked on the ground: its code sent, a strip **30 m long and 5 m wide** is outlined in red where the player looks, running straight away from them; the trigger sends it there (not under a roof). **3 s** later the plane's guns rake it end to end in **1 s**. Everything in it under open sky as the rounds pass takes **900** (plate's no help: all of the horde dies of it, a Juggernaut is badly hurt); a player in it takes **70** (armor first). Under a roof, nothing's touched. The kills are whoever called it's (their points), but charge no signal.
 - A **precision strike** is marked on the ground too: a red circle with a cross in it, **5 m** in radius, where the player looks; the trigger sends it there (not under a roof). **2 s** later one heavy shell comes straight down on it: no fire, a blow. Everything in the circle under open sky takes from **1200** at its middle to **500** at its edge (plate's no help) and is flung outward; a player in it takes **80** to **30** (armor first). The kills are whoever called it's (their points), but charge no signal.
@@ -340,7 +404,7 @@ Averaged over six generated maps, if every container were searched:
 
 ## Adding a gun
 
-1. **Its spec:** `src/weapon/spec.rs`. **Its viewmodel:** a Blender module (`magfed.py` makes a magazine-fed one quick).
-2. **Its item and loot:** `Items.md`, and a row in this doc's tables.
+1. **Its spec:** `src/weapon/spec/` (`sidearms.rs`, `long.rs`). **Its viewmodel:** a Blender module (`magfed.py` makes a magazine-fed long gun quick, `sidearm.py` a sidearm), and its item model (`items_more.py`).
+2. **Its item and loot:** `Items.md`, and a row in this doc's tables. In HOLDOUT: a wall spot or the mystery drop's odds (or both), and a line of its rounds in what the dead leave.
 3. **Where it sits:** find its place in *Damage per second* and *Shots to kill*. It should do something none of the others do (the shotgun clears a room, the rifle picks and pierces, the SMG sprays cheap rounds, the AR does it all but eats scarce ammo), not just beat one of them.
 4. **Keep them in step:** the tests hold this doc to the game.

@@ -14,7 +14,7 @@ pub mod boosts;
 pub mod drops;
 mod buy;
 #[cfg(test)]
-pub use buy::AMPLIFY;
+pub use buy::{AMPLIFY, price};
 pub mod hud;
 mod land;
 pub mod lamps;
@@ -42,7 +42,7 @@ use buy::spare;
 use rounds::Rounds;
 // (What the tests of all this name, as they did when it was one file.)
 #[cfg(test)]
-use {arena::Wares, buy::price, crate::loot::bag::Slot};
+use {arena::Wares, crate::loot::bag::Slot};
 
 /// Points to start with.
 const START_POINTS: u32 = 500;
@@ -341,5 +341,11 @@ mod cellar_tests;
 mod dump;
 #[cfg(test)]
 mod tests;
+
+/// (For tests elsewhere.) The Relay Station's arena, built.
+#[cfg(test)]
+pub fn tests_built() -> Arena {
+    tests::built().arena.expect("the arena")
+}
 #[cfg(test)]
 mod waves_tests;

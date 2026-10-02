@@ -31,6 +31,15 @@ Everything that can be found, carried and (one day) extracted. Size is grid cell
 | 7.62 BELT | 2×1 | 100 | Rare | $6 | ammo cage, soldiers, juggernaut | A can of belted 7.62. Heavy, loud, and exactly what the LMG wants. |
 | FLAMETHROWER | 5×2 | 1 | Legendary | $1200 | ammo cage | Everything in front of it burns: the dead, the floor, your friends. Point it away from people you like. |
 | FLAME FUEL | 1×2 | 200 | Rare | $2 | ammo cage | A red tank of thickened fuel. Ten seconds of the worst idea you've had today. |
+| .45 PISTOL | 2×1 | 1 | Rare | $260 | gun cabinet, gun rack, police locker | Eight rounds, each with something to say. Kicks like it means it. |
+| .45 ROUNDS | 1×1 | 24 | Uncommon | $4 | locker, gun cabinet, gun rack, police locker, police armory | Fat, slow and persuasive. |
+| .44 MAGNUM | 2×1 | 1 | Epic | $520 | gun cabinet, hunter's cabinet, display case | Six shots, and the dead behind the first one feel it too. Count them. |
+| .44 ROUNDS | 1×1 | 18 | Rare | $9 | gun cabinet, hunter's cabinet, display case | Each one the size of a thumb. Somebody was expecting bears. |
+| MINI UZI | 2×2 | 1 | Rare | $420 | gun cage, police armory | A sidearm that empties itself in under two seconds. Aim is a suggestion. |
+| AK-47 | 5×1 | 1 | Epic | $700 | ammo cage, juggernaut, gun cage | Wood, steel and a bad attitude. Hits harder than the soldiers' rifle and climbs while it does. B switches between full auto and a round a pull. |
+| 7.62 ROUNDS | 1×1 | 30 | Uncommon | $6 | ammo cage, soldiers, juggernaut, gun cage | Lacquered steel in a paper box. Feeds the AK and the RPK alike. |
+| BULLPUP | 4×1 | 1 | Legendary | $900 | ammo cage, police armory | Short, quick and it points where you look. Drinks 5.56 like water. B switches between full auto and a round a pull. |
+| RPK | 5×2 | 1 | Legendary | $1000 | ammo cage, juggernaut | An AK that ate its vegetables: a long barrel and a drum of seventy-five. |
 | MOLOTOV | 2×1 | 2 | Uncommon | $45 | crate, car, drawers, tool locker, ammo cage | A bottle, a rag, and a bad idea done well. Hold G to aim, let go to throw: a pool of fire that the dead walk into and keep burning after. |
 | PIPE BOMB | 2×1 | 2 | Rare | $90 | cage, tool locker, supply case, ammo cage, soldiers, gun cage, police armory | It beeps, and every one of the dead near enough drops what it's doing to go and listen. Then it stops beeping. |
 | BIKE HELMET | 2×2 | 1 | Common | $40 | crate, locker, car, wardrobe, shelf, student locker | Worn on the head: 15 armor. Better than a bare skull; not by a lot. |

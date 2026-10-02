@@ -27,7 +27,8 @@
 //! over it, or that one amplified. `POINTS=<n>`: the points the radio's
 //! card takes them to have. `STIM=bulwark|twitch|rush|lazarus`: that
 //! stim's injector in their arm, every stim in their blood, and their
-//! own HUD drawn over the picture.
+//! own HUD drawn over the picture. `GUN=<save key>` (`ak47`, `magnum_44`):
+//! that gun in hand (and, with `BUDDY=gun`, in the second player's).
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -97,6 +98,14 @@ const SHOTS: &[Shot] = &[
     Shot("stim_rush", -70.5, 10.5, 0, 288.0, -4.0),
     Shot("stim_bulwark", 45.0, -13.5, 0, 162.0, -4.0),
     Shot("stim_twitch", 70.5, 6.0, 1, 72.0, -4.0),
+    // What's new on the walls: the .45 in the alley, the Mini Uzi on the
+    // east court, the AK in the generator shed, Molotovs in the workshop,
+    // pipe bombs in the barracks' kitchen.
+    Shot("wall_45", 14.6, -20.5, 0, 90.0, 0.0),
+    Shot("wall_uzi", 57.4, -19.0, 0, 270.0, 0.0),
+    Shot("wall_ak", -27.4, -24.0, 0, 90.0, 0.0),
+    Shot("wall_molotov", -59.0, 25.6, 0, 180.0, 0.0),
+    Shot("wall_pipe_bomb", 42.0, -23.4, 0, 180.0, 0.0),
 ];
 
 impl DeadSignal {
@@ -290,14 +299,21 @@ impl DeadSignal {
             if let Some(how) = &buddy {
                 use crate::radio::Shown;
                 let mut hands = crate::weapon::Hands::default();
-                hands.stow();
+                // (`BUDDY=gun`: what `GUN` names in their hands instead.)
+                let gun = std::env::var("GUN").ok().and_then(|key| crate::loot::Kind::from_key(&key)).and_then(|k| k.weapon()).filter(|_| how == "gun");
+                match gun {
+                    Some(weapon) => hands.take_up(weapon.spec().slot, weapon, weapon.spec().mag),
+                    None => {
+                        hands.stow();
+                    }
+                }
                 hands.update(Default::default(), 2.0);
                 let shown = match how.as_str() {
                     "key" => Shown { clip: "Key", t: Some(0.5), stowed: 0.0 },
                     "flare" => Shown { clip: "Flare", t: None, stowed: 0.0 },
                     _ => Shown { clip: "Idle", t: None, stowed: 0.0 },
                 };
-                let doing = crate::survivor::Doing { seat: 1, hands: &hands, winding: None, threw: None, lowered: 0.0, reviving: false, down: false, out: false, radio: Some(shown) };
+                let doing = crate::survivor::Doing { seat: 1, hands: &hands, winding: None, threw: None, lowered: 0.0, reviving: false, down: false, out: false, radio: gun.is_none().then_some(shown) };
                 crate::survivor::pose(&mut self.game.world, &[doing]);
             }
             // (Their hands come up, as in a run: the last quarter second
@@ -432,6 +448,14 @@ fn shots() {
     }
     for lamp in app.game.world.query::<&crate::holdout::lamps::Lamp>().iter(&app.game.world).filter(|l| l.mood != crate::holdout::lamps::Mood::Steady) {
         eprintln!("shots: a {:?} lamp at {:.0}, {:.1}, {:.0}", lamp.mood, lamp.light.at.x - 0.5, lamp.light.at.y, lamp.light.at.z - 0.5);
+    }
+    // (Another gun in hand, asked for by its save key: `GUN=ak47`.)
+    if let Some(kind) = std::env::var("GUN").ok().and_then(|key| crate::loot::Kind::from_key(&key))
+        && let (Some(weapon), Some(seat)) = (kind.weapon(), app.run.seats.first_mut())
+    {
+        let slot = crate::loot::bag::Slot::of(kind).expect("a weapon's slot");
+        *seat.bag.slot_mut(slot) = Some(crate::loot::Stack::fresh(kind, 1));
+        app.combat.take_up(0, Some(slot), weapon, weapon.spec().mag);
     }
     // (What's in hand amplified, asked for: `AMP=1..3`.)
     if let Ok(tier) = std::env::var("AMP") {

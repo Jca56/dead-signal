@@ -15,7 +15,7 @@ use crate::weapon::amp;
 
 /// What a weapon off the wall costs; its rounds cost half. Armor the
 /// same: half to make a piece worn whole again.
-pub(super) fn price(kind: Kind) -> u32 {
+pub fn price(kind: Kind) -> u32 {
     match kind {
         Kind::Pistol => 250,
         Kind::Rifle => 500,
@@ -26,6 +26,14 @@ pub(super) fn price(kind: Kind) -> u32 {
         Kind::AssaultRifle => 1800,
         Kind::Flamethrower => 2500,
         Kind::Lmg => 3000,
+        Kind::Pistol45 => 600,
+        Kind::MiniUzi => 1000,
+        Kind::Magnum => 1500,
+        Kind::Ak47 => 2200,
+        Kind::Bullpup => 2400,
+        Kind::Rpk => 2800,
+        Kind::Molotov => 400,
+        Kind::PipeBomb => 600,
         Kind::Bandage => 200,
         Kind::Medkit => 600,
         Kind::BikeHelmet => 300,
@@ -47,8 +55,8 @@ pub(super) fn spare(kind: Kind, tier: u8) -> Option<(Kind, u32)> {
     let weapon = kind.weapon()?;
     let ammo = weapon.spec().ammo?;
     let mags = match kind {
-        Kind::Pistol => 10,
-        Kind::Lmg | Kind::Flamethrower => 4,
+        Kind::Pistol | Kind::Pistol45 => 10,
+        Kind::Lmg | Kind::Flamethrower | Kind::Rpk => 4,
         _ => 12,
     };
     Some((ammo, amp::capacity(weapon, tier) * mags))

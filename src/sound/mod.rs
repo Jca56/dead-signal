@@ -40,6 +40,13 @@ pub enum Sfx {
     /// The LMG's heavy bark; a flamethrower's stream, a breath of it.
     LmgShot,
     Flame,
+    /// A .45's thump, a .44's boom, a machine pistol's rattle, an AK's
+    /// bark, a bullpup's snap.
+    Shot45,
+    MagnumShot,
+    UziShot,
+    AkShot,
+    BullpupShot,
     /// Thrown things: a bottle bursting, what's in it catching, a fire
     /// crackling, a pipe bomb's beep, and its blast.
     Shatter,
@@ -145,7 +152,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 80] = [
+const ALL: [Sfx; 85] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -155,6 +162,11 @@ const ALL: [Sfx; 80] = [
     Sfx::SmgShot,
     Sfx::ArShot,
     Sfx::LmgShot,
+    Sfx::Shot45,
+    Sfx::MagnumShot,
+    Sfx::UziShot,
+    Sfx::AkShot,
+    Sfx::BullpupShot,
     Sfx::Flame,
     Sfx::Shatter,
     Sfx::Ignite,

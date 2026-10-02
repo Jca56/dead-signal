@@ -41,6 +41,10 @@ fn balance_md_matches_the_game() {
         };
         assert!((num(&row["Reload"]) - reload).abs() < 0.006, "{} reload {}", spec.name, row["Reload"]);
         assert_eq!(row["Mode"].starts_with("auto"), shot.auto, "{} mode", spec.name);
+        assert_eq!(Some(row["Slot"].to_uppercase().as_str()), spec.slot.map(|s| s.name()), "{} slot", spec.name);
+        if shot.gap > 0.0 && shot.stream.is_none() {
+            assert!((num(&row["Between shots"]) - shot.gap).abs() < 1e-9, "{} gap {}", spec.name, row["Between shots"]);
+        }
     }
     assert_eq!(guns.len(), Weapon::ALL.iter().filter(|w| w.spec().shot.is_some()).count(), "a row a gun");
     // Every melee weapon (and bare fists), a row.
@@ -72,11 +76,21 @@ fn balance_md_matches_the_game() {
     // What a holdout's dead leave.
     let left = table("| Left | Chance |");
     use crate::holdout::drops;
-    for (name, chance) in [("Rounds", drops::AMMO), ("Bandage", drops::BANDAGE), ("Medkit", drops::MEDKIT), ("Armor plate", drops::PLATE)] {
+    for (name, chance) in [("Rounds", drops::AMMO), ("Bandage", drops::BANDAGE), ("Medkit", drops::MEDKIT), ("Armor plate", drops::PLATE), ("Molotov", drops::MOLOTOV), ("Pipe bomb", drops::PIPE_BOMB)] {
         let row = left.iter().find(|r| r["Left"] == name).unwrap_or_else(|| panic!("no row for {name}"));
         assert!((num(&row["Chance"]) - chance * 100.0).abs() < 1e-9, "{name}: {}", row["Chance"]);
     }
-    assert_eq!(left.len(), 4);
+    assert_eq!(left.len(), 6);
+    // What's on a holdout's walls, and what each costs.
+    let walls = table("| On the wall | Cost |");
+    let built = crate::holdout::tests_built();
+    let sold: std::collections::HashSet<crate::loot::Kind> = built.buys.iter().filter_map(|b| b.wares.kind()).filter(|k| k.gear().is_none() && *k != crate::loot::Kind::ArmorPlate).collect();
+    assert_eq!(walls.len(), sold.len(), "a row for each thing sold");
+    for kind in sold {
+        let name = kind.def().name;
+        let row = walls.iter().find(|r| r["On the wall"] == name).unwrap_or_else(|| panic!("no wall row for {name}"));
+        assert_eq!(num(&row["Cost"]), f64::from(crate::holdout::price(kind)), "{name} cost");
+    }
     // The Amplifier's tiers.
     let tiers = table("| Tier | Cost |");
     assert_eq!(tiers.len(), usize::from(crate::weapon::amp::TIERS));

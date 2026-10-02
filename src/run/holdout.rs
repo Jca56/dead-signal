@@ -106,6 +106,8 @@ impl Run {
                 }
             }
         }
+        // (What the dead leave is for the guns there are among them.)
+        game.world.insert_resource(crate::holdout::drops::Wanted::by(self.seats.iter().filter(|s| !s.out).map(|s| &s.bag)));
         let alive = crate::zombie::alive(&mut game.world) as u32;
         for seat in &mut self.seats {
             h.score(seat.n, &seat.stats);

@@ -39,6 +39,7 @@ pub(super) const LOCKER: &[Line] = &[
     (Kind::Rucksack, 2, (1, 1)),
     (Kind::CargoPants, 3, (1, 1)),
     (Kind::Bandolier, 2, (1, 1)),
+    (Kind::Rounds45, 6, (6, 12)),
 ];
 
 // A map has a score of wrecks: their gold is rare.
@@ -181,6 +182,10 @@ pub(super) const GUN_CABINET: &[Line] = &[
     (Kind::Rifle, 4, (1, 1)),
     (Kind::RifleRounds, 8, (4, 10)),
     (Kind::Bandolier, 6, (1, 1)),
+    (Kind::Pistol45, 6, (1, 1)),
+    (Kind::Rounds45, 14, (8, 16)),
+    (Kind::Magnum, 3, (1, 1)),
+    (Kind::Rounds44, 8, (6, 12)),
 ];
 
 // The hunter's: their rifle, and what it takes.
@@ -192,6 +197,8 @@ pub(super) const HUNTER_CABINET: &[Line] = &[
     (Kind::Cash, 6, (1, 3)),
     (Kind::FireAxe, 10, (1, 1)),
     (Kind::Bandolier, 6, (1, 1)),
+    (Kind::Magnum, 4, (1, 1)),
+    (Kind::Rounds44, 10, (6, 12)),
 ];
 
 // A barn's: what the farm cut with, and what it ran on.
@@ -253,6 +260,10 @@ pub(super) const AMMO_CAGE: &[Line] = &[
     (Kind::MilitaryRuck, 2, (1, 1)),
     (Kind::Bandolier, 4, (1, 1)),
     (Kind::ArmorPlate, 8, (1, 2)),
+    (Kind::Ak47, 5, (1, 1)),
+    (Kind::RoundsAk, 18, (20, 30)),
+    (Kind::Bullpup, 3, (1, 1)),
+    (Kind::Rpk, 2, (1, 1)),
 ];
 
 pub(super) const SOLDIER: &[Line] = &[
@@ -271,6 +282,7 @@ pub(super) const SOLDIER: &[Line] = &[
     (Kind::CargoPants, 2, (1, 1)),
     (Kind::Bandolier, 2, (1, 1)),
     (Kind::ArmorPlate, 5, (1, 1)),
+    (Kind::RoundsAk, 8, (8, 20)),
 ];
 
 pub(super) const JUGGERNAUT: &[Line] = &[
@@ -288,6 +300,9 @@ pub(super) const JUGGERNAUT: &[Line] = &[
     (Kind::Rounds762, 8, (30, 60)),
     (Kind::PlateCarrier, 5, (1, 1)),
     (Kind::ArmorPlate, 8, (1, 2)),
+    (Kind::Ak47, 4, (1, 1)),
+    (Kind::RoundsAk, 8, (15, 30)),
+    (Kind::Rpk, 2, (1, 1)),
 ];
 
 // The gun store's: long guns on the wall, a gun more often than not
@@ -300,6 +315,8 @@ pub(super) const GUN_RACK: &[Line] = &[
     (Kind::RifleRounds, 20, (6, 12)),
     (Kind::Rounds, 15, (12, 24)),
     (Kind::Bandolier, 5, (1, 1)),
+    (Kind::Pistol45, 5, (1, 1)),
+    (Kind::Rounds45, 14, (8, 16)),
 ];
 
 // Under the glass: handguns, blades, boxes of rounds.
@@ -312,6 +329,8 @@ pub(super) const DISPLAY_CASE: &[Line] = &[
     (Kind::RifleRounds, 10, (6, 12)),
     (Kind::Rounds556, 8, (10, 20)),
     (Kind::Bandolier, 5, (1, 1)),
+    (Kind::Magnum, 4, (1, 1)),
+    (Kind::Rounds44, 8, (6, 12)),
 ];
 
 // Locked in the back (the cage key opens it): what the store didn't put
@@ -327,6 +346,9 @@ pub(super) const GUN_CAGE: &[Line] = &[
     (Kind::MilitaryHelmet, 5, (1, 1)),
     (Kind::PipeBomb, 8, (1, 2)),
     (Kind::ArmorPlate, 8, (1, 2)),
+    (Kind::MiniUzi, 5, (1, 1)),
+    (Kind::Ak47, 4, (1, 1)),
+    (Kind::RoundsAk, 14, (15, 30)),
 ];
 
 pub(super) const POLICE_LOCKER: &[Line] = &[
@@ -340,6 +362,8 @@ pub(super) const POLICE_LOCKER: &[Line] = &[
     (Kind::LightVest, 6, (1, 1)),
     (Kind::MilitaryHelmet, 2, (1, 1)),
     (Kind::ArmorPlate, 4, (1, 1)),
+    (Kind::Pistol45, 3, (1, 1)),
+    (Kind::Rounds45, 8, (6, 12)),
 ];
 
 // The station's front desk (the precinct key is kept in one).
@@ -367,6 +391,9 @@ pub(super) const POLICE_ARMORY: &[Line] = &[
     (Kind::MilitaryHelmet, 6, (1, 1)),
     (Kind::ArmorPlate, 10, (1, 2)),
     (Kind::PipeBomb, 4, (1, 1)),
+    (Kind::MiniUzi, 5, (1, 1)),
+    (Kind::Bullpup, 3, (1, 1)),
+    (Kind::Rounds45, 8, (8, 16)),
 ];
 
 // A patrol car's trunk.

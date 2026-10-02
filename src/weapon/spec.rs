@@ -3,6 +3,9 @@
 //! its clips runs (and when things happen in them, as `arms.py` and the
 //! weapon's own Blender module pose them).
 
+mod long;
+mod sidearms;
+
 use super::Act;
 use crate::loot::Kind;
 use crate::sound::Sfx;
@@ -19,13 +22,37 @@ pub enum Weapon {
     AssaultRifle,
     Lmg,
     Flamethrower,
+    Pistol45,
+    Magnum,
+    MiniUzi,
+    Ak47,
+    Bullpup,
+    Rpk,
     Knife,
     Machete,
     Axe,
 }
 
 impl Weapon {
-    pub const ALL: [Weapon; 11] = [Weapon::Fists, Weapon::Pistol, Weapon::Shotgun, Weapon::Rifle, Weapon::Smg, Weapon::AssaultRifle, Weapon::Lmg, Weapon::Flamethrower, Weapon::Knife, Weapon::Machete, Weapon::Axe];
+    pub const ALL: [Weapon; 17] = [
+        Weapon::Fists,
+        Weapon::Pistol,
+        Weapon::Shotgun,
+        Weapon::Rifle,
+        Weapon::Smg,
+        Weapon::AssaultRifle,
+        Weapon::Lmg,
+        Weapon::Flamethrower,
+        Weapon::Pistol45,
+        Weapon::Magnum,
+        Weapon::MiniUzi,
+        Weapon::Ak47,
+        Weapon::Bullpup,
+        Weapon::Rpk,
+        Weapon::Knife,
+        Weapon::Machete,
+        Weapon::Axe,
+    ];
 }
 
 /// How far off true a round may fly, degrees: standing still, moving,
@@ -158,7 +185,7 @@ pub struct Bash {
 }
 
 /// A blow as a gun's (or bare hands') is: a quick shove of a thing.
-const BLOW: Bash = Bash { time: 0.5, swing_at: 0.05, strike_at: 8.0 / 30.0, damage: 50.0, reach: 1.8, arc: 16.0, stamina: 8.0, shove: 1.0, cleave: 1, takedown: false, heard: 0.0, combo: false };
+pub(super) const BLOW: Bash = Bash { time: 0.5, swing_at: 0.05, strike_at: 8.0 / 30.0, damage: 50.0, reach: 1.8, arc: 16.0, stamina: 8.0, shove: 1.0, cleave: 1, takedown: false, heard: 0.0, combo: false };
 
 #[derive(Clone, Copy, Debug)]
 pub struct Spec {
@@ -193,278 +220,6 @@ const FISTS: Spec = Spec {
     holster: 0.2,
 };
 
-const PISTOL: Spec = Spec {
-    name: "PISTOL",
-    slot: Some(Slot::Sidearm),
-    model: "pistol",
-    mag: 12,
-    ammo: Some(Kind::Rounds),
-    shot: Some(Shot {
-        damage: 25.0,
-        pellets: 1,
-        falloff: None,
-        range: 300.0,
-        sound: Sfx::Shot,
-        heard: 40.0,
-        shove: 0.6,
-        stumble: false,
-        pierce: &[],
-        hip: Spread { still: 1.5, moving: 2.2, air: 4.0 },
-        aimed: Spread { still: 0.0, moving: 0.5, air: 3.0 },
-        aim_time: 0.18,
-        zoom: 0.8,
-        scope: false,
-        gap: 0.0,
-        time: 0.2,
-        auto: false,
-        select: false,
-        kick: 1.5,
-        kick_side: 0.8,
-        marks: &[],
-        stream: None,
-    }),
-    reload: Some(Reload::Magazine { time: 1.4, marks: &[(0.2, Act::MagOut), (0.95, Act::MagIn), (1.12, Act::SlideRack)] }),
-    // The pistol-whip lands on frame 9 of 30 a second.
-    bash: BLOW,
-    draw: 0.35,
-    holster: 0.25,
-};
-
-const SHOTGUN: Spec = Spec {
-    name: "SHOTGUN",
-    slot: Some(Slot::Primary),
-    model: "shotgun",
-    mag: 5,
-    ammo: Some(Kind::Shells),
-    shot: Some(Shot {
-        // Ten pellets, tight enough to put a Shambler down in one out to
-        // six metres from the hip, ten aimed.
-        damage: 22.0,
-        pellets: 10,
-        falloff: Some(Falloff { near: 12.0, far: 32.0, least: 0.4 }),
-        range: 60.0,
-        sound: Sfx::Blast,
-        heard: 100.0,
-        shove: 1.3,
-        stumble: true,
-        pierce: &[],
-        hip: Spread { still: 3.6, moving: 4.4, air: 7.0 },
-        aimed: Spread { still: 2.4, moving: 3.2, air: 6.0 },
-        aim_time: 0.25,
-        zoom: 0.85,
-        scope: false,
-        // The pump is racked before it fires again.
-        gap: 0.6,
-        time: 0.8,
-        auto: false,
-        select: false,
-        kick: 5.0,
-        kick_side: 2.0,
-        marks: &[(10.0 / 30.0, Act::Pump)],
-        stream: None,
-    }),
-    reload: Some(Reload::Rounds { start: 0.4, start_marks: &[], each: 13.0 / 30.0, insert_at: 8.0 / 30.0, end: 0.5, end_marks: &[(9.0 / 30.0, Act::Pump)] }),
-    // The shove with the gun's side lands on frame 8.
-    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
-    draw: 0.45,
-    holster: 0.35,
-};
-
-const RIFLE: Spec = Spec {
-    name: "HUNTING RIFLE",
-    slot: Some(Slot::Primary),
-    model: "rifle",
-    mag: 5,
-    ammo: Some(Kind::RifleRounds),
-    shot: Some(Shot {
-        // One to anywhere drops one of the dead; the round goes on through
-        // two more, weaker.
-        damage: 160.0,
-        pellets: 1,
-        falloff: None,
-        range: 400.0,
-        sound: Sfx::RifleShot,
-        heard: 120.0,
-        shove: 3.0,
-        stumble: true,
-        pierce: &[0.7, 0.4],
-        hip: Spread { still: 3.0, moving: 5.0, air: 8.0 },
-        aimed: Spread { still: 0.0, moving: 1.5, air: 5.0 },
-        aim_time: 0.35,
-        zoom: 0.25,
-        scope: true,
-        // The bolt is worked before it fires again.
-        gap: 1.1,
-        time: 1.1,
-        auto: false,
-        select: false,
-        kick: 6.0,
-        kick_side: 1.5,
-        marks: &[(14.0 / 30.0, Act::Bolt)],
-        stream: None,
-    }),
-    reload: Some(Reload::Rounds { start: 0.5, start_marks: &[(6.0 / 30.0, Act::Bolt)], each: 0.6, insert_at: 10.0 / 30.0, end: 0.55, end_marks: &[(9.0 / 30.0, Act::Bolt)] }),
-    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
-    draw: 0.5,
-    holster: 0.4,
-};
-
-// A spray of 9mm: soft rounds, a lot of them, quickly.
-const SMG: Spec = Spec {
-    name: "SMG",
-    slot: Some(Slot::Sidearm),
-    model: "smg",
-    mag: 30,
-    ammo: Some(Kind::Rounds),
-    shot: Some(Shot {
-        damage: 20.0,
-        pellets: 1,
-        falloff: Some(Falloff { near: 20.0, far: 60.0, least: 0.6 }),
-        range: 150.0,
-        sound: Sfx::SmgShot,
-        heard: 60.0,
-        shove: 0.4,
-        stumble: false,
-        pierce: &[],
-        hip: Spread { still: 2.6, moving: 3.5, air: 6.0 },
-        aimed: Spread { still: 0.8, moving: 1.6, air: 4.0 },
-        aim_time: 0.2,
-        zoom: 0.8,
-        scope: false,
-        // About 800 a minute.
-        gap: 0.075,
-        time: 2.0 / 30.0,
-        auto: true,
-        select: false,
-        kick: 0.8,
-        kick_side: 0.9,
-        marks: &[],
-        stream: None,
-    }),
-    reload: Some(Reload::Magazine { time: 2.0, marks: &[(0.5, Act::MagOut), (1.48, Act::MagIn), (1.76, Act::SlideRack)] }),
-    bash: Bash { time: 0.6, swing_at: 0.1, damage: 50.0, reach: 1.8, stamina: 9.0, ..BLOW },
-    draw: 0.4,
-    holster: 0.3,
-};
-
-// The soldiers' rifle: hard-hitting, through one into the next, full auto
-// or a round a pull.
-const ASSAULT_RIFLE: Spec = Spec {
-    name: "ASSAULT RIFLE",
-    slot: Some(Slot::Primary),
-    model: "ar",
-    mag: 30,
-    ammo: Some(Kind::Rounds556),
-    shot: Some(Shot {
-        damage: 42.0,
-        pellets: 1,
-        falloff: None,
-        range: 350.0,
-        sound: Sfx::ArShot,
-        heard: 90.0,
-        shove: 1.0,
-        stumble: false,
-        pierce: &[0.5],
-        hip: Spread { still: 2.4, moving: 3.4, air: 6.0 },
-        aimed: Spread { still: 0.15, moving: 1.0, air: 4.0 },
-        aim_time: 0.25,
-        zoom: 0.7,
-        scope: false,
-        // About 600 a minute.
-        gap: 0.1,
-        time: 3.0 / 30.0,
-        auto: true,
-        select: true,
-        kick: 1.3,
-        kick_side: 0.8,
-        marks: &[],
-        stream: None,
-    }),
-    reload: Some(Reload::Magazine { time: 2.3, marks: &[(0.55, Act::MagOut), (1.7, Act::MagIn), (2.02, Act::SlideRack)] }),
-    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 10.0, ..BLOW },
-    draw: 0.5,
-    holster: 0.4,
-};
-
-// A belt of 7.62 and no hurry: slow up, slow to feed, and it doesn't stop.
-// Through one and the two behind it.
-const LMG: Spec = Spec {
-    name: "LMG",
-    slot: Some(Slot::Primary),
-    model: "lmg",
-    mag: 100,
-    ammo: Some(Kind::Rounds762),
-    shot: Some(Shot {
-        damage: 55.0,
-        pellets: 1,
-        falloff: None,
-        range: 400.0,
-        sound: Sfx::LmgShot,
-        heard: 110.0,
-        shove: 1.4,
-        stumble: false,
-        pierce: &[0.6, 0.3],
-        hip: Spread { still: 3.4, moving: 4.8, air: 8.0 },
-        aimed: Spread { still: 0.5, moving: 1.8, air: 5.0 },
-        aim_time: 0.4,
-        zoom: 0.75,
-        scope: false,
-        // About 550 a minute.
-        gap: 0.11,
-        time: 3.0 / 30.0,
-        auto: true,
-        select: false,
-        kick: 1.7,
-        kick_side: 1.3,
-        marks: &[],
-        stream: None,
-    }),
-    // The old box off, a fresh one on, the belt laid in, the handle hauled.
-    reload: Some(Reload::Magazine { time: 5.0, marks: &[(1.1, Act::MagOut), (3.3, Act::MagIn), (4.4, Act::SlideRack)] }),
-    bash: Bash { time: 0.6, swing_at: 0.1, damage: 60.0, reach: 1.9, stamina: 14.0, ..BLOW },
-    draw: 0.8,
-    holster: 0.6,
-};
-
-// A tank of fuel and a pilot light: no aim to speak of, no reach, and
-// nothing in front of it left unburnt.
-const FLAMETHROWER: Spec = Spec {
-    name: "FLAMETHROWER",
-    slot: Some(Slot::Primary),
-    model: "flamethrower",
-    mag: 200,
-    ammo: Some(Kind::FlameFuel),
-    shot: Some(Shot {
-        // Twenty puffs a second, each scorching all it reaches.
-        damage: 8.0,
-        pellets: 1,
-        falloff: None,
-        range: 9.0,
-        sound: Sfx::Flame,
-        heard: 35.0,
-        shove: 0.0,
-        stumble: false,
-        pierce: &[],
-        hip: Spread { still: 0.0, moving: 0.0, air: 0.0 },
-        aimed: Spread { still: 0.0, moving: 0.0, air: 0.0 },
-        aim_time: 0.25,
-        zoom: 0.9,
-        scope: false,
-        gap: 0.05,
-        time: 2.0 / 30.0,
-        auto: true,
-        select: false,
-        kick: 0.12,
-        kick_side: 0.25,
-        marks: &[],
-        stream: Some(Stream { cone: 22.0 }),
-    }),
-    reload: Some(Reload::Magazine { time: 3.0, marks: &[(0.6, Act::MagOut), (2.1, Act::MagIn), (2.6, Act::SlideRack)] }),
-    bash: Bash { time: 0.6, swing_at: 0.1, damage: 55.0, reach: 1.9, stamina: 12.0, ..BLOW },
-    draw: 0.7,
-    holster: 0.5,
-};
-
 /// A melee weapon: no rounds, its swing everything.
 const fn melee(name: &'static str, model: &'static str, bash: Bash, draw: f64) -> Spec {
     Spec { name, slot: Some(Slot::Melee), model, mag: 0, ammo: None, shot: None, reload: None, bash, draw, holster: draw * 0.8 }
@@ -481,13 +236,19 @@ impl Weapon {
     pub fn spec(self) -> &'static Spec {
         match self {
             Weapon::Fists => &FISTS,
-            Weapon::Pistol => &PISTOL,
-            Weapon::Shotgun => &SHOTGUN,
-            Weapon::Rifle => &RIFLE,
-            Weapon::Smg => &SMG,
-            Weapon::AssaultRifle => &ASSAULT_RIFLE,
-            Weapon::Lmg => &LMG,
-            Weapon::Flamethrower => &FLAMETHROWER,
+            Weapon::Pistol => &sidearms::PISTOL,
+            Weapon::Shotgun => &long::SHOTGUN,
+            Weapon::Rifle => &long::RIFLE,
+            Weapon::Smg => &sidearms::SMG,
+            Weapon::AssaultRifle => &long::ASSAULT_RIFLE,
+            Weapon::Lmg => &long::LMG,
+            Weapon::Flamethrower => &long::FLAMETHROWER,
+            Weapon::Pistol45 => &sidearms::PISTOL_45,
+            Weapon::Magnum => &sidearms::MAGNUM,
+            Weapon::MiniUzi => &sidearms::MINI_UZI,
+            Weapon::Ak47 => &long::AK47,
+            Weapon::Bullpup => &long::BULLPUP,
+            Weapon::Rpk => &long::RPK,
             Weapon::Knife => &KNIFE,
             Weapon::Machete => &MACHETE,
             Weapon::Axe => &AXE,

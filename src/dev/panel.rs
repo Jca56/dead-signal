@@ -243,10 +243,12 @@ impl DevPanel {
 
 /// Every kind of thing, by what it is: two columns of groups, each its
 /// name over a row of buttons.
-const GROUPS: [(&str, &[Kind]); 12] = [
-    ("GUNS", &[Kind::Pistol, Kind::Shotgun, Kind::Rifle, Kind::Smg, Kind::AssaultRifle]),
-    ("AMMO", &[Kind::Rounds, Kind::Shells, Kind::RifleRounds, Kind::Rounds556]),
-    ("HEAVY", &[Kind::Lmg, Kind::Rounds762, Kind::Flamethrower, Kind::FlameFuel]),
+const GROUPS: [(&str, &[Kind]); 14] = [
+    ("SIDEARMS", &[Kind::Pistol, Kind::Pistol45, Kind::Magnum, Kind::Smg, Kind::MiniUzi]),
+    ("LONG GUNS", &[Kind::Shotgun, Kind::Rifle, Kind::AssaultRifle, Kind::Ak47, Kind::Bullpup]),
+    ("HEAVY", &[Kind::Lmg, Kind::Rpk, Kind::Flamethrower]),
+    ("AMMO", &[Kind::Rounds, Kind::Rounds45, Kind::Rounds44, Kind::Shells, Kind::RifleRounds]),
+    ("MORE AMMO", &[Kind::Rounds556, Kind::RoundsAk, Kind::Rounds762, Kind::FlameFuel]),
     ("THROWABLES", &[Kind::Molotov, Kind::PipeBomb]),
     ("MELEE", &[Kind::Knife, Kind::Machete, Kind::FireAxe]),
     ("HEALTH", &[Kind::Bandage, Kind::Medkit, Kind::Pills]),

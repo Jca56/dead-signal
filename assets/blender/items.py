@@ -33,6 +33,7 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 from item_kit import *  # noqa: E402,F403
 import items_guns  # noqa: E402
 import items_heavy  # noqa: E402
+import items_more  # noqa: E402
 import items_throw  # noqa: E402
 import items_gear  # noqa: E402
 
@@ -283,6 +284,15 @@ def main():
     items_heavy.rounds_762()
     items_heavy.flamethrower()
     items_heavy.flame_fuel()
+    items_more.pistol_45()
+    items_more.rounds_45()
+    items_more.magnum()
+    items_more.rounds_44()
+    items_more.uzi()
+    items_more.ak()
+    items_more.rounds_ak()
+    items_more.bullpup()
+    items_more.rpk()
     items_throw.molotov()
     items_throw.pipe_bomb()
     items_gear.all_gear()

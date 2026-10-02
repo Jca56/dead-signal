@@ -95,9 +95,18 @@ pub enum Kind {
     Rounds762,
     Flamethrower,
     FlameFuel,
+    Pistol45,
+    Rounds45,
+    Magnum,
+    Rounds44,
+    MiniUzi,
+    Ak47,
+    RoundsAk,
+    Bullpup,
+    Rpk,
 }
 
-pub const ALL: [Kind; 47] = [
+pub const ALL: [Kind; 56] = [
     Kind::Rounds,
     Kind::Bandage,
     Kind::Medkit,
@@ -145,6 +154,15 @@ pub const ALL: [Kind; 47] = [
     Kind::Rounds762,
     Kind::Flamethrower,
     Kind::FlameFuel,
+    Kind::Pistol45,
+    Kind::Rounds45,
+    Kind::Magnum,
+    Kind::Rounds44,
+    Kind::MiniUzi,
+    Kind::Ak47,
+    Kind::RoundsAk,
+    Kind::Bullpup,
+    Kind::Rpk,
 ];
 
 impl Kind {
@@ -199,6 +217,15 @@ impl Kind {
             Kind::Rounds762 => "rounds_762",
             Kind::Flamethrower => "flamethrower",
             Kind::FlameFuel => "flame_fuel",
+            Kind::Pistol45 => "pistol_45",
+            Kind::Rounds45 => "rounds_45",
+            Kind::Magnum => "magnum_44",
+            Kind::Rounds44 => "rounds_44",
+            Kind::MiniUzi => "mini_uzi",
+            Kind::Ak47 => "ak47",
+            Kind::RoundsAk => "rounds_762x39",
+            Kind::Bullpup => "bullpup",
+            Kind::Rpk => "rpk",
         }
     }
 
@@ -219,6 +246,12 @@ impl Kind {
             Kind::AssaultRifle => Some(Weapon::AssaultRifle),
             Kind::Lmg => Some(Weapon::Lmg),
             Kind::Flamethrower => Some(Weapon::Flamethrower),
+            Kind::Pistol45 => Some(Weapon::Pistol45),
+            Kind::Magnum => Some(Weapon::Magnum),
+            Kind::MiniUzi => Some(Weapon::MiniUzi),
+            Kind::Ak47 => Some(Weapon::Ak47),
+            Kind::Bullpup => Some(Weapon::Bullpup),
+            Kind::Rpk => Some(Weapon::Rpk),
             _ => None,
         }
     }
@@ -290,6 +323,15 @@ impl Kind {
             Kind::Rounds762 => d("7.62 BELT", (2, 1), 100, Rare, 6, "ITEM_Rounds762"),
             Kind::Flamethrower => d("FLAMETHROWER", (5, 2), 1, Legendary, 1200, "ITEM_Flamethrower"),
             Kind::FlameFuel => d("FLAME FUEL", (1, 2), 200, Rare, 2, "ITEM_FlameFuel"),
+            Kind::Pistol45 => d(".45 PISTOL", (2, 1), 1, Rare, 260, "ITEM_Pistol45"),
+            Kind::Rounds45 => d(".45 ROUNDS", (1, 1), 24, Uncommon, 4, "ITEM_Rounds45"),
+            Kind::Magnum => d(".44 MAGNUM", (2, 1), 1, Epic, 520, "ITEM_Magnum"),
+            Kind::Rounds44 => d(".44 ROUNDS", (1, 1), 18, Rare, 9, "ITEM_Rounds44"),
+            Kind::MiniUzi => d("MINI UZI", (2, 2), 1, Rare, 420, "ITEM_Uzi"),
+            Kind::Ak47 => d("AK-47", (5, 1), 1, Epic, 700, "ITEM_Ak"),
+            Kind::RoundsAk => d("7.62 ROUNDS", (1, 1), 30, Uncommon, 6, "ITEM_RoundsAk"),
+            Kind::Bullpup => d("BULLPUP", (4, 1), 1, Legendary, 900, "ITEM_Bullpup"),
+            Kind::Rpk => d("RPK", (5, 2), 1, Legendary, 1000, "ITEM_Rpk"),
         }
     }
 }
@@ -411,78 +453,4 @@ impl Dice {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::tables::Source;
-    use super::*;
-
-    /// `Items.md` is the list kept for people: every thing in it, as the
-    /// game has it (size, stack, rarity, worth, where it's found).
-    #[test]
-    fn items_md_matches_the_game() {
-        let md = std::fs::read_to_string(format!("{}/Items.md", env!("CARGO_MANIFEST_DIR"))).expect("Items.md");
-        let rows: Vec<Vec<String>> = md
-            .lines()
-            .skip_while(|l| !l.starts_with("| Item |"))
-            .skip(2)
-            .take_while(|l| l.starts_with('|'))
-            .map(|l| l.trim_matches('|').split('|').map(|c| c.trim().to_string()).collect())
-            .collect();
-        assert_eq!(rows.len(), ALL.len(), "one row a kind of thing");
-        let lying = [Kind::Rounds, Kind::Bandage, Kind::Medkit];
-        for kind in ALL {
-            let d = kind.def();
-            let row = rows.iter().find(|r| r[0] == d.name).unwrap_or_else(|| panic!("{} isn't in Items.md", d.name));
-            assert_eq!(row[1], format!("{}×{}", d.size.0, d.size.1), "{} size", d.name);
-            assert_eq!(row[2], d.stack.to_string(), "{} stack", d.name);
-            let rarity = d.rarity.name();
-            assert_eq!(row[3].to_uppercase(), rarity, "{} rarity", d.name);
-            assert_eq!(row[4], format!("${}", d.value), "{} value", d.name);
-            assert!(!row[6].is_empty(), "{} has no flavor", d.name);
-            // (The keys are put somewhere once a run, not rolled for.)
-            if matches!(kind, Kind::Key | Kind::ArmoryKey | Kind::PrecinctKey) {
-                continue;
-            }
-            let mut found: Vec<&str> = [
-                (Source::Crate, "crate"),
-                (Source::Locker, "locker"),
-                (Source::Car, "car"),
-                (Source::Cage, "cage"),
-                (Source::Fridge, "fridge"),
-                (Source::Cabinet, "drawers"),
-                (Source::Desk, "desk"),
-                (Source::Wardrobe, "wardrobe"),
-                (Source::Shelf, "shelf"),
-                (Source::Register, "register"),
-                (Source::GunCabinet, "gun cabinet"),
-                (Source::HunterCabinet, "hunter's cabinet"),
-                (Source::ToolLocker, "tool locker"),
-                (Source::SupplyCase, "supply case"),
-                (Source::AmmoCage, "ammo cage"),
-                (Source::Corpse, "zombies"),
-                (Source::Soldier, "soldiers"),
-                (Source::Juggernaut, "juggernaut"),
-                (Source::GunRack, "gun rack"),
-                (Source::DisplayCase, "display case"),
-                (Source::GunCage, "gun cage"),
-                (Source::PoliceLocker, "police locker"),
-                (Source::FrontDesk, "front desk"),
-                (Source::PoliceArmory, "police armory"),
-                (Source::CopCar, "patrol car"),
-                (Source::Cop, "cops"),
-                (Source::FireEngine, "fire engine"),
-                (Source::FireLocker, "turnout locker"),
-                (Source::MedCabinet, "first aid cabinet"),
-                (Source::SchoolLocker, "student locker"),
-                (Source::Firefighter, "firefighters"),
-            ]
-                .iter()
-                .filter(|(s, _)| s.holds(kind))
-                .map(|(_, w)| *w)
-                .collect();
-            if lying.contains(&kind) {
-                found.push("lying about");
-            }
-            assert_eq!(row[5], found.join(", "), "{} found in", d.name);
-        }
-    }
-}
+mod tests;

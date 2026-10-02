@@ -149,6 +149,16 @@ HOLDOUT's perks. Decided 2026-10-02 (Alva's note: "Perks are Stimpacks that you 
 - [x] The med stations (`src/holdout/station.rs`): an enamelled cabinet, a lit cross, tubes and a beacon in its stim's colour. Lazarus in the control room, Rush at the far end of the motor pool's bay, Bulwark in the barracks' showers, Twitch upstairs among the servers.
 - [x] The jab (`assets/blender/stim.py` → `viewmodel_stim.glb`): the gun's put away, an injector comes up in the right hand, what's in it glowing the stim's colour, and it's jabbed into the left forearm; the needle in, it's theirs.
 
+## Phase 14: More guns 🔫
+
+Decided 2026-10-02: six more guns, some on HOLDOUT's walls and the best only in the mystery drop; the dead leave rounds only for guns the players carry; Molotovs and pipe bombs sold on walls and now and then left by the dead.
+
+- [x] Sidearms (`src/weapon/spec/sidearms.rs`, `assets/blender/sidearm.py`): the .45 PISTOL (8 rounds of 45; a wall, 600), the .44 MAGNUM (a revolver: 6 of 130, through one into the next; mystery drop only), the MINI UZI (32 rounds of 9mm at 1100 a minute; a wall, 1000).
+- [x] Long guns (`src/weapon/spec/long.rs`, `magfed.py`): the AK-47 (7.62, 52 a round, iron sights; a wall, 2200), the BULLPUP (5.56, fast and light, its sight built in; mystery drop only), the RPK (the AK's rounds from a drum of 75; mystery drop only).
+- [x] New rounds: .45, .44, and 7.62 (the AK's and the RPK's).
+- [x] The dead leave rounds only for guns carried (`holdout/drops.rs::Wanted`), and rarely a Molotov or a pipe bomb; both are on walls too (the motor pool's workshop, the barracks' kitchen).
+- [x] All six in the mystery drop's odds; in extraction's loot tables too (gun cabinets, the police armory, the ammo cage, a Juggernaut).
+
 
 ---
 

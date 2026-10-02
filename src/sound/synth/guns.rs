@@ -99,6 +99,66 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
                 (crack * 1.0 + thump * 1.25 + roll * 2.8).tanh()
             })
         }
+        Sfx::Shot45 => {
+            // The pistol's, heavier: a lower crack, more thump.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(0.6, 0.97, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 2900.0, 0.6).2 * env(t, 0.0005, 0.007);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 135.0, 38.0, 0.035)).sin() * env(t, 0.001, 0.09);
+                let rumble = tail.run(x, 560.0, 1.2).0 * env(t, 0.004, 0.2);
+                (crack * 0.9 + thump * 1.25 + rumble * 2.7).tanh()
+            })
+        }
+        Sfx::MagnumShot => {
+            // A hand cannon: a hard crack, a boom under it, and a roll
+            // that comes back off the walls.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(1.2, 1.0, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 3300.0, 0.6).2 * env(t, 0.0004, 0.009);
+                let boom = (std::f32::consts::TAU * sweep_phase(t, 125.0, 30.0, 0.05)).sin() * env(t, 0.001, 0.13);
+                let echo = env((t - 0.3).max(0.0), 0.02, 0.2) * f32::from(t > 0.3);
+                let roll = tail.run(x, 420.0, 1.1).0 * (env(t, 0.005, 0.26) + 0.4 * echo);
+                (crack * 1.2 + boom * 1.5 + roll * 3.0).tanh()
+            })
+        }
+        Sfx::UziShot => {
+            // A tinny, quick snap, hardly any thump: they come in a rattle.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(0.22, 0.75, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 4700.0, 0.6).2 * env(t, 0.0004, 0.004);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 210.0, 75.0, 0.018)).sin() * env(t, 0.001, 0.035);
+                let rumble = tail.run(x, 1100.0, 1.1).0 * env(t, 0.003, 0.06);
+                (crack * 0.95 + thump * 0.65 + rumble * 2.0).tanh()
+            })
+        }
+        Sfx::AkShot => {
+            // Between the rifle's and the LMG's: a flat, hard bark with
+            // a clatter in it, a short roll.
+            let (mut body, mut tail, mut clack) = (Svf::default(), Svf::default(), Svf::default());
+            render(0.6, 0.98, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 3900.0, 0.5).2 * env(t, 0.0003, 0.007);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 155.0, 42.0, 0.03)).sin() * env(t, 0.001, 0.075);
+                let clatter = clack.run(x, 1700.0, 0.4).1 * env((t - 0.03).max(0.0), 0.0005, 0.012) * f32::from(t > 0.03) * 0.5;
+                let roll = tail.run(x, 520.0, 1.0).0 * env(t, 0.004, 0.16);
+                (crack * 1.05 + thump * 1.2 + clatter + roll * 2.7).tanh()
+            })
+        }
+        Sfx::BullpupShot => {
+            // The assault rifle's, tighter and brighter: a snap, a small
+            // punch, gone before the next.
+            let (mut body, mut tail) = (Svf::default(), Svf::default());
+            render(0.4, 0.9, |t, n| {
+                let x = n.next();
+                let crack = body.run(x, 5400.0, 0.5).2 * env(t, 0.0003, 0.005);
+                let thump = (std::f32::consts::TAU * sweep_phase(t, 185.0, 55.0, 0.022)).sin() * env(t, 0.001, 0.05);
+                let roll = tail.run(x, 700.0, 1.0).0 * env(t, 0.004, 0.1);
+                (crack * 1.1 + thump * 0.9 + roll * 2.4).tanh()
+            })
+        }
         Sfx::Flame => {
             // A breath of the stream: a roar of burning air, swelling and
             // gone (one on another, they're the stream).

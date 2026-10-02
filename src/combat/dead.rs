@@ -122,7 +122,9 @@ impl Combat {
         // with (`holdout/drops.rs`).
         if let Some(kind) = game.world.get::<zombie::brain::Zombie>(e).filter(|z| z.relentless).map(|z| z.kind) {
             let Some(at) = game.world.get::<Body>(e).map(|b| b.pos) else { return };
-            for stack in crate::holdout::drops::left_by(kind, &mut self.loot) {
+            // (Its rounds, if any, for a gun one of the players has.)
+            let wanted = game.world.get_resource::<crate::holdout::drops::Wanted>().cloned().unwrap_or_default();
+            for stack in crate::holdout::drops::left_by(kind, &mut self.loot, &wanted) {
                 let yaw = self.loot.unit() * std::f64::consts::TAU;
                 let off = Vec3::new(yaw.cos(), 0.0, yaw.sin()) * (0.5 * self.loot.unit());
                 items::set_down(&mut game.world, stack, at + off + Vec3::new(0.0, 1.0, 0.0), yaw);
