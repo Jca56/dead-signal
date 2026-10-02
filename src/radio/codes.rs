@@ -19,6 +19,7 @@ pub enum Call {
     MedicDrop,
     DoublePoints,
     Instakill,
+    PrecisionStrike,
     StrafingRun,
     Gunship,
 }
@@ -36,11 +37,12 @@ pub struct Entry {
 use Arrow::{Down as D, Left as L, Right as R, Up as U};
 
 /// Everything on the card, in its order.
-pub const ENTRIES: [Entry; 6] = [
+pub const ENTRIES: [Entry; 7] = [
     Entry { call: Call::AmmoDrop, name: "AMMO DROP", code: &[D, D, U, R], cost: 2 },
     Entry { call: Call::MedicDrop, name: "MEDIC DROP", code: &[D, U, R, L], cost: 2 },
     Entry { call: Call::DoublePoints, name: "2X POINTS", code: &[L, R, L, R], cost: 3 },
     Entry { call: Call::Instakill, name: "INSTAKILL", code: &[R, U, D, D, L], cost: 4 },
+    Entry { call: Call::PrecisionStrike, name: "PRECISION STRIKE", code: &[R, R, U], cost: 2 },
     Entry { call: Call::StrafingRun, name: "STRAFING RUN", code: &[U, R, R], cost: 3 },
     Entry { call: Call::Gunship, name: "GUNSHIP", code: &[U, L, R, D, U], cost: 5 },
 ];
@@ -53,6 +55,11 @@ impl Call {
     /// thrown.
     pub fn dropped(self) -> bool {
         matches!(self, Call::AmmoDrop | Call::MedicDrop)
+    }
+
+    /// Whether it's a strike: where it's to land is marked on the ground.
+    pub fn struck(self) -> bool {
+        matches!(self, Call::StrafingRun | Call::PrecisionStrike)
     }
 
     /// Its line of the card.

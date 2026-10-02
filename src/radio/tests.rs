@@ -42,7 +42,7 @@ fn a_code_punched_in_keys_it_and_what_was_called_for_goes_out() {
     assert_eq!((r.calling(), r.press(D)), (Some(Call::StrafingRun), None), "no more arrows till it's sent");
     r.update(true, DT);
     assert_eq!(r.shown().map(|s| s.clip), Some("Key"));
-    assert_eq!(run(&mut r, KEY + 0.1), [Cue::Talk, Cue::Over(Call::StrafingRun)]);
+    assert_eq!(run(&mut r, KEY / KEYED + 0.1), [Cue::Talk, Cue::Over], "keyed quick");
     assert!(r.dialing() && r.calling().is_none() && r.dial().len() == 0, "ready for the next");
 }
 
@@ -57,7 +57,7 @@ fn arrows_are_taken_before_it_s_up_and_a_wrong_one_shows_a_moment() {
     assert!(r.shown().is_none());
     // Up it comes, and it's keyed at once.
     let heard = run(&mut r, RAISE + KEY + 0.2);
-    assert_eq!(heard, [Cue::On, Cue::Talk, Cue::Over(Call::AmmoDrop)]);
+    assert_eq!(heard, [Cue::On, Cue::Talk, Cue::Over]);
     // A wrong arrow: begun again, and it shows for a moment.
     assert_eq!([L, R].map(|a| r.press(a)), [Some(Dialed::On); 2]);
     assert_eq!(r.press(U), Some(Dialed::Wrong));
@@ -150,9 +150,39 @@ fn a_strike_given_waits_to_be_placed_with_the_radio_up_and_is_kept_put_away() {
     run(&mut r, LOWER + 0.1);
     r.drop_it();
     r.pull();
-    assert_eq!((r.placing(), r.strike()), (None, Some(Call::StrafingRun)), "kept; placed once it's up again");
+    assert_eq!(r.placing(), Some(Call::StrafingRun), "kept; and to be placed as soon as it's wanted again");
     run(&mut r, RAISE + 0.1);
     assert_eq!(r.placing(), Some(Call::StrafingRun));
     r.placed();
     assert!(r.strike().is_none() && r.dialing());
+}
+
+#[test]
+fn told_to_leave_it_goes_away_by_itself_once_it_s_keyed_or_the_flare_s_thrown() {
+    // A boost called for: keyed, then down without being told again.
+    let mut r = up();
+    for a in [L, R, L, R] {
+        r.press(a);
+    }
+    r.leave();
+    assert_eq!(run(&mut r, KEY / KEYED + LOWER + 0.2), [Cue::Talk, Cue::Over, Cue::Off]);
+    assert!(!r.out());
+    // A flare thrown: its throw finished, then down.
+    let mut r = up();
+    r.give_flare(Call::MedicDrop);
+    run(&mut r, FLARE_UP + 0.1);
+    r.throw();
+    let heard = run(&mut r, THROWN_AT + 0.05);
+    assert_eq!(heard, [Cue::Thrown(Call::MedicDrop)]);
+    r.leave();
+    assert_eq!(r.shown().map(|s| s.clip), Some("Throw"), "the throw's followed through");
+    assert_eq!(run(&mut r, THROW + LOWER + 0.2), [Cue::Off]);
+    assert!(!r.out());
+    // Put away by hand meanwhile: it isn't told twice.
+    let mut r = up();
+    r.leave();
+    r.put_away();
+    run(&mut r, LOWER + 0.1);
+    r.pull();
+    assert!(run(&mut r, RAISE + 0.5) == [Cue::On] && r.dialing());
 }

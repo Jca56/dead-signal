@@ -4,7 +4,9 @@
 //! down, its lid off, the parachute fallen in a heap beside it; a strip
 //! of ground marked for a strafing run, outlined in red (while it's being
 //! placed, in that player's pane; once it's called in, for everyone to
-//! keep out of), and the plane that comes over it; the gunship, its
+//! keep out of), and the plane that comes over it; a precision strike's
+//! circle with its cross, its shell coming down, and the ring and the
+//! dust of it landing; the gunship, its
 //! rotor turning, its gun flashing in its door, its searchlight's shaft
 //! down on what it's at. And what they light of a night.
 
@@ -14,6 +16,7 @@ use lntrn_math::{Mat4, Quat, Vec3};
 
 use super::gunship::Gunship;
 use super::strafe::{LONG, Strafe, Strip, WIDE};
+use super::strike::{self, Spot, Strike};
 use super::{Drop, Flare, SETTLES, STANDS};
 use crate::render::{Draw, Light, MeshId, Renderer, Vertex};
 use crate::world::Solid;
@@ -47,6 +50,13 @@ const BAR: (f64, f64) = (0.16, 0.07);
 const OVER: f64 = 0.06;
 const MARKED: [f32; 3] = [1.0, 0.08, 0.06];
 const REFUSED: [f32; 3] = [0.40, 0.38, 0.36];
+/// A precision strike: its shell's white heat, how long and thick it's
+/// drawn; how many bars its circle's drawn with; and its dust (how many
+/// puffs, their colour, how thick).
+const HOT: [f32; 3] = [1.0, 0.95, 0.85];
+const SHELL: (f64, f64) = (9.0, 0.45);
+const ROUND: usize = 30;
+const DUST: (usize, [f32; 3], f32) = (12, [0.42, 0.36, 0.28], 0.5);
 const PORT: [f32; 3] = [1.0, 0.1, 0.1];
 const STARBOARD: [f32; 3] = [0.1, 1.0, 0.2];
 /// The gunship: its searchlight's colour, how wide its shaft is and how
@@ -87,6 +97,8 @@ pub struct Meshes {
     /// The handset, and its display's glow: in another player's hand.
     radio: MeshId,
     display: MeshId,
+    /// A precision strike's shell, white-hot.
+    shell: MeshId,
 }
 
 /// Load what they look like, for `world`'s runs.
@@ -109,6 +121,7 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
                     // a block of each.)
                     let mut block = |glow: [f32; 3]| renderer.add_mesh(&crate::motes::speck([1.0; 3], glow, glow));
                     let (marked, refused, port, starboard, display) = (block(MARKED), block(REFUSED), block(PORT), block(STARBOARD), block(AMBER));
+                    let shell = block(HOT);
                     // A fire's flame, made a flare's: red, its heart
                     // white-hot.
                     let Some(flame) = crate::assets::load(renderer, "effects").ok().and_then(|fx| {
@@ -119,7 +132,7 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
                         log_error!("airdrop: no Flame to make a flare's of");
                         return;
                     };
-                    world.insert_resource(Meshes { flare, shut, open, chute, plane, heli, rotor, puff, shaft, flame, marked, refused, port, starboard, radio, display });
+                    world.insert_resource(Meshes { flare, shut, open, chute, plane, heli, rotor, puff, shaft, flame, marked, refused, port, starboard, radio, display, shell });
                 }
                 _ => log_error!("airdrop: no Flare, Crate, Open, Chute, Plane, Heli, Rotor or Radio"),
             }
@@ -245,6 +258,26 @@ pub fn held_flare(world: &World, renderer: &mut Renderer, pane: usize, model: Ma
     renderer.draw_in(pane, Draw { mesh: m.flame, model: flame, emissive: 1.0, fog: 1.0, tint: [1.0; 3] });
 }
 
+/// A bar of an outline from `a` to `b` (each a little over the ground),
+/// glowing `glows` of itself: in `pane` only, or (none) for everyone.
+fn bar(renderer: &mut Renderer, pane: Option<usize>, mesh: MeshId, glows: f64, a: Vec3, b: Vec3) {
+    let (a, b) = (a + Vec3::new(0.0, OVER, 0.0), b + Vec3::new(0.0, OVER, 0.0));
+    let Some(along) = (b - a).try_normalize() else { return };
+    let d = Draw { mesh, model: Mat4::from_translation((a + b) * 0.5) * Mat4::from_quat(Quat::from_rotation_arc(Vec3::Z, along)) * Mat4::from_scale(Vec3::new(BAR.0, BAR.1, (b - a).length())), emissive: glows as f32, fog: 0.4, tint: [1.0; 3] };
+    match pane {
+        Some(p) => renderer.draw_in(p, d),
+        None => renderer.draw(d),
+    }
+}
+
+/// Ground marked for a strike, being placed: its outline, in `pane`.
+pub fn mark(world: &World, renderer: &mut Renderer, pane: usize, mark: &super::Mark, time: f64) {
+    match mark {
+        super::Mark::Strip(strip) => zone(world, renderer, Some(pane), strip, time),
+        super::Mark::Spot(at) => spot(world, renderer, Some(pane), at, time),
+    }
+}
+
 /// A strip's outline, on the ground it lies over, at `time`: in `pane`
 /// only (it's being placed), or for everyone (none: it's called in, and
 /// pulses).
@@ -255,32 +288,97 @@ pub fn zone(world: &World, renderer: &mut Renderer, pane: Option<usize>, strip: 
     let mesh = if strip.open { m.marked } else { m.refused };
     let glows = if pane.is_none() { 0.45 + 0.55 * (time * 9.0).sin().abs() } else { 1.0 };
     // A bar from one point of it to the next, each on the ground there.
-    let mut bar = |from: (f64, f64), to: (f64, f64)| {
-        let (Some(a), Some(b)) = (strip.meets(solid, from.0, from.1), strip.meets(solid, to.0, to.1)) else { return };
-        let (a, b) = (a + Vec3::new(0.0, OVER, 0.0), b + Vec3::new(0.0, OVER, 0.0));
-        let Some(along) = (b - a).try_normalize() else { return };
-        let turn = Quat::from_rotation_arc(Vec3::Z, along);
-        let d = Draw { mesh, model: Mat4::from_translation((a + b) * 0.5) * Mat4::from_quat(turn) * Mat4::from_scale(Vec3::new(BAR.0, BAR.1, (b - a).length())), emissive: glows as f32, fog: 0.4, tint: [1.0; 3] };
-        match pane {
-            Some(p) => renderer.draw_in(p, d),
-            None => renderer.draw(d),
+    let mut side = |from: (f64, f64), to: (f64, f64)| {
+        if let (Some(a), Some(b)) = (strip.meets(solid, from.0, from.1), strip.meets(solid, to.0, to.1)) {
+            bar(renderer, pane, mesh, glows, a, b);
         }
     };
     let (half, steps) = (WIDE * 0.5, (LONG / BARS).round() as usize);
     for k in 0..steps {
         let (a, b) = (LONG * k as f64 / steps as f64, LONG * (k + 1) as f64 / steps as f64);
-        for side in [-half, half] {
-            bar((a, side), (b, side));
+        for across in [-half, half] {
+            side((a, across), (b, across));
         }
         // (Down its middle, a dash every other step: the way it's raked.)
         if k % 2 == 0 {
-            bar((a + 0.2, 0.0), (b - 0.2, 0.0));
+            side((a + 0.2, 0.0), (b - 0.2, 0.0));
         }
     }
     for end in [0.0, LONG] {
         for k in 0..4 {
-            bar((end, -half + WIDE * k as f64 / 4.0), (end, -half + WIDE * (k + 1) as f64 / 4.0));
+            side((end, -half + WIDE * k as f64 / 4.0), (end, -half + WIDE * (k + 1) as f64 / 4.0));
         }
+    }
+}
+
+/// A spot's outline, on the ground it lies over: a circle with a cross in
+/// it. In `pane` only (it's being placed), or for everyone (none: it's
+/// called in, and pulses).
+pub fn spot(world: &World, renderer: &mut Renderer, pane: Option<usize>, spot: &Spot, time: f64) {
+    let Some(m) = world.get_resource::<Meshes>().copied() else { return };
+    let solid = &world.resource::<Solid>().0;
+    let mesh = if spot.open { m.marked } else { m.refused };
+    let glows = if pane.is_none() { 0.45 + 0.55 * (time * 11.0).sin().abs() } else { 1.0 };
+    let mut side = |from: (f64, f64), to: (f64, f64)| {
+        if let (Some(a), Some(b)) = (spot.ground(solid, from), spot.ground(solid, to)) {
+            bar(renderer, pane, mesh, glows, a, b);
+        }
+    };
+    let r = strike::RADIUS;
+    let at = |k: usize| {
+        let a = k as f64 / ROUND as f64 * std::f64::consts::TAU;
+        (a.cos() * r, a.sin() * r)
+    };
+    for k in 0..ROUND {
+        side(at(k), at(k + 1));
+    }
+    // The cross: corner to corner, each arm in a few bars (the ground's
+    // not flat).
+    let reach = r * std::f64::consts::FRAC_1_SQRT_2;
+    for turn in [1.0, -1.0] {
+        for k in 0..6 {
+            let (a, b) = (-reach + 2.0 * reach * f64::from(k) / 6.0, -reach + 2.0 * reach * f64::from(k + 1) / 6.0);
+            side((a, a * turn), (b, b * turn));
+        }
+    }
+}
+
+/// Every precision strike called in: its circle, till its shell lands;
+/// the shell coming down; and, landed, the ring of the blow going out
+/// over the ground and the dust it raised.
+pub fn strikes(world: &mut World, renderer: &mut Renderer, time: f64) {
+    let (Some(m), Some(rings)) = (world.get_resource::<Meshes>().copied(), world.get_resource::<crate::throw::draw::Meshes>().copied()) else { return };
+    let all: Vec<Strike> = world.query::<&Strike>().iter(world).copied().collect();
+    for s in all {
+        let at = s.spot.at;
+        if s.threatens() {
+            spot(world, renderer, None, &s.spot, time);
+        }
+        if let Some(high) = s.shell() {
+            let model = Mat4::from_translation(at + Vec3::new(0.0, high + SHELL.0 * 0.5, 0.0)) * Mat4::from_scale(Vec3::new(SHELL.1, SHELL.0, SHELL.1));
+            renderer.draw(Draw { mesh: m.shell, model, emissive: 1.0, fog: 0.3, tint: [1.0; 3] });
+        }
+        let Some(since) = s.landed() else { continue };
+        // The blow going out: a ring over the ground, widening past the
+        // circle and fading as it goes.
+        let out = (since / 0.35).min(1.0);
+        if out < 1.0 {
+            let wide = 2.0 * strike::RADIUS * (0.15 + 1.1 * out);
+            renderer.draw(Draw { mesh: rings.ring, model: Mat4::from_translation(at + Vec3::new(0.0, 0.1, 0.0)) * Mat4::from_scale(Vec3::new(wide, 3.0, wide)), emissive: (1.0 - out) as f32, fog: 0.5, tint: [1.0; 3] });
+        }
+        // The dust: a ring of it thrown up and out, hanging, thinning.
+        let share = (since / strike::SETTLES).clamp(0.0, 1.0);
+        for k in 0..DUST.0 {
+            let a = k as f64 / DUST.0 as f64 * std::f64::consts::TAU + at.x;
+            let far = strike::RADIUS * (0.25 + 0.75 * (1.0 - (-since * 3.5).exp())) * (0.75 + 0.25 * ((k * 7) % 5) as f64 / 4.0);
+            let wide = 1.6 + 3.2 * share;
+            let model = Mat4::from_translation(at + Vec3::new(a.cos() * far, 0.5 + 1.6 * share, a.sin() * far)) * Mat4::from_scale(Vec3::new(wide, wide * 0.8, wide));
+            renderer.draw_soft(Draw { mesh: m.puff, model, emissive: 0.0, fog: 1.0, tint: DUST.1 }, DUST.2 * (1.0 - share).powf(1.4) as f32);
+        }
+        // (And one great puff over the middle of it.)
+        let wide = 2.5 + 4.5 * share;
+        let model = Mat4::from_translation(at + Vec3::new(0.0, 0.8 + 2.4 * share, 0.0)) * Mat4::from_scale(Vec3::new(wide, wide, wide));
+        renderer.draw_soft(Draw { mesh: m.puff, model, emissive: 0.0, fog: 1.0, tint: DUST.1 }, DUST.2 * (1.0 - share).powf(1.2) as f32);
     }
 }
 
@@ -323,7 +421,7 @@ fn hovering(g: &Gunship) -> Mat4 {
 
 /// Where its searchlight's on: what it's shooting at, or (nothing to
 /// shoot) sweeping the ground under its circle.
-fn spot(g: &Gunship, time: f64) -> Vec3 {
+fn searched(g: &Gunship, time: f64) -> Vec3 {
     g.lit.unwrap_or(g.over + Vec3::new((time * 0.6).sin() * g.out.0 * 0.5, 0.0, (time * 0.43).cos() * g.out.1 * 0.5)) + Vec3::new(0.0, 0.4, 0.0)
 }
 
@@ -352,7 +450,7 @@ pub fn gunship(world: &mut World, renderer: &mut Renderer, time: f64) {
         // under its nose down to where it's looking.
         if g.on_station() {
             let from = placed.transform_point(Vec3::new(0.0, -1.0, -2.6));
-            let to = spot(g, time);
+            let to = searched(g, time);
             // (Its point up at the lamp.)
             let Some(up) = (from - to).try_normalize() else { continue };
             let model = Mat4::from_translation((from + to) * 0.5) * Mat4::from_quat(Quat::from_rotation_arc(Vec3::Y, up)) * Mat4::from_scale(Vec3::new(SHAFT.0, (to - from).length(), SHAFT.0));
@@ -373,7 +471,7 @@ pub fn lights(world: &mut World, renderer: &mut Renderer, time: f64) {
         let (at, _) = g.place();
         renderer.light(Light::open(at - Vec3::new(0.0, 1.5, 0.0), 9.0, [0.45, 0.5, 0.55]));
         if g.on_station() {
-            renderer.light(Light::open(spot(g, time) + Vec3::new(0.0, 1.2, 0.0), SPOT, SEARCHLIGHT.map(|c| c * 1.7)));
+            renderer.light(Light::open(searched(g, time) + Vec3::new(0.0, 1.2, 0.0), SPOT, SEARCHLIGHT.map(|c| c * 1.7)));
         }
         if g.firing() {
             let k = 1.0 + (time * 80.0).sin().abs();

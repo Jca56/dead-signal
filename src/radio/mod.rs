@@ -2,13 +2,13 @@
 //! gun's put away and the handset comes up in the right hand in its
 //! place; a code of arrows is punched in on it (`codes.rs`: what there is
 //! to call for, and each one's code; `card.rs`: the card of them drawn
-//! beside it); a whole code keys it, brought to the mouth with the talk
-//! button pressed, and what was called for goes out as the button's let
-//! go, paid for in signal (`signal.rs`: charged by kills; `meter.rs`: its
-//! bars drawn); a drop called for, a lit flare comes up in the left hand
-//! to be thrown where it's to land, the radio still up in the right; a
-//! strike called for, it waits to be told where (a strip marked on the
-//! ground); put away, it goes down and the gun comes back. A machine of
+//! beside it); a whole code's called in at once, paid for in signal
+//! (`signal.rs`: charged by kills; `meter.rs`: its bars drawn), and the
+//! handset's keyed, brought to the mouth with the talk button pressed; a
+//! drop called for, a lit flare comes up in the left hand instead, to be
+//! thrown where it's to land, the radio still up in the right; a strike
+//! called for, it waits to be told where (ground marked). What was called
+//! for seen to, it goes away by itself; put away, it goes down and the gun comes back. A machine of
 //! states, like the hands (`weapon`): it knows nothing of the world, and
 //! says what's to be heard at the moments its clips show them. How it's
 //! drawn is the viewmodel's (`viewmodel`), in the weapon's place.
@@ -29,6 +29,9 @@ pub const KEY: f64 = 1.0;
 /// Into keying it, when the talk button goes down and when it's let go.
 const TALK_AT: f64 = 0.3;
 const OVER_AT: f64 = 0.8;
+/// How many times as fast as its clip's made it's keyed: there's no time
+/// to linger over it.
+const KEYED: f64 = 1.7;
 /// How long a flare takes to come up in the left hand, and to be thrown;
 /// and into the throw, when it leaves the hand.
 const FLARE_UP: f64 = 0.27;
@@ -61,9 +64,11 @@ enum State {
 pub enum Cue {
     /// It's switched on, coming up.
     On,
-    /// The talk button down; and let go, what was called for sent.
+    /// The talk button down; and let go.
     Talk,
-    Over(Call),
+    Over,
+    /// Going away by itself, what it was out for done.
+    Off,
     /// A flare struck, coming up in the left hand; and leaving it, thrown.
     Lit,
     Thrown(Call),
@@ -98,6 +103,9 @@ pub struct Radio {
     flare: Option<Call>,
     /// A strike called for and not yet placed (kept, as a flare is).
     strike: Option<Call>,
+    /// What it was out for is done: it goes away once it's done being
+    /// keyed (or the flare's thrown).
+    leaving: bool,
 }
 
 impl Radio {
@@ -129,9 +137,10 @@ impl Radio {
         self.strike = Some(call);
     }
 
-    /// The strike being placed: the radio's up, and it's waiting on where.
+    /// The strike being placed: the radio's out (or on its way out, or
+    /// being keyed), and it's waiting on where.
     pub fn placing(&self) -> Option<Call> {
-        self.strike.filter(|_| self.state == State::Up && self.calling.is_none())
+        self.strike.filter(|_| self.holds())
     }
 
     /// It's been told where: the strike's on its way.
@@ -144,9 +153,18 @@ impl Radio {
         self.flare
     }
 
-    /// `call` is on its way: a flare for it, to mark where it's to land.
+    /// `call` is on its way: a flare for it, to mark where it's to land
+    /// (in hand at once: it's not keyed for this).
     pub fn give_flare(&mut self, call: Call) {
         self.flare = Some(call);
+        self.calling = None;
+        self.dial.clear();
+    }
+
+    /// What it was out for is seen to: away it goes by itself, once it's
+    /// done being keyed (or the flare's left the hand).
+    pub fn leave(&mut self) {
+        self.leaving = true;
     }
 
     /// Whether the flare's up in the left hand, to be thrown.
@@ -218,6 +236,7 @@ impl Radio {
         }
         self.dial.clear();
         self.calling = None;
+        self.leaving = false;
         true
     }
 
@@ -236,7 +255,8 @@ impl Radio {
     }
 
     /// Punch `arrow` in, if arrows are being taken; what it came to. A
-    /// whole code's called in: it's keyed, as soon as it's up.
+    /// whole code's called in: it's keyed, as soon as it's up (unless
+    /// it's refused, or it's a flare that's wanted).
     pub fn press(&mut self, arrow: Arrow) -> Option<Dialed> {
         if !self.dialing() {
             return None;
@@ -255,7 +275,8 @@ impl Radio {
     pub fn update(&mut self, empty: bool, dt: f64) -> Vec<Cue> {
         let mut cues = Vec::new();
         let before = self.t;
-        self.t += dt;
+        // (Keyed, its clip runs quick.)
+        self.t += dt * if self.state == State::Key { KEYED } else { 1.0 };
         self.since += dt;
         self.wrong = self.wrong.map(|t| t + dt);
         let crossed = |at: f64| before < at && self.t >= at;
@@ -274,6 +295,12 @@ impl Radio {
                 self.start(State::FlareUp);
                 cues.push(Cue::Lit);
             }
+            // What it was out for is done: away.
+            State::Up if self.leaving => {
+                self.leaving = false;
+                self.start(State::Lower);
+                cues.push(Cue::Off);
+            }
             State::FlareUp if self.t >= FLARE_UP => self.start(State::Flare),
             State::Throw => {
                 if let Some(call) = self.flare.filter(|_| crossed(THROWN_AT)) {
@@ -288,8 +315,8 @@ impl Radio {
                 if crossed(TALK_AT) {
                     cues.push(Cue::Talk);
                 }
-                if let Some(call) = self.calling.filter(|_| crossed(OVER_AT)) {
-                    cues.push(Cue::Over(call));
+                if crossed(OVER_AT) {
+                    cues.push(Cue::Over);
                 }
                 if self.t >= KEY {
                     self.start(State::Up);

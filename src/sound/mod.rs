@@ -121,6 +121,9 @@ pub enum Sfx {
     /// A strafing run: the plane coming in, and its guns.
     Jet,
     Brrt,
+    /// A precision strike: its shell heard coming down, and landing.
+    Whistle,
+    Impact,
     /// Searching: a container gone through, a lock opened, a lock that
     /// won't.
     Rummage,
@@ -135,7 +138,7 @@ pub enum Sfx {
     Safe,
 }
 
-const ALL: [Sfx; 74] = [
+const ALL: [Sfx; 76] = [
     Sfx::Shot,
     Sfx::Blast,
     Sfx::Pump,
@@ -202,6 +205,8 @@ const ALL: [Sfx; 74] = [
     Sfx::Boost,
     Sfx::Jet,
     Sfx::Brrt,
+    Sfx::Whistle,
+    Sfx::Impact,
     Sfx::Rummage,
     Sfx::Unlock,
     Sfx::Rattle,

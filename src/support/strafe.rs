@@ -7,7 +7,7 @@
 use bevy_ecs::prelude::*;
 use lntrn_math::Vec3;
 
-use super::{Event, Support};
+use super::{Event, Support, looked_at, open_sky, under};
 use crate::collide::Solids;
 use crate::player::{Body, Player, STEP};
 use crate::sound::Sfx;
@@ -18,10 +18,6 @@ use crate::zombie::{self, Horde, brain::Zombie};
 /// The strip: how long and how wide.
 pub const LONG: f64 = 30.0;
 pub const WIDE: f64 = 5.0;
-/// How far off a strip can be marked; and looking at the sky, how far out
-/// it's laid.
-const REACH: f64 = 70.0;
-const OUT: f64 = 35.0;
 /// How long after it's marked the rounds begin, and how long they take to
 /// go its length.
 pub const WARNS: f64 = 3.0;
@@ -30,10 +26,9 @@ pub const RAKES: f64 = 1.0;
 pub const TO_THE_DEAD: f64 = 900.0;
 pub const TO_A_PLAYER: f64 = 70.0;
 /// Rounds seen to land each step (what's hit is everything in the strip,
-/// whichever they land on); how high the sky's looked for; and how far
-/// off the rounds landing shake a player.
+/// whichever they land on); and how far off the rounds landing shake a
+/// player.
 const ROUNDS: usize = 3;
-const SKY: f64 = 80.0;
 const SHAKES: f64 = 45.0;
 /// The plane: how high it comes over, how fast, how far behind where its
 /// rounds land it is, and how long after the last of them it's gone.
@@ -51,30 +46,13 @@ pub struct Strip {
     pub open: bool,
 }
 
-/// The ground (or the roof) under `p`, from well over it.
-fn under(solid: &Solids, p: Vec3) -> Option<Vec3> {
-    solid.raycast(Vec3::new(p.x, p.y + SKY * 0.5, p.z), -Vec3::Y, SKY).map(|h| h.point)
-}
-
-/// Whether there's nothing over `p`.
-fn open(solid: &Solids, p: Vec3) -> bool {
-    solid.raycast(p + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, SKY).is_none()
-}
-
 impl Strip {
     /// The strip marked from `eye`, looking along `look`: on the ground
     /// where the look lands (out ahead, looking at the sky), running
     /// straight away from the eye.
     pub fn marked(solid: &Solids, eye: Vec3, look: Vec3) -> Option<Strip> {
-        let dir = Vec3::new(look.x, 0.0, look.z).try_normalize()?;
-        // Where the look lands: the ground there, or under what it met.
-        let met = match solid.raycast(eye, look, REACH) {
-            Some(h) if h.normal.y > 0.5 => h.point,
-            Some(h) => h.point + h.normal * 0.4,
-            None => eye + dir * OUT,
-        };
-        let mid = solid.raycast(met + Vec3::new(0.0, 0.3, 0.0), -Vec3::Y, SKY).map(|h| h.point)?;
-        Some(Strip { mid, dir, open: open(solid, mid) })
+        let (mid, dir) = looked_at(solid, eye, look)?;
+        Some(Strip { mid, dir, open: open_sky(solid, mid) })
     }
 
     /// Where `p` is in it: how far along from its start, and how far to
@@ -182,7 +160,7 @@ pub(super) fn step(world: &mut World) {
             // sky: hit.
             let within = |p: Vec3| {
                 let (along, across) = s.strip.place(p);
-                along > before && along <= front && across.abs() <= WIDE * 0.5 && open(solid, p + Vec3::new(0.0, 0.8, 0.0))
+                along > before && along <= front && across.abs() <= WIDE * 0.5 && open_sky(solid, p + Vec3::new(0.0, 0.8, 0.0))
             };
             struck.extend(dead.iter().filter(|(_, p)| within(*p)).map(|&(z, p)| (s.by, z, p, s.strip.dir)));
             hurt.extend(players.iter().filter(|(_, p)| within(*p)).map(|(seat, _)| *seat));

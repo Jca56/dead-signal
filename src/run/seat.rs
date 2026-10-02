@@ -84,9 +84,9 @@ pub struct Seat {
     pub(super) throwable: Option<Throwable>,
     pub(super) aiming: Option<Aiming>,
     /// The radio's flare, its throw being aimed; and a strike of its being
-    /// placed: the strip of ground marked for it just now.
+    /// placed: the ground marked for it just now.
     pub(super) marking: Option<Aiming>,
-    pub zone: Option<crate::support::strafe::Strip>,
+    pub zone: Option<crate::support::Mark>,
     pub(super) threw: Option<(Throwable, f64)>,
     /// Playing together: down (bleeding out, crawling), or out (bled out,
     /// watching); and picking someone downed up (their place in the seats,
@@ -161,10 +161,10 @@ impl Seat {
         }
         let open = self.open.is_some();
         let down = self.down.is_some();
-        // (The bag up, their pad's the bag's; the radio out, the keys that
-        // walk are its dial.)
+        // (The bag up, their pad's the bag's; the radio's dial being
+        // worked, the keys that walk are its.)
         self.input.set_rummaging(open);
-        self.input.set_dialing(self.radio_held());
+        self.input.set_dialing(self.dialling());
         let settings = game.world.get_resource::<Settings>().cloned().unwrap_or_default();
         self.bag_ui.slot_keys = settings.keys.slot_names();
         // What's worn weighs on the sprint, the breath and the feet; the

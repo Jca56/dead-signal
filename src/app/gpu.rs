@@ -149,8 +149,8 @@ impl AppHost for DeadSignal {
                 if let Some((dots, lands)) = seat.throw_arc() {
                     crate::throw::draw::aim(&self.game.world, renderer, i, dots, lands);
                 }
-                if let Some(strip) = &seat.zone {
-                    crate::support::draw::zone(&self.game.world, renderer, Some(i), strip, time);
+                if let Some(mark) = &seat.zone {
+                    crate::support::draw::mark(&self.game.world, renderer, i, mark, time);
                 }
             }
             self.combat.draw(renderer);
@@ -160,6 +160,7 @@ impl AppHost for DeadSignal {
             crate::throw::draw::draw(&mut self.game.world, renderer, alpha, time);
             crate::support::draw::draw(&mut self.game.world, renderer, alpha, time);
             crate::support::draw::runs(&mut self.game.world, renderer, time);
+            crate::support::draw::strikes(&mut self.game.world, renderer, time);
             crate::support::draw::gunship(&mut self.game.world, renderer, time);
             zombie::rift::draw(&mut self.game.world, renderer, time);
             crate::glass::draw(&self.game.world, renderer, &sights);

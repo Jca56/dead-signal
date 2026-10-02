@@ -256,16 +256,18 @@ Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's
 | MEDIC DROP | ↓ ↑ → ← | 2 bars |
 | 2X POINTS | ← → ← → | 3 bars |
 | INSTAKILL | → ↑ ↓ ↓ ← | 4 bars |
+| PRECISION STRIKE | → → ↑ | 2 bars |
 | STRAFING RUN | ↑ → → | 3 bars |
 | GUNSHIP | ↑ ← → ↓ ↑ | 5 bars |
 
 - A **drop** (ammo, medic) is marked with a flare: it comes up lit in the left hand, the radio still up in the right; the trigger held aims its throw, let go throws it. Once it's come to rest a crate is let go over it **2.5 s** later and comes down under a parachute in **6 s**. Under a roof the flare gutters out, nothing comes, and the signal it cost is given back.
 - An **ammo drop** holds what every player's guns lack of a full carry (what a hound round's worth tops them up to), a stack a kind. A **medic drop** holds, for each player, **1 medkit, 2 bandages and 1 armor plate**. It's all spilled about the crate to be taken, by anyone, and lies there the 30 seconds everything does.
 - A **strafing run** is marked on the ground: its code sent, a strip **30 m long and 5 m wide** is outlined in red where the player looks, running straight away from them; the trigger sends it there (not under a roof). **3 s** later the plane's guns rake it end to end in **1 s**. Everything in it under open sky as the rounds pass takes **900** (plate's no help: all of the horde dies of it, a Juggernaut is badly hurt); a player in it takes **70** (armor first). Under a roof, nothing's touched. The kills are whoever called it's (their points), but charge no signal.
+- A **precision strike** is marked on the ground too: a red circle with a cross in it, **5 m** in radius, where the player looks; the trigger sends it there (not under a roof). **2 s** later one heavy shell comes straight down on it: no fire, a blow. Everything in the circle under open sky takes from **1200** at its middle to **500** at its edge (plate's no help) and is flung outward; a player in it takes **80** to **30** (armor first). The kills are whoever called it's (their points), but charge no signal.
 - The **gunship** needs no marking: **4 s** after its code's sent a helicopter's in over the compound, and for **45 s** it flies a slow circle round it, its door gun on the dead out in the open that it can see (those nearest a player first; a round every 0.08 s, **60** each), its searchlight on whichever it's at. What's under a roof is safe from it; players always are. Called for again while it's up, it stays as long again. Its kills are whoever called it's (their points), but charge no signal.
 - The **boosts** are on for everyone the moment they're sent, for **30 s**; called again while one's up, it's up as long again. **2X POINTS** doubles everything earned (hits, kills, boards, a Juggernaut's). **INSTAKILL** makes any hit a kill on all of the dead but a Juggernaut, which takes **3×** the damage; what's killed while it's up charges no signal.
 - Signal is each player's own, a meter of **5 bars** (a whole one shows green; the one being charged, amber). A kill charges **a tenth of a bar**; one to the head or by hand, half again as much (0.15); a Juggernaut, a whole bar on top of its kill.
-- It's spent as the call goes out (the talk button let go): put the radio away before that and nothing's spent. A code there isn't the signal for is refused.
+- It's spent the moment a whole code's in, and what was called for is live from then: a strike's marker is on the ground at once, a flare's in hand, a boost's begun. A code there isn't the signal for is refused. The feet stand still only while the dial's being worked; and what was called for seen to (the strike placed, the flare thrown, the boost begun), the radio goes away by itself.
 - It's kept through bleeding out.
 
 **Bleeding:** 1 health a second a cut, up to 3 cuts. It never stops on its own; a bandage or a medkit stops it. **Poison:** 3 a second for 10 s; a medkit clears it. Neither lets health come back.

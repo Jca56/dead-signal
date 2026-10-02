@@ -87,6 +87,20 @@ impl Run {
                     combat.fx.flash(at + Vec3::new(0.0, 0.3, 0.0), 5.0, [2.4, 1.6, 0.7], 0.12);
                     crate::glass::blast(&mut game.world, &mut combat.fx, at, 1.6);
                 }
+                // A precision strike's shell landed: the ground thrown up
+                // all round it, a flash, and the glass about it gone.
+                Event::Impact { at } => {
+                    use crate::support::strike::RADIUS;
+                    combat.fx.burst(at + Vec3::new(0.0, 0.1, 0.0), Vec3::Y, Surface::Dirt, 70);
+                    combat.fx.burst(at + Vec3::new(0.0, 0.1, 0.0), Vec3::Y, Surface::Stone, 30);
+                    for k in 0..14 {
+                        let a = f64::from(k) / 14.0 * std::f64::consts::TAU;
+                        let out = Vec3::new(a.cos(), 0.0, a.sin());
+                        combat.fx.burst(at + out * (RADIUS * 0.55) + Vec3::new(0.0, 0.1, 0.0), (out + Vec3::Y * 0.8).normalize(), Surface::Dirt, 12);
+                    }
+                    combat.fx.flash(at + Vec3::new(0.0, 1.5, 0.0), 26.0, [3.2, 3.0, 2.7], 0.22);
+                    crate::glass::blast(&mut game.world, &mut combat.fx, at + Vec3::new(0.0, 1.0, 0.0), RADIUS + 3.0);
+                }
                 // Down: the dust it raises, and what it held, about it.
                 Event::Landed { call, at, .. } => {
                     combat.fx.burst(at + Vec3::new(0.0, 0.15, 0.0), Vec3::Y, Surface::Dirt, 40);

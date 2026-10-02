@@ -1,7 +1,8 @@
 //! The handheld radio, and what it calls down: the handset switched on,
 //! its talk button pressed and let go, the tones of its dial and the buzz
 //! of a wrong arrow; a plane going over, high up, and a crate coming to
-//! ground; a boost coming on; a strafing run's plane, and its guns.
+//! ground; a boost coming on; a strafing run's plane, and its guns; a
+//! precision strike's shell coming down, and landing.
 
 use super::{Svf, env, pulse, render, sine};
 use crate::sound::{RATE, Sfx};
@@ -131,6 +132,33 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
                 let crack = g.run(x, 3200.0, 0.6).1 * on * (0.5 + 0.5 * pulse(t, 68.0));
                 let after = sine(t, 70.0) * env((t - 1.05).max(0.0), 0.005, 0.18) * f32::from(t >= 1.05) * 0.5;
                 body + crack * 0.6 + after
+            })
+        }
+        Sfx::Whistle => {
+            // A heavy shell coming down: a whistle falling for two
+            // seconds, louder and lower till it's on you.
+            let mut f = Svf::default();
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(2.0, 0.6, move |t, n| {
+                let near = t / 2.0;
+                phase = (phase + (2100.0 - 1300.0 * near * near) * dt).fract();
+                let tone = (std::f32::consts::TAU * phase).sin();
+                let air = f.run(n.next(), 1800.0 - 900.0 * near, 0.5).1 * 0.5;
+                (tone * 0.6 + air) * (0.08 + 0.92 * near.powi(3))
+            })
+        }
+        Sfx::Impact => {
+            // It lands: no blast, a blow. A crack, a boom dropping away
+            // under it, and the ground coming back down.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(1.5, 1.0, move |t, n| {
+                let x = n.next();
+                let crack = g.run(x, 2600.0, 0.5).1 * env(t, 0.0004, 0.02) * 1.2;
+                let boom = sine(t, 58.0 - 26.0 * (t / 0.5).min(1.0)) * env(t, 0.004, 0.36) * 1.6;
+                let thud = f.run(x, 220.0, 0.6).0 * env(t, 0.002, 0.16) * 1.4;
+                let rain = g.run(x, 1400.0, 0.9).1 * env((t - 0.18).max(0.0), 0.12, 0.42) * f32::from(t >= 0.18) * 0.3;
+                crack + boom + thud + rain
             })
         }
         _ => Vec::new(),

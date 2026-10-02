@@ -5,7 +5,8 @@
 //! opens; under a roof the flare gutters out and nothing comes. A strafing
 //! run (`strafe.rs`): a strip of ground raked by a plane's guns. The
 //! gunship (`gunship.rs`): a helicopter circling the compound, its gun on
-//! the dead in the open. What it
+//! the dead in the open. A precision strike (`strike.rs`): one heavy
+//! shell down on a marked spot. What it
 //! means to the players (what the crate held, the signal back for a flare
 //! that guttered) is the run's: it's told through [`Support`], as is
 //! what's called for that needs no marking (a boost). What's
@@ -14,6 +15,7 @@
 pub mod draw;
 pub mod gunship;
 pub mod strafe;
+pub mod strike;
 #[cfg(test)]
 mod tests;
 
@@ -48,6 +50,70 @@ pub const FALLS: f64 = 6.0;
 const BURNS_ON: f64 = 3.0;
 pub const STANDS: f64 = 30.0;
 pub const SETTLES: f64 = 1.4;
+
+/// How far off ground can be marked for a strike; and looking at the sky,
+/// how far out it's marked.
+const REACH: f64 = 70.0;
+const OUT: f64 = 35.0;
+
+/// The ground (or the roof) under `p`, from well over it.
+fn under(solid: &crate::collide::Solids, p: Vec3) -> Option<Vec3> {
+    solid.raycast(Vec3::new(p.x, p.y + SKY * 0.5, p.z), -Vec3::Y, SKY).map(|h| h.point)
+}
+
+/// Whether there's nothing over `p`.
+fn open_sky(solid: &crate::collide::Solids, p: Vec3) -> bool {
+    solid.raycast(p + Vec3::new(0.0, 0.3, 0.0), Vec3::Y, SKY).is_none()
+}
+
+/// The ground a look from `eye` along `look` lands on (out ahead, looking
+/// at the sky), and the way the look goes, flat.
+fn looked_at(solid: &crate::collide::Solids, eye: Vec3, look: Vec3) -> Option<(Vec3, Vec3)> {
+    let dir = Vec3::new(look.x, 0.0, look.z).try_normalize()?;
+    // Where the look lands: the ground there, or under what it met.
+    let met = match solid.raycast(eye, look, REACH) {
+        Some(h) if h.normal.y > 0.5 => h.point,
+        Some(h) => h.point + h.normal * 0.4,
+        None => eye + dir * OUT,
+    };
+    let ground = solid.raycast(met + Vec3::new(0.0, 0.3, 0.0), -Vec3::Y, SKY).map(|h| h.point)?;
+    Some((ground, dir))
+}
+
+/// Ground marked for a strike: a strip for a strafing run, a spot for a
+/// precision strike.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mark {
+    Strip(strafe::Strip),
+    Spot(strike::Spot),
+}
+
+impl Mark {
+    /// What `call` would have marked from `eye`, looking along `look`.
+    pub fn of(call: Call, solid: &crate::collide::Solids, eye: Vec3, look: Vec3) -> Option<Mark> {
+        match call {
+            Call::StrafingRun => strafe::Strip::marked(solid, eye, look).map(Mark::Strip),
+            Call::PrecisionStrike => strike::Spot::marked(solid, eye, look).map(Mark::Spot),
+            _ => None,
+        }
+    }
+
+    /// Whether there's open sky over it: it can be struck.
+    pub fn open(&self) -> bool {
+        match self {
+            Mark::Strip(s) => s.open,
+            Mark::Spot(s) => s.open,
+        }
+    }
+
+    /// Player `by` calls it in there.
+    pub fn call(&self, world: &mut World, by: usize) {
+        match *self {
+            Mark::Strip(s) => strafe::call(world, s, by),
+            Mark::Spot(s) => strike::call(world, s, by),
+        }
+    }
+}
 
 /// A flare, thrown for a drop: in the air, or come to rest and burning.
 #[derive(Component, Clone, Copy, Debug)]
@@ -97,6 +163,8 @@ pub enum Event {
     /// One of a strafing run's rounds (or the gunship's) landed at `at`,
     /// come from `from`.
     Round { from: Vec3, at: Vec3 },
+    /// A precision strike's shell landed at `at`.
+    Impact { at: Vec3 },
 }
 
 /// What's come of what was called down since the run last asked.
@@ -127,7 +195,7 @@ pub fn drop_at(world: &mut World, call: Call, at: Vec3, height: f64) {
 
 /// Everything called down, gone (a new run).
 pub fn clear(world: &mut World) {
-    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Flare>, With<Drop>, With<strafe::Strafe>, With<gunship::Gunship>)>>().iter(world).collect();
+    let all: Vec<Entity> = world.query_filtered::<Entity, Or<(With<Flare>, With<Drop>, With<strafe::Strafe>, With<gunship::Gunship>, With<strike::Strike>)>>().iter(world).collect();
     for e in all {
         world.despawn(e);
     }
@@ -140,6 +208,7 @@ pub fn clear(world: &mut World) {
 /// A fixed step of it all.
 pub fn step(world: &mut World) {
     strafe::step(world);
+    strike::step(world);
     gunship::step(world);
     let mut sounds: Vec<(Sfx, Vec3, f32)> = Vec::new();
     let mut events = Vec::new();

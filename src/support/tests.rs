@@ -2,7 +2,8 @@
 //! crate down on it; one under a roof gutters out and nothing comes. And
 //! a strafing run: what's in its strip under open sky is hit as its
 //! rounds pass, and nothing else. And the gunship: in, round its circle
-//! shooting the dead it can see in the open, and off again.
+//! shooting the dead it can see in the open, and off again. And a
+//! precision strike: one blow on its circle, hardest at the middle.
 
 use lntrn_math::Vec3;
 
@@ -19,6 +20,7 @@ fn world() -> World {
     w.insert_resource(Horde::default());
     w.insert_resource(Support::default());
     w.insert_resource(crate::throw::Booms::default());
+    w.insert_resource(crate::zombie::Noises::default());
     w
 }
 
@@ -191,4 +193,49 @@ fn the_gunship_comes_in_circles_the_compound_shooting_what_it_sees_in_the_open_a
     assert!(!ship(&mut w).on_station() && gunship::left(&mut w) == 0.0);
     steps(&mut w, 6.0);
     assert_eq!(w.query::<&Gunship>().iter(&w).count(), 0);
+}
+
+#[test]
+fn a_precision_strike_lands_one_blow_on_its_circle_hardest_at_the_middle() {
+    use crate::player::{Body, Player};
+    use crate::zombie::brain::Zombie;
+    use strike::{RADIUS, SETTLES, Spot, Strike, TO_A_PLAYER, WARNS};
+    let mut w = world();
+    w.insert_resource(crate::world::Clock::default());
+    // Marked where the look lands; not open, under the roof.
+    let solid = &w.resource::<Solid>().0;
+    let spot = Spot::marked(solid, Vec3::new(0.0, 1.6, 0.0), Vec3::new(0.0, -0.2, -1.0).normalize()).expect("the ground ahead");
+    assert!(spot.open && (spot.at - Vec3::new(0.0, 0.0, -8.0)).length() < 0.1);
+    assert!(!Spot::marked(solid, Vec3::new(15.0, 1.6, 0.0), Vec3::new(1.0, -0.3, 0.0).normalize()).unwrap().open);
+    assert_eq!((spot.share(spot.at), spot.share(spot.at + Vec3::new(RADIUS + 0.1, 0.0, 0.0))), (Some(1.0), None));
+    // One of the dead at its middle, a tough one at its edge, one outside.
+    let dead = |w: &mut World, at: Vec3, hp: f64| {
+        let mut z = Zombie::new(0.0, 3);
+        z.hp = hp;
+        w.spawn((z, Body::at(at))).id()
+    };
+    let middle = dead(&mut w, spot.at + Vec3::new(0.3, 0.0, 0.0), 1100.0);
+    let edge = dead(&mut w, spot.at + Vec3::new(0.0, 0.0, RADIUS - 0.2), 900.0);
+    let outside = dead(&mut w, spot.at + Vec3::new(RADIUS + 1.0, 0.0, 0.0), 100.0);
+    w.spawn((Player(0), Body::at(spot.at + Vec3::new(-RADIUS * 0.5, 0.0, 0.0))));
+    strike::call(&mut w, spot, 0);
+    let hp = |w: &World, e: Entity| w.get::<Zombie>(e).unwrap().hp;
+    // Nothing till it lands; its shell's seen coming down just before.
+    steps(&mut w, WARNS - 0.2);
+    assert!(hp(&w, middle) == 1100.0 && events(&mut w).is_empty());
+    let s = *w.query::<&Strike>().single(&w).unwrap();
+    assert!(s.threatens() && s.shell().is_some_and(|high| high > 20.0) && s.landed().is_none());
+    // It lands: the one at the middle killed outright, the tough one at
+    // the edge hurt but standing, the one outside untouched.
+    steps(&mut w, 0.25);
+    assert!(w.get::<Zombie>(middle).unwrap().dead() && !w.get::<Zombie>(edge).unwrap().dead());
+    assert!(hp(&w, edge) < 900.0 - 480.0 && hp(&w, edge) > 900.0 - 620.0 && hp(&w, outside) == 100.0, "{}", hp(&w, edge));
+    assert_eq!(std::mem::take(&mut w.resource_mut::<Support>().kills), [(0, middle)]);
+    assert_eq!(events(&mut w), [Event::Impact { at: spot.at }]);
+    // The player half way out took half way between the two.
+    let felt = w.resource::<crate::throw::Booms>().of(0);
+    assert!((felt.blasted - (TO_A_PLAYER.0 + TO_A_PLAYER.1) * 0.5).abs() < 0.5 && felt.shake > 0.0, "{felt:?}");
+    // Once, and then it's gone.
+    steps(&mut w, SETTLES + 0.2);
+    assert!(events(&mut w).is_empty() && w.query::<&Strike>().iter(&w).count() == 0);
 }

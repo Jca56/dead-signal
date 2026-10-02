@@ -20,6 +20,9 @@
 //! ahead; `STRAFE=run`: one coming in along it, its rounds half way. `GUNSHIP=1`:
 //! the gunship over the yard, shooting. `BUDDY=up|key|flare`: a second
 //! player stood ahead, the radio out, as the first sees them.
+//! `STRIKE=mark`: a precision strike's circle being placed ahead;
+//! `STRIKE=fall|hit`: one called in there, its shell coming down, or just
+//! landed.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -224,7 +227,7 @@ impl DeadSignal {
                 let look = Vec3::new(-yaw.sin(), -0.14, -yaw.cos()).normalize();
                 let strip = Strip::marked(&self.game.world.resource::<crate::world::Solid>().0, feet + Vec3::new(0.0, 1.6, 0.0), look);
                 if how == "mark" {
-                    self.run.seats[0].zone = strip;
+                    self.run.seats[0].zone = strip.map(crate::support::Mark::Strip);
                 } else if let (Some(strip), true) = (strip, k == 0) {
                     crate::support::clear(&mut self.game.world);
                     call(&mut self.game.world, strip, 0);
@@ -236,6 +239,24 @@ impl DeadSignal {
                 self.run.supported(&mut self.game, &mut self.combat);
             }
             if gunship {
+                self.run.supported(&mut self.game, &mut self.combat);
+            }
+            // (A precision strike's circle ahead, asked for: marked, its
+            // shell coming down, or just landed.)
+            if let Ok(how) = std::env::var("STRIKE") {
+                use crate::support::strike::{Spot, WARNS, call};
+                let look = Vec3::new(-yaw.sin(), -0.16, -yaw.cos()).normalize();
+                let spot = Spot::marked(&self.game.world.resource::<crate::world::Solid>().0, feet + Vec3::new(0.0, 1.6, 0.0), look);
+                if how == "mark" {
+                    self.run.seats[0].zone = spot.map(crate::support::Mark::Spot);
+                } else if let (Some(spot), true) = (spot, k == 0) {
+                    crate::support::clear(&mut self.game.world);
+                    call(&mut self.game.world, spot, 0);
+                    let ago = if how == "fall" { 1.5 + 0.1 } else { 1.5 - 0.12 };
+                    for mut s in self.game.world.query::<&mut crate::support::strike::Strike>().iter_mut(&mut self.game.world) {
+                        s.t = WARNS - ago;
+                    }
+                }
                 self.run.supported(&mut self.game, &mut self.combat);
             }
             if let Some(how) = &buddy {
