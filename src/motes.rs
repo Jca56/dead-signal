@@ -90,7 +90,7 @@ pub struct Motes {
 }
 
 /// A box of `size`, glowing `glow` (or lit like anything else, `color`).
-fn speck(size: [f32; 3], color: [f32; 3], glow: [f32; 3]) -> Vec<Vertex> {
+pub(crate) fn speck(size: [f32; 3], color: [f32; 3], glow: [f32; 3]) -> Vec<Vertex> {
     let [x, y, z] = size.map(|s| s * 0.5);
     let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
         ([1.0, 0.0, 0.0], [[x, -y, -z], [x, y, -z], [x, y, z], [x, -y, z]]),

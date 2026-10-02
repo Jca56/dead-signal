@@ -83,8 +83,10 @@ pub struct Seat {
     /// (and when, the game's clock).
     pub(super) throwable: Option<Throwable>,
     pub(super) aiming: Option<Aiming>,
-    /// The radio's flare, its throw being aimed.
+    /// The radio's flare, its throw being aimed; and a strike of its being
+    /// placed: the strip of ground marked for it just now.
     pub(super) marking: Option<Aiming>,
+    pub zone: Option<crate::support::strafe::Strip>,
     pub(super) threw: Option<(Throwable, f64)>,
     /// Playing together: down (bleeding out, crawling), or out (bled out,
     /// watching); and picking someone downed up (their place in the seats,

@@ -2,7 +2,8 @@
 //! it holds is spilled about it to be taken (an ammo drop: what everyone's
 //! guns lack of a full carry; a medic drop: something to mend each of them
 //! with); a flare that guttered out with nothing sent, its signal's given
-//! back; a boost called for, it's begun, for everyone.
+//! back; a boost called for, it's begun, for everyone; a strafing run's
+//! rounds seen to land, and what they killed counted.
 
 use lntrn_math::Vec3;
 
@@ -34,8 +35,22 @@ impl Run {
     }
 
     /// What came of what's been called down since last frame.
-    pub(super) fn supported(&mut self, game: &mut Game, combat: &mut Combat) {
-        let events = std::mem::take(&mut game.world.resource_mut::<Support>().events);
+    pub fn supported(&mut self, game: &mut Game, combat: &mut Combat) {
+        let (events, kills) = {
+            let mut support = game.world.resource_mut::<Support>();
+            (std::mem::take(&mut support.events), std::mem::take(&mut support.kills))
+        };
+        // The dead it killed: whoever called it in's, with what each had
+        // on it; but they charge no signal.
+        for (by, e) in kills {
+            if let Some(seat) = self.seats.iter_mut().find(|s| s.n == by) {
+                seat.stats.blast_kills += 1;
+                if let Some(radio) = &mut seat.radio {
+                    radio.signal.forgo(1);
+                }
+            }
+            combat.drop_for(game, e);
+        }
         for event in events {
             match event {
                 // A boost: on, for everyone, and everyone's told. (What
@@ -58,6 +73,14 @@ impl Run {
                     }
                     seat.note = Some(("NO OPEN SKY  ·  SIGNAL BACK", super::loot::NOTE_FOR * 1.5));
                     combat.play(Sfx::DialWrong, 0.6);
+                }
+                // A strafing run's round landed: its streak down the sky,
+                // the dirt it throws up, the glass it breaks.
+                Event::Round { from, at } => {
+                    combat.fx.streak(from, at, 0);
+                    combat.fx.burst(at, Vec3::Y, Surface::Dirt, 7);
+                    combat.fx.flash(at + Vec3::new(0.0, 0.3, 0.0), 5.0, [2.4, 1.6, 0.7], 0.12);
+                    crate::glass::blast(&mut game.world, &mut combat.fx, at, 1.6);
                 }
                 // Down: the dust it raises, and what it held, about it.
                 Event::Landed { call, at, .. } => {

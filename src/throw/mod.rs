@@ -137,7 +137,7 @@ impl Booms {
         self.felt.get(seat).copied().unwrap_or_default()
     }
 
-    fn felt(&mut self, seat: usize) -> &mut Felt {
+    pub(crate) fn felt(&mut self, seat: usize) -> &mut Felt {
         if self.felt.len() <= seat {
             self.felt.resize(seat + 1, Felt::default());
         }

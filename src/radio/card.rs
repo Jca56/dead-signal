@@ -41,7 +41,8 @@ const MIDDLE: f64 = 30.0;
 const COLUMN: usize = 5;
 
 /// What the foot of the card says: what dials, what puts it away, and
-/// (a flare in hand) what's held to aim its throw.
+/// (a flare in hand, a strike to place) the trigger, which throws or
+/// sends it.
 pub struct Hints {
     pub dial: String,
     pub away: String,
@@ -151,9 +152,14 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     // for either.)
     let dialling = format!("{}  DIAL      {}  PUT AWAY", hints.dial, hints.away);
     let throwing = format!("HOLD {}  AIM      LET GO  THROW", hints.throw);
-    let foot_wide = ui.measure(&dialling, &small).max(ui.measure(&throwing, &small));
-    let marking = radio.flare();
-    let foot = if marking.is_some() { throwing } else { dialling };
+    let placing = format!("LOOK  MARK IT      {}  SEND IT", hints.throw);
+    let foot_wide = ui.measure(&dialling, &small).max(ui.measure(&throwing, &small)).max(ui.measure(&placing, &small));
+    let marking = radio.flare().or(radio.strike());
+    let foot = match (radio.flare(), radio.strike()) {
+        (Some(_), _) => throwing,
+        (None, Some(_)) => placing,
+        (None, None) => dialling,
+    };
     let Lay { card, row } = lay(pane, window, s, names, foot_wide);
     let text = words(row);
     let pad = PAD * s;
@@ -168,6 +174,7 @@ pub fn draw(ui: &mut Ui, pane: Rect, window: Rect, radio: &Radio, hints: &Hints)
     // The header, ruled off.
     let head = TextStyle::new((type_size(row, s) * 1.15) as f32).bold().family(style::FONT);
     let title = match (marking, radio.calling()) {
+        (Some(_), _) if radio.flare().is_none() => "MARK THE TARGET",
         (Some(_), _) => "THROW THE FLARE",
         (None, Some(_)) => "CALLING IN",
         (None, None) => "CALL IN",

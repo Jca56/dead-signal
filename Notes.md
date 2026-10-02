@@ -131,14 +131,14 @@ A handheld radio every player always has on them, pulled out like GTA's phone: t
 - [x] 2. Its codes. Helldivers style: every call-in has a code of arrows (`src/radio/codes.rs`), and a card beside the radio (in the player's own pane, split screen too, big type) lists them. With the radio out W/A/S/D punch the arrows in and the feet stand still (a pad: the d-pad, and the stick still walks); the codes that still match stay lit as it's dialled, a wrong arrow starts it over, a whole code keys the radio and it's called in (for now, only its name's flashed: nothing comes of it till the stages below).
 - [x] 3. Signal. Each player's own meter of 5 bars (`src/radio/signal.rs`), a tenth of a bar a kill (half again for one to the head or by hand, a whole bar for a Juggernaut), shown by the points with the key that pulls the radio out, and on the card. Each call-in costs bars (2 for a drop, 3 for 2X POINTS or a strafing run, 4 for INSTAKILL, 5 for the gunship: `Balance.md`); what there isn't the signal for is dim on the card, its cost red, and its code's refused. Spent as the call goes out.
 - [x] 4a. Where a drop lands. Its code sent, a lit flare comes up in the left hand, the radio still up in the right; the trigger held aims its throw (the arc shown), let go throws it. It bounces to a stop and burns, red smoke going up. Under a roof it gutters out, and the signal's given back.
-- [ ] 4b. Where a strike lands. A red outlined zone on the ground (a strip for a strafing run, a circle for what falls on one spot), moved to where it's wanted and confirmed.
+- [x] 4b. Where a strike lands. Its code sent, a red outlined strip on the ground where the player looks, running away from them (grey where it can't be: under a roof); the trigger sends it. Other shapes (a circle for what falls on one spot) when there's a strike for them.
 - [x] 5. Ammo drop and medic drop (`src/support/`, `src/run/support.rs`). A crate comes down on the flare under a parachute and opens; what it held lies about it to be taken (the 30 s rule): what everyone's guns lack of a full carry, or a medkit, two bandages and a plate each.
-- [ ] 6. Strafing run. A few seconds' warning (engines), then a line raked across the open ground through the flare: the dead in it cut down, glass broken, chips flying.
+- [x] 6. Strafing run (`src/support/strafe.rs`). Three seconds' warning (the plane heard coming, the strip pulsing red for everyone), then its guns rake the strip end to end: the dead in it under open sky cut down, a player in it badly hurt, glass broken, dirt flying, tracers down the sky; the plane seen going over. Its kills are whoever called it's, but charge no signal.
 - [x] 7. Boosts as entries (`src/holdout/boosts.rs`): 2X POINTS and INSTAKILL, on for everyone for 30 s (called again, as long again), each shown top middle with its time. INSTAKILL kills all but a Juggernaut (3× damage), and what's killed while it's up charges no signal.
 - [ ] 8. The gunship. A helicopter model, a slow circle over the compound for half a minute, its gun on the dead it can see in the open, its light, its rotor heard.
 - [ ] 9. Seen by the other player: the radio in the survivor figure's hand.
 
-**Still to ask** (before the stage that needs it): whether a strafing run or the gunship can hurt players; how long drops and boosts last.
+**Still to ask** (before the gunship): whether it can hurt players; how long it stays.
 
 ---
 

@@ -6,7 +6,9 @@
 //! button pressed, and what was called for goes out as the button's let
 //! go, paid for in signal (`signal.rs`: charged by kills; `meter.rs`: its
 //! bars drawn); a drop called for, a lit flare comes up in the left hand
-//! to be thrown where it's to land, the radio still up in the right; put away, it goes down and the gun comes back. A machine of
+//! to be thrown where it's to land, the radio still up in the right; a
+//! strike called for, it waits to be told where (a strip marked on the
+//! ground); put away, it goes down and the gun comes back. A machine of
 //! states, like the hands (`weapon`): it knows nothing of the world, and
 //! says what's to be heard at the moments its clips show them. How it's
 //! drawn is the viewmodel's (`viewmodel`), in the weapon's place.
@@ -94,6 +96,8 @@ pub struct Radio {
     /// A drop called for and not yet marked: its flare's still to throw
     /// (kept, put away, till the radio's out again).
     flare: Option<Call>,
+    /// A strike called for and not yet placed (kept, as a flare is).
+    strike: Option<Call>,
 }
 
 impl Radio {
@@ -112,7 +116,27 @@ impl Radio {
     /// Whether arrows are being taken: from the moment it's pulled out
     /// (the fingers needn't wait for it to come up), till a code's in.
     pub fn dialing(&self) -> bool {
-        matches!(self.state, State::Wanted | State::Raise | State::Up) && self.calling.is_none() && self.flare.is_none()
+        matches!(self.state, State::Wanted | State::Raise | State::Up) && self.calling.is_none() && self.flare.is_none() && self.strike.is_none()
+    }
+
+    /// The strike still to be placed, if there's one.
+    pub fn strike(&self) -> Option<Call> {
+        self.strike
+    }
+
+    /// `call` is ready: where it's to strike is theirs to mark.
+    pub fn give_strike(&mut self, call: Call) {
+        self.strike = Some(call);
+    }
+
+    /// The strike being placed: the radio's up, and it's waiting on where.
+    pub fn placing(&self) -> Option<Call> {
+        self.strike.filter(|_| self.state == State::Up && self.calling.is_none())
+    }
+
+    /// It's been told where: the strike's on its way.
+    pub fn placed(&mut self) {
+        self.strike = None;
     }
 
     /// The drop whose flare's still to throw, if there's one.
@@ -170,7 +194,7 @@ impl Radio {
     /// Pull it out (once the gun's away).
     pub fn pull(&mut self) {
         if self.state == State::Away {
-            *self = Self { state: State::Wanted, signal: self.signal, flare: self.flare, ..Self::default() };
+            *self = Self { state: State::Wanted, signal: self.signal, flare: self.flare, strike: self.strike, ..Self::default() };
         }
     }
 
@@ -198,9 +222,9 @@ impl Radio {
     }
 
     /// Away at once, wherever it was (they're down and out): its signal's
-    /// kept, and a flare not yet thrown.
+    /// kept, and a flare not yet thrown or a strike not yet placed.
     pub fn drop_it(&mut self) {
-        *self = Self { signal: self.signal, flare: self.flare, ..Self::default() };
+        *self = Self { signal: self.signal, flare: self.flare, strike: self.strike, ..Self::default() };
     }
 
     /// What was just dialled can't be called in (there's not the signal

@@ -11,6 +11,11 @@
     Chute   its parachute, from where its cords meet (the origin: the top
             of the crate) up 4.6 m: a round canopy of olive and sand
             gores, eight cords down to the crate
+    Plane   the strafing run's: a ground-attack plane, 14 m across its
+            straight wings and 13 m long, its nose along +Y, about its
+            middle: a grey fuselage, a gun under its nose, a dark canopy,
+            two engines high on its back, a tailplane with a fin at each
+            end
 
 Run headless from the project root:
     /opt/blender-bin-5.2.1/blender -b --factory-startup --python assets/blender/airdrop.py
@@ -171,12 +176,48 @@ def chute(mat):
     s.finish("Chute", mat)
 
 
+GREY = (0.24, 0.27, 0.27)
+BELLY = (0.34, 0.37, 0.38)
+GLASS = (0.05, 0.07, 0.09)
+GUN = (0.06, 0.06, 0.06)
+INTAKE = (0.10, 0.10, 0.11)
+
+
+def plane(mat):
+    s = Shape()
+    # The fuselage: a long body, a nose tapering down from it, a belly.
+    s.box((0, 0.5, 0), (1.3, 9.0, 1.4), GREY)
+    s.box((0, 5.6, -0.12), (1.0, 1.6, 1.05), GREY)
+    s.box((0, 6.7, -0.25), (0.6, 0.9, 0.7), GREY)
+    s.box((0, 0.5, -0.72), (1.1, 8.6, 0.12), BELLY)
+    # The gun, out under the nose; the canopy, up behind it.
+    s.box((0.12, 6.6, -0.62), (0.22, 2.2, 0.22), GUN)
+    s.box((0, 3.6, 0.82), (0.8, 1.9, 0.5), GLASS)
+    # Straight wings, a little up at the tips, a pod under each.
+    for side in (-1.0, 1.0):
+        s.box((side * 3.6, 0.7, -0.2), (6.4, 2.3, 0.22), GREY, Matrix.Rotation(side * math.radians(-3.0), 4, "Y"))
+        s.box((side * 6.7, 0.5, 0.02), (0.5, 1.5, 0.16), BELLY)
+        s.box((side * 2.6, 0.9, -0.55), (0.3, 1.6, 0.3), GUN)
+    # The engines, high on the back, each side.
+    for side in (-1.0, 1.0):
+        s.box((side * 1.25, -2.2, 0.95), (1.05, 2.8, 1.05), GREY)
+        s.box((side * 1.25, -0.75, 0.95), (0.85, 0.12, 0.85), INTAKE)
+        s.box((side * 0.6, -2.2, 0.6), (0.5, 1.4, 0.3), GREY)
+    # The tail: its boom, its plane, and a fin at each end of that.
+    s.box((0, -4.9, 0.1), (0.8, 2.4, 0.9), GREY)
+    s.box((0, -5.6, 0.3), (5.2, 1.3, 0.16), GREY)
+    for side in (-1.0, 1.0):
+        s.box((side * 2.6, -5.7, 0.95), (0.16, 1.4, 1.5), GREY)
+    s.finish("Plane", mat)
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mat = material()
     flare(mat)
     crate(mat)
     chute(mat)
+    plane(mat)
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(OUT), export_format="GLB", export_yup=True, export_apply=False, export_animations=False, export_vertex_color="ACTIVE", export_normals=True)
     print(f"airdrop: {len(bpy.data.objects)} objects -> {os.path.abspath(OUT)}")
 

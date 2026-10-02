@@ -1,21 +1,23 @@
 //! What's called down, as drawn: a flare turning end over end in the air,
 //! then lying where it stopped with its red flame and the smoke going up
 //! from it; a crate swinging down under its parachute; and the crate
-//! down, its lid off, the parachute fallen in a heap beside it. And what
-//! they light of a night.
+//! down, its lid off, the parachute fallen in a heap beside it; a strip
+//! of ground marked for a strafing run, outlined in red (while it's being
+//! placed, in that player's pane; once it's called in, for everyone to
+//! keep out of), and the plane that comes over it. And what they light of
+//! a night.
 
 use bevy_ecs::prelude::*;
 use lntrn_core::log_error;
 use lntrn_math::{Mat4, Quat, Vec3};
 
+use super::strafe::{LONG, Strafe, Strip, WIDE};
 use super::{Drop, Flare, SETTLES, STANDS};
-use crate::render::{Draw, Light, MeshId, Renderer};
+use crate::render::{Draw, Light, MeshId, Renderer, Vertex};
+use crate::world::Solid;
 
-/// A flare's flame: how big, in the air and burning on the ground, and
-/// what it's tinted (the flame's own is a fire's: this makes it a
-/// flare's red).
+/// A flare's flame: how big, in the air and burning on the ground.
 const FLAME: (f64, f64) = (0.45, 0.8);
-const RED: [f32; 3] = [1.0, 0.22, 0.42];
 /// Its light, and how far it reaches.
 const GLOW: [f32; 3] = [1.0, 0.10, 0.12];
 const REACH: f64 = 11.0;
@@ -28,14 +30,33 @@ const SMOKE: ([f32; 3], f32) = ([0.85, 0.16, 0.14], 0.3);
 /// How high the crate's top is (where its cords meet).
 const CRATE_TOP: f64 = 0.6;
 
-/// What they look like (`airdrop.glb`), and a ball for the smoke.
+/// A marked strip's outline: how far apart its bars are along its sides,
+/// how thick they are, how far over the ground, and its red (and what it
+/// is where the strip can't be: under a roof).
+const BARS: f64 = 1.5;
+const BAR: (f64, f64) = (0.16, 0.07);
+const OVER: f64 = 0.06;
+const MARKED: [f32; 3] = [1.0, 0.08, 0.06];
+const REFUSED: [f32; 3] = [0.40, 0.38, 0.36];
+const PORT: [f32; 3] = [1.0, 0.1, 0.1];
+const STARBOARD: [f32; 3] = [0.1, 1.0, 0.2];
+
+/// What they look like (`airdrop.glb`), a ball for the smoke, a flare's
+/// red flame, and glowing blocks: a strip's outline (red; grey where it
+/// can't be), and a plane's lights.
 #[derive(Resource, Clone, Copy)]
 pub struct Meshes {
     flare: MeshId,
     shut: MeshId,
     open: MeshId,
     chute: MeshId,
+    plane: MeshId,
     puff: MeshId,
+    flame: MeshId,
+    marked: MeshId,
+    refused: MeshId,
+    port: MeshId,
+    starboard: MeshId,
 }
 
 /// Load what they look like, for `world`'s runs.
@@ -43,12 +64,26 @@ pub fn load(renderer: &mut Renderer, world: &mut World) {
     match crate::assets::load(renderer, "airdrop") {
         Ok(props) => {
             let find = |n: &str| props.iter().find(|p| p.name == n).and_then(|p| p.mesh);
-            match (find("Flare"), find("Crate"), find("Open"), find("Chute")) {
-                (Some(flare), Some(shut), Some(open), Some(chute)) => {
+            match (find("Flare"), find("Crate"), find("Open"), find("Chute"), find("Plane")) {
+                (Some(flare), Some(shut), Some(open), Some(chute), Some(plane)) => {
                     let puff = renderer.add_mesh(&crate::motes::ball());
-                    world.insert_resource(Meshes { flare, shut, open, chute, puff });
+                    // (What glows is its own colour, whatever it's tinted:
+                    // a block of each.)
+                    let mut block = |glow: [f32; 3]| renderer.add_mesh(&crate::motes::speck([1.0; 3], glow, glow));
+                    let (marked, refused, port, starboard) = (block(MARKED), block(REFUSED), block(PORT), block(STARBOARD));
+                    // A fire's flame, made a flare's: red, its heart
+                    // white-hot.
+                    let Some(flame) = crate::assets::load(renderer, "effects").ok().and_then(|fx| {
+                        let burning = fx.iter().find(|p| p.name == "Flame")?;
+                        let red: Vec<Vertex> = burning.vertices.iter().map(|v| Vertex { emissive: if v.color[1] > 0.7 { [1.0, 0.8, 0.75] } else { [v.color[0], v.color[1] * 0.3, v.color[1] * 0.45 + 0.05] }, ..*v }).collect();
+                        Some(renderer.add_mesh(&red))
+                    }) else {
+                        log_error!("airdrop: no Flame to make a flare's of");
+                        return;
+                    };
+                    world.insert_resource(Meshes { flare, shut, open, chute, plane, puff, flame, marked, refused, port, starboard });
                 }
-                _ => log_error!("airdrop: no Flare, Crate, Open or Chute"),
+                _ => log_error!("airdrop: no Flare, Crate, Open, Chute or Plane"),
             }
         }
         Err(e) => log_error!("airdrop: {e}"),
@@ -69,7 +104,7 @@ fn swing(age: f64) -> Quat {
 /// Queue everything called down for drawing, `alpha` between the last two
 /// steps, at `time`.
 pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
-    let (Some(m), Some(flames)) = (world.get_resource::<Meshes>().copied(), world.get_resource::<crate::throw::draw::Meshes>().copied()) else { return };
+    let Some(m) = world.get_resource::<Meshes>().copied() else { return };
     let lit = |mesh, model| Draw { mesh, model, emissive: 0.0, fog: 1.0, tint: [1.0; 3] };
     for f in world.query::<&Flare>().iter(world) {
         let at = f.prev + (f.pos - f.prev) * alpha;
@@ -88,7 +123,7 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
         renderer.draw(lit(m.flare, Mat4::from_translation(at) * Mat4::from_quat(turn)));
         let high = size * flutter(time, own);
         let flame = Mat4::from_translation(tip - Vec3::new(0.0, 0.03, 0.0)) * Mat4::from_quat(Quat::from_rotation_y(time * 5.0 + own)) * Mat4::from_scale(Vec3::new(size * 0.8, high, size * 0.8));
-        renderer.draw(Draw { mesh: flames.flame, model: flame, emissive: 1.0, fog: 1.0, tint: RED });
+        renderer.draw(Draw { mesh: m.flame, model: flame, emissive: 1.0, fog: 1.0, tint: [1.0; 3] });
         // The smoke, once it's settled: puffs going up one after another,
         // each swelling, leaning with the air, and thinning as it climbs.
         if let Some(rest) = f.rest {
@@ -140,10 +175,85 @@ pub fn draw(world: &mut World, renderer: &mut Renderer, alpha: f64, time: f64) {
     }
 }
 
+/// A strip's outline, on the ground it lies over, at `time`: in `pane`
+/// only (it's being placed), or for everyone (none: it's called in, and
+/// pulses).
+pub fn zone(world: &World, renderer: &mut Renderer, pane: Option<usize>, strip: &Strip, time: f64) {
+    let Some(m) = world.get_resource::<Meshes>().copied() else { return };
+    let solid = &world.resource::<Solid>().0;
+    // (Grey where it can't be; called in, it pulses.)
+    let mesh = if strip.open { m.marked } else { m.refused };
+    let glows = if pane.is_none() { 0.45 + 0.55 * (time * 9.0).sin().abs() } else { 1.0 };
+    // A bar from one point of it to the next, each on the ground there.
+    let mut bar = |from: (f64, f64), to: (f64, f64)| {
+        let (Some(a), Some(b)) = (strip.meets(solid, from.0, from.1), strip.meets(solid, to.0, to.1)) else { return };
+        let (a, b) = (a + Vec3::new(0.0, OVER, 0.0), b + Vec3::new(0.0, OVER, 0.0));
+        let Some(along) = (b - a).try_normalize() else { return };
+        let turn = Quat::from_rotation_arc(Vec3::Z, along);
+        let d = Draw { mesh, model: Mat4::from_translation((a + b) * 0.5) * Mat4::from_quat(turn) * Mat4::from_scale(Vec3::new(BAR.0, BAR.1, (b - a).length())), emissive: glows as f32, fog: 0.4, tint: [1.0; 3] };
+        match pane {
+            Some(p) => renderer.draw_in(p, d),
+            None => renderer.draw(d),
+        }
+    };
+    let (half, steps) = (WIDE * 0.5, (LONG / BARS).round() as usize);
+    for k in 0..steps {
+        let (a, b) = (LONG * k as f64 / steps as f64, LONG * (k + 1) as f64 / steps as f64);
+        for side in [-half, half] {
+            bar((a, side), (b, side));
+        }
+        // (Down its middle, a dash every other step: the way it's raked.)
+        if k % 2 == 0 {
+            bar((a + 0.2, 0.0), (b - 0.2, 0.0));
+        }
+    }
+    for end in [0.0, LONG] {
+        for k in 0..4 {
+            bar((end, -half + WIDE * k as f64 / 4.0), (end, -half + WIDE * (k + 1) as f64 / 4.0));
+        }
+    }
+}
+
+/// Every strafing run called in: its strip, till its rounds have been
+/// through it, and its plane coming over (its guns alight as they fire).
+pub fn runs(world: &mut World, renderer: &mut Renderer, time: f64) {
+    let (Some(m), Some(flames)) = (world.get_resource::<Meshes>().copied(), world.get_resource::<crate::throw::draw::Meshes>().copied()) else { return };
+    let all: Vec<Strafe> = world.query::<&Strafe>().iter(world).copied().collect();
+    for s in all {
+        if s.threatens() {
+            zone(world, renderer, None, &s.strip, time);
+        }
+        let (at, dir) = s.plane();
+        // (Its nose is the model's -Z.)
+        let placed = Mat4::from_translation(at) * Mat4::from_quat(Quat::from_rotation_y((-dir.x).atan2(-dir.z)));
+        renderer.draw(Draw { mesh: m.plane, model: placed, emissive: 0.0, fog: 1.0, tint: [1.0; 3] });
+        // A light at each wingtip, so it's seen against the night.
+        for (side, mesh) in [(-6.9, m.port), (6.9, m.starboard)] {
+            renderer.draw(Draw { mesh, model: placed * Mat4::from_translation(Vec3::new(side, 0.0, -0.5)) * Mat4::from_scale(Vec3::splat(0.35)), emissive: 1.0, fog: 0.3, tint: [1.0; 3] });
+        }
+        // (And one under its belly, blinking.)
+        if (time * 2.5).fract() < 0.25 {
+            renderer.draw(Draw { mesh: m.port, model: placed * Mat4::from_translation(Vec3::new(0.0, -0.85, 0.5)) * Mat4::from_scale(Vec3::splat(0.4)), emissive: 1.0, fog: 0.3, tint: [1.0; 3] });
+        }
+        let firing = s.front() > 0.0 && s.front() < LONG;
+        if firing {
+            let spit = 5.0 + 2.5 * (time * 90.0).sin().abs();
+            renderer.draw(Draw { mesh: flames.flash, model: placed * Mat4::from_translation(Vec3::new(0.12, -0.62, -7.8)) * Mat4::from_quat(Quat::from_rotation_y(std::f64::consts::FRAC_PI_2)) * Mat4::from_scale(Vec3::splat(spit)), emissive: 1.0, fog: 0.5, tint: [1.0; 3] });
+        }
+    }
+}
+
 /// What they light at `time`, to `renderer`: a flare's red.
 pub fn lights(world: &mut World, renderer: &mut Renderer, time: f64) {
     for f in world.query::<&Flare>().iter(world) {
         let k = 1.5 * (0.8 + 0.2 * flutter(time, f.pos.x + f.pos.z));
         renderer.light(Light::open(f.pos + Vec3::new(0.0, 0.35, 0.0), REACH, GLOW.map(|c| c * k as f32)));
+    }
+    // A strafing run's rounds, where they're landing: a strobe of them.
+    for s in world.query::<&Strafe>().iter(world) {
+        if s.front() > 0.0 && s.front() < LONG {
+            let k = 1.5 + 1.5 * (time * 70.0).sin().abs();
+            renderer.light(Light::open(s.strip.point(s.front(), 0.0) + Vec3::new(0.0, 1.0, 0.0), 12.0, [1.0, 0.75, 0.4].map(|c| c * k as f32)));
+        }
     }
 }

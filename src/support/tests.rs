@@ -1,5 +1,7 @@
 //! Drops in a small built world: a flare thrown into the open brings a
-//! crate down on it; one under a roof gutters out and nothing comes.
+//! crate down on it; one under a roof gutters out and nothing comes. And
+//! a strafing run: what's in its strip under open sky is hit as its
+//! rounds pass, and nothing else.
 
 use lntrn_math::Vec3;
 
@@ -15,6 +17,7 @@ fn world() -> World {
     w.insert_resource(Solid(s));
     w.insert_resource(Horde::default());
     w.insert_resource(Support::default());
+    w.insert_resource(crate::throw::Booms::default());
     w
 }
 
@@ -69,4 +72,73 @@ fn a_flare_under_a_roof_gutters_out_and_nothing_comes() {
     assert_eq!(events(&mut w), [Event::Guttered { call: Call::MedicDrop, by: 0 }]);
     clear(&mut w);
     assert_eq!(w.query::<&Flare>().iter(&w).count(), 0);
+}
+
+#[test]
+fn a_strip_is_marked_where_the_look_lands_running_away_from_the_eye() {
+    use strafe::Strip;
+    let w = world();
+    let solid = &w.resource::<Solid>().0;
+    let eye = Vec3::new(0.0, 1.6, 0.0);
+    // Looking down at the ground ahead, to the north: there, and open.
+    let s = Strip::marked(solid, eye, Vec3::new(0.0, -0.2, -1.0).normalize()).expect("ground ahead");
+    assert!(s.open && s.mid.y.abs() < 1e-6 && (s.mid.z + 8.0).abs() < 0.1 && s.dir == Vec3::new(0.0, 0.0, -1.0), "{s:?}");
+    let (along, across) = s.place(s.mid + Vec3::new(1.5, 0.0, -5.0));
+    assert!((along - (strafe::LONG * 0.5 + 5.0)).abs() < 1e-9 && across.abs() == 1.5, "{along} along, {across} across");
+    assert!((s.point(along, across) - (s.mid + Vec3::new(1.5, 0.0, -5.0))).length() < 1e-9 || (s.point(along, -across) - (s.mid + Vec3::new(1.5, 0.0, -5.0))).length() < 1e-9);
+    // At the sky: out ahead, on the ground. Under the roof: marked, but
+    // not open.
+    let s = Strip::marked(solid, eye, Vec3::new(0.0, 0.5, -1.0).normalize()).expect("out ahead");
+    assert!(s.open && s.mid.y.abs() < 1e-6 && s.mid.z < -30.0);
+    let s = Strip::marked(solid, Vec3::new(15.0, 1.6, 0.0), Vec3::new(1.0, -0.3, 0.0).normalize()).expect("under the roof");
+    assert!(!s.open && s.mid.x > 15.0);
+    assert!(Strip::marked(solid, eye, Vec3::Y).is_none(), "straight up: no way for it to run");
+}
+
+#[test]
+fn a_strafing_run_cuts_down_what_s_in_its_strip_in_the_open_as_its_rounds_pass() {
+    use crate::player::{Body, Player};
+    use crate::zombie::brain::Zombie;
+    use strafe::{LONG, RAKES, Strafe, Strip, TO_A_PLAYER, WARNS};
+    let mut w = world();
+    w.insert_resource(crate::world::Clock::default());
+    // A strip running east from x = -20 to 10: its last metres are under
+    // the roof's edge (x >= 10 is roofed).
+    let strip = Strip { mid: Vec3::new(-5.0, 0.0, 0.0), dir: Vec3::X, open: true };
+    let dead = |w: &mut World, at: Vec3| w.spawn((Zombie::new(0.0, 3), Body::at(at))).id();
+    let near = dead(&mut w, Vec3::new(-15.0, 0.0, 1.0));
+    let far = dead(&mut w, Vec3::new(5.0, 0.0, -2.0));
+    let beside = dead(&mut w, Vec3::new(0.0, 0.0, 4.0));
+    let roofed = dead(&mut w, Vec3::new(12.0, 0.0, 0.0));
+    w.spawn((Player(1), Body::at(Vec3::new(-10.0, 0.0, 0.5))));
+    w.spawn((Player(0), Body::at(Vec3::new(-10.0, 0.0, 9.0))));
+    strafe::call(&mut w, strip, 1);
+    let alive = |w: &World, e: Entity| !w.get::<Zombie>(e).unwrap().dead();
+    // Nothing till the plane's there.
+    steps(&mut w, WARNS - 0.1);
+    assert!(alive(&w, near) && w.resource::<Support>().kills.is_empty() && events(&mut w).is_empty());
+    assert!(w.query::<&Strafe>().single(&w).is_ok_and(|s| s.threatens() && s.front() == 0.0));
+    // A third of the way through: the near one's down, the far one not yet.
+    steps(&mut w, 0.1 + RAKES / 3.0);
+    assert!(!alive(&w, near) && alive(&w, far));
+    // All of it: the far one too; not the one beside the strip, nor the
+    // one under the roof. The kills are whoever called it's.
+    steps(&mut w, RAKES);
+    assert!(!alive(&w, far) && alive(&w, beside) && alive(&w, roofed));
+    assert_eq!(std::mem::take(&mut w.resource_mut::<Support>().kills), [(1, near), (1, far)]);
+    assert_eq!(w.get::<Zombie>(near).unwrap().by, Some(1));
+    // Its rounds were seen to land all along it, on the ground and on the
+    // roof at its end.
+    let rounds: Vec<Vec3> = events(&mut w).into_iter().filter_map(|e| if let Event::Round { at, .. } = e { Some(at) } else { None }).collect();
+    assert!(rounds.len() > 100 && rounds.iter().all(|at| at.x >= -20.0 && at.x <= 10.0 + 1e-6 && at.z.abs() <= 2.5), "{} rounds", rounds.len());
+    assert!(rounds.iter().any(|at| at.x < -15.0) && rounds.iter().any(|at| at.x > 5.0));
+    // The player in it was hit, hard; the one beside it only shaken.
+    let booms = w.resource::<crate::throw::Booms>();
+    assert_eq!((booms.of(1).blasted, booms.of(0).blasted), (TO_A_PLAYER, 0.0));
+    assert!(booms.of(0).shake > 0.0);
+    // And then it's gone.
+    assert!(!w.query::<&Strafe>().single(&w).unwrap().threatens());
+    steps(&mut w, 6.0);
+    assert_eq!(w.query::<&Strafe>().iter(&w).count(), 0);
+    let _ = LONG;
 }

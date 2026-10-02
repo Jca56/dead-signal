@@ -48,6 +48,12 @@ impl Signal {
         self.seen = [stats.kills(), stats.headshot_kills, stats.melee_kills];
     }
 
+    /// `kills` of theirs weren't their own doing (what they called in
+    /// did it): they charge nothing.
+    pub fn forgo(&mut self, kills: u32) {
+        self.seen[0] += kills;
+    }
+
     /// A Juggernaut killed: a bar at once.
     pub fn juggernaut(&mut self) {
         self.add(JUGGERNAUT);
@@ -120,6 +126,12 @@ mod tests {
         stats.gun_kills = 50;
         s.charge(&stats);
         assert_eq!(s.bars(), 1.0, "and what's killed after counts as it did");
+        // Twelve more, ten of them a strafing run's: only the two are theirs.
+        stats.gun_kills = 52;
+        stats.blast_kills = 10;
+        s.forgo(10);
+        s.charge(&stats);
+        assert_eq!(s.units, BAR + 2 * KILL);
     }
 
     #[test]

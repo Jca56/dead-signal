@@ -16,7 +16,8 @@
 //! draws them that big (1280x720 if not). `RADIO=flare`: a drop's flare in
 //! their left hand. `DROP=1`: a crate coming down on its flare in the
 //! yard, and another down and open, what it held about it. `BOOSTS=1`:
-//! both boosts up.
+//! both boosts up. `STRAFE=mark`: a strafing run's strip being placed
+//! ahead; `STRAFE=run`: one coming in along it, its rounds half way.
 
 use lntrn_app::lntrn_render::{AtlasTexture, Gpu, Images, Pass2d, RenderGraph, TexturePool};
 use lntrn_app::{AppHost, RenderCx, wgpu};
@@ -188,9 +189,27 @@ impl DeadSignal {
                 crate::items::set_down(&mut self.game.world, crate::loot::Stack::one(kind), yard(5.5, -4.0) + Vec3::new(a.cos() * 1.3, 0.6, a.sin() * 1.3), a);
             }
         }
+        let strafe = std::env::var("STRAFE").ok();
         for k in 0..90 {
             self.game.tick(time + f64::from(k) / 60.0);
             self.game.teleport(0, feet);
+            // (A strafing run's strip ahead, asked for: marked, or raked.)
+            if let Some(how) = &strafe {
+                use crate::support::strafe::{Strip, WARNS, call};
+                let look = Vec3::new(-yaw.sin(), -0.14, -yaw.cos()).normalize();
+                let strip = Strip::marked(&self.game.world.resource::<crate::world::Solid>().0, feet + Vec3::new(0.0, 1.6, 0.0), look);
+                if how == "mark" {
+                    self.run.seats[0].zone = strip;
+                } else if let (Some(strip), true) = (strip, k == 0) {
+                    crate::support::clear(&mut self.game.world);
+                    call(&mut self.game.world, strip, 0);
+                    // (On to just before its rounds begin.)
+                    for mut s in self.game.world.query::<&mut crate::support::strafe::Strafe>().iter_mut(&mut self.game.world) {
+                        s.t = WARNS - 1.0;
+                    }
+                }
+                self.run.supported(&mut self.game, &mut self.combat);
+            }
             // (Their hands come up, as in a run: the last quarter second
             // of it the trigger's pulled, `firing`.)
             let trigger = crate::weapon::Trigger { fire: firing && k == 86, ..Default::default() };
@@ -327,6 +346,8 @@ fn shots() {
         let about = Vec3::new(x + 0.5, f64::from(*level) * crate::map::building::plan::STOREY + 0.3, z + 0.5);
         let floor = app.game.world.resource::<zombie::Nav>().0.as_ref().and_then(|n| n.height_at(about)).unwrap_or(about.y);
         let feet = Vec3::new(about.x, floor, about.z);
+        // (Looking up or down by so much instead, asked for: `PITCH=<degrees>`.)
+        let pitch = std::env::var("PITCH").ok().and_then(|p| p.parse().ok()).unwrap_or(*pitch);
         let pixels = app.frame_off_screen(&gpu, &target, feet, -bearing.to_radians(), pitch.to_radians(), 100.0 + i as f64, name.ends_with("_shot"), (&mut over, &images));
         write(name, pixels);
     }

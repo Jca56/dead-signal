@@ -5,8 +5,9 @@
 //! walk (a pad's d-pad) punch its code in; a whole code's called in, if
 //! there's the signal for it (what they kill charges it), and the signal
 //! spent as it's sent. A drop called for, its flare comes up in the left
-//! hand: the trigger held aims its throw, let go throws it. Anything else
-//! the hands are
+//! hand: the trigger held aims its throw, let go throws it. A strike
+//! called for, the strip of ground they look at is marked, and the
+//! trigger sends it there. Anything else the hands are
 //! wanted for puts it away: a shot or a blow, another weapon, a kit, a
 //! throw, the bag, someone to pick up, going down.
 
@@ -68,8 +69,9 @@ impl Seat {
     /// code punched in, a flare aimed and thrown, and what's heard of it.
     pub(super) fn radioing(&mut self, ui: &mut Ui, game: &mut Game, combat: &mut Combat, free: bool, pulls: Pulls, dt: f64) {
         let Some(radio) = self.radio else { return };
-        // (With a flare to throw, the trigger's for that.)
-        let cut = pulls.strike || (pulls.fire && radio.flare().is_none());
+        // (With a flare to throw or a strike to place, the trigger's for
+        // that.)
+        let cut = pulls.strike || (pulls.fire && radio.flare().is_none() && radio.strike().is_none());
         if radio.out() {
             // (A pad's View tapped is the bag's: with the radio out, it
             // puts the radio away instead.)
@@ -86,6 +88,20 @@ impl Seat {
             self.radio.iter_mut().for_each(|r| {
                 r.throw();
             });
+        }
+        // A strike to place: the strip of ground they're looking at's
+        // marked, and the trigger sends it there (not under a roof).
+        self.zone = self.radio.and_then(|r| r.placing()).filter(|_| free).and_then(|_| self.marked(game));
+        if let Some(strip) = self.zone.filter(|_| pulls.fire) {
+            if strip.open {
+                self.radio.iter_mut().for_each(|r| r.placed());
+                crate::support::strafe::call(&mut game.world, strip, self.n);
+                combat.play(Sfx::RadioOver, 0.7);
+                self.zone = None;
+            } else {
+                self.note = Some(("NO OPEN SKY", super::loot::NOTE_FOR));
+                combat.play(Sfx::DialWrong, 0.6);
+            }
         }
         let arrow = self.input.dial(ui);
         let Some(radio) = &mut self.radio else { return };
@@ -130,8 +146,19 @@ impl Seat {
         }
     }
 
+    /// The strip of ground a strike would be laid on, looking where they
+    /// look now.
+    fn marked(&self, game: &mut Game) -> Option<crate::support::strafe::Strip> {
+        let (body, view) = game.player(self.n)?;
+        let eye = crate::head::eye_position(&view, &body, game.alpha());
+        let (yaw, pitch) = view.aim();
+        let look = lntrn_math::Vec3::new(-yaw.sin() * pitch.cos(), pitch.sin(), -yaw.cos() * pitch.cos());
+        crate::support::strafe::Strip::marked(&game.world.resource::<crate::world::Solid>().0, eye, look)
+    }
+
     /// `call`'s gone out: its signal's spent. A drop's flare is theirs to
-    /// throw; anything else is the run's to begin.
+    /// throw, a strike theirs to place; anything else is the run's to
+    /// begin.
     fn sent(&mut self, game: &mut Game, call: Call) {
         let Some(radio) = &mut self.radio else { return };
         if !radio.signal.spend(call.entry().cost) {
@@ -139,6 +166,8 @@ impl Seat {
         }
         if call.dropped() {
             radio.give_flare(call);
+        } else if call == Call::StrafingRun {
+            radio.give_strike(call);
         } else {
             crate::support::called(&mut game.world, call, self.n);
         }
@@ -234,12 +263,12 @@ mod tests {
         run(&mut h, &mut seat, &mut combat, None, false, 90);
         assert!(seat.radio_held() && combat.arms[0].hands.stowed() == Some(Some(Slot::Sidearm)));
         assert_eq!(seat.radio_shown().map(|s| (s.clip, s.stowed)), Some(("Idle", 0.0)));
-        // W, D, D: a strafing run's code. It's keyed, its name's flashed
-        // as it goes out, and the dial's clear for the next.
-        for key in ['w', 'd', 'd'] {
+        // A, D, A, D: 2X POINTS' code. It's keyed, and as it goes out the
+        // dial's clear for the next.
+        for key in ['a', 'd', 'a', 'd'] {
             run(&mut h, &mut seat, &mut combat, Some(Key::Char(key)), false, 2);
         }
-        assert_eq!(seat.radio.and_then(|r| r.calling()), Some(Call::StrafingRun));
+        assert_eq!(seat.radio.and_then(|r| r.calling()), Some(Call::DoublePoints));
         assert_eq!(seat.radio_shown().map(|s| s.clip), Some("Key"));
         run(&mut h, &mut seat, &mut combat, None, false, 90);
         assert!(seat.radio.is_some_and(|r| r.dialing() && r.dial().len() == 0));
@@ -378,6 +407,33 @@ mod tests {
         assert!(!seat.radio_out() && combat.arms[0].hands.held == Some(Slot::Sidearm));
         // Tapped again, the radio away: the bag.
         assert!(frame(&mut seat, &mut combat, tap, DT));
+    }
+
+    #[test]
+    fn a_strafing_run_s_strip_is_marked_where_they_look_and_the_trigger_sends_it() {
+        use crate::support::strafe::Strafe;
+        let mut h = Harness::new(800.0, 600.0);
+        let mut combat = Combat::new();
+        let mut seat = seat(&mut combat);
+        let mut game = game();
+        game.world.insert_resource(crate::zombie::Horde::default());
+        run_in(&mut game, &mut h, &mut seat, &mut combat, Some(Key::Char('q')), (false, false), 90);
+        assert!(seat.zone.is_none());
+        for key in ['w', 'd', 'd'] {
+            run_in(&mut game, &mut h, &mut seat, &mut combat, Some(Key::Char(key)), (false, false), 2);
+        }
+        // Sent: three bars spent, and the strip's marked on the ground
+        // ahead, running the way they face (north).
+        run_in(&mut game, &mut h, &mut seat, &mut combat, None, (false, false), 90);
+        assert_eq!(seat.radio.map(|r| (r.placing(), r.signal.bars())), Some((Some(Call::StrafingRun), 2.0)));
+        let strip = seat.zone.expect("marked");
+        assert!(strip.open && strip.dir.z < -0.99 && strip.mid.z < -5.0 && strip.mid.y.abs() < 1e-6, "{strip:?}");
+        // The trigger: it's called in there, the radio still up, the dial
+        // free.
+        run_in(&mut game, &mut h, &mut seat, &mut combat, None, (true, false), 2);
+        let runs: Vec<Strafe> = game.world.query::<&Strafe>().iter(&game.world).copied().collect();
+        assert!(runs.len() == 1 && runs[0].by == 0 && runs[0].strip == strip, "{runs:?}");
+        assert!(seat.zone.is_none() && seat.radio_held() && seat.radio.is_some_and(|r| r.strike().is_none() && r.dialing()));
     }
 
     #[test]

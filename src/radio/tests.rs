@@ -138,3 +138,21 @@ fn a_flare_given_comes_up_in_the_left_hand_is_thrown_and_is_kept_if_the_radio_s_
     assert_eq!(run(&mut r, THROW + 0.1), [Cue::Thrown(Call::AmmoDrop)]);
     assert!(r.flare().is_none() && r.dialing() && r.shown().map(|s| s.clip) == Some("Idle"));
 }
+
+#[test]
+fn a_strike_given_waits_to_be_placed_with_the_radio_up_and_is_kept_put_away() {
+    let mut r = up();
+    r.give_strike(Call::StrafingRun);
+    assert!(!r.dialing() && r.placing() == Some(Call::StrafingRun));
+    assert_eq!(r.shown().map(|s| s.clip), Some("Idle"));
+    r.put_away();
+    assert_eq!(r.placing(), None, "not while it's going down");
+    run(&mut r, LOWER + 0.1);
+    r.drop_it();
+    r.pull();
+    assert_eq!((r.placing(), r.strike()), (None, Some(Call::StrafingRun)), "kept; placed once it's up again");
+    run(&mut r, RAISE + 0.1);
+    assert_eq!(r.placing(), Some(Call::StrafingRun));
+    r.placed();
+    assert!(r.strike().is_none() && r.dialing());
+}

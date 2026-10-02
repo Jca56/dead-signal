@@ -1,7 +1,7 @@
 //! The handheld radio, and what it calls down: the handset switched on,
 //! its talk button pressed and let go, the tones of its dial and the buzz
 //! of a wrong arrow; a plane going over, high up, and a crate coming to
-//! ground; a boost coming on.
+//! ground; a boost coming on; a strafing run's plane, and its guns.
 
 use super::{Svf, env, pulse, render, sine};
 use crate::sound::{RATE, Sfx};
@@ -101,6 +101,36 @@ pub(super) fn make(sfx: Sfx) -> Vec<f32> {
                 let note = |from: f32, hz: f32, rings: f32| if t >= from { (sine(t - from, hz) + sine(t - from, hz * 2.0) * 0.3) * env(t - from, 0.004, rings) } else { 0.0 };
                 let shimmer = sine(t, 3136.0) * env((t - 0.2).max(0.0), 0.05, 0.2) * f32::from(t >= 0.2) * 0.12;
                 note(0.0, 784.0, 0.06) + note(0.09, 988.0, 0.06) + note(0.18, 1175.0, 0.22) + shimmer + n.next() * 0.01
+            })
+        }
+        Sfx::Jet => {
+            // A strafing run coming in: a whine and a roar swelling for
+            // three seconds, tearing overhead, and gone past.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            let mut phase = 0.0f32;
+            let dt = 1.0 / RATE as f32;
+            render(5.0, 0.85, move |t, n| {
+                let near = (-((t - 3.3) / 0.9).powi(2)).exp();
+                let swell = (t / 3.3).min(1.0).powi(3) * 0.5 + near;
+                let pitch = 560.0 - 240.0 * ((t - 3.3) / 0.35).tanh();
+                phase = (phase + pitch * dt).fract();
+                let whine = (phase * 2.0 - 1.0) * 0.18;
+                let roar = f.run(n.next(), 300.0 + 900.0 * near, 0.9).0 * 1.4 + g.run(n.next(), 2400.0, 0.7).1 * 0.35 * near;
+                (whine + roar) * swell
+            })
+        }
+        Sfx::Brrt => {
+            // Its guns: one long tearing burst, the rounds too fast to
+            // tell apart, and the air settling after.
+            let (mut f, mut g) = (Svf::default(), Svf::default());
+            render(1.6, 0.95, move |t, n| {
+                let on = f32::from(t < 1.05) * (t / 0.02).min(1.0);
+                let x = n.next();
+                let tear = pulse(t, 68.0) * 0.9 + pulse(t, 136.5) * 0.4;
+                let body = f.run(tear + x * 0.5, 900.0, 0.7).0 * on;
+                let crack = g.run(x, 3200.0, 0.6).1 * on * (0.5 + 0.5 * pulse(t, 68.0));
+                let after = sine(t, 70.0) * env((t - 1.05).max(0.0), 0.005, 0.18) * f32::from(t >= 1.05) * 0.5;
+                body + crack * 0.6 + after
             })
         }
         _ => Vec::new(),
