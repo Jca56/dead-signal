@@ -162,17 +162,17 @@ mod tests {
     }
 
     #[test]
-    fn the_best_of_the_new_guns_are_on_no_wall_and_the_rest_are_where_they_re_said_to_be() {
+    fn the_heaviest_and_the_rarest_are_on_no_wall_and_the_rest_are_where_they_re_said_to_be() {
         use crate::holdout::arena::Wares;
         let arena = crate::holdout::tests_built();
         let zone = |wares: Wares| arena.buys.iter().find(|b| b.wares == wares).map(|b| arena.zones[b.zone]);
-        for kind in [Kind::Magnum, Kind::Bullpup, Kind::Rpk] {
+        for kind in [Kind::Magnum, Kind::Bullpup, Kind::Rpk, Kind::Lmg, Kind::Flamethrower] {
             assert_eq!(zone(Wares::Weapon(kind)), None, "{kind:?} is a mystery drop's alone");
             assert!(ODDS.iter().any(|(k, _)| *k == kind));
         }
-        assert_eq!(zone(Wares::Weapon(Kind::Pistol45)), Some("THE YARD"));
-        assert_eq!(zone(Wares::Weapon(Kind::MiniUzi)), Some("EAST COURT"));
-        assert_eq!(zone(Wares::Weapon(Kind::Ak47)), Some("GENERATOR PEN"));
+        assert_eq!(zone(Wares::Weapon(Kind::Pistol45)), Some("CONTROL ROOM"));
+        assert_eq!(zone(Wares::Weapon(Kind::MiniUzi)), Some("EQUIPMENT ROOM"));
+        assert_eq!(zone(Wares::Weapon(Kind::Ak47)), Some("THE BUNKER"));
         assert_eq!(zone(Wares::Kit(Kind::Molotov)), Some("MOTOR POOL"));
         assert_eq!(zone(Wares::Kit(Kind::PipeBomb)), Some("BARRACKS"));
         // Every gun there is but the pistol everyone begins with can come

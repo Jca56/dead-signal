@@ -158,6 +158,7 @@ Decided 2026-10-02: six more guns, some on HOLDOUT's walls and the best only in 
 - [x] New rounds: .45, .44, and 7.62 (the AK's and the RPK's).
 - [x] The dead leave rounds only for guns carried (`holdout/drops.rs::Wanted`), and rarely a Molotov or a pipe bomb; both are on walls too (the motor pool's workshop, the barracks' kitchen).
 - [x] All six in the mystery drop's odds; in extraction's loot tables too (gun cabinets, the police armory, the ammo cage, a Juggernaut).
+- [x] The walls redone: the pistol and the .45 where a holdout starts; the shotgun, the SMG and the Mini Uzi (and the .45 again) each in two places about the middle; the hunting rifle (the motor pool's mezzanine), the assault rifle (the broadcast floor) and the AK (the bunker's armory) once each, deep in. The LMG and the flamethrower are off the walls: a mystery drop's, with the Magnum, the bullpup and the RPK. No ammo bench: ammo's plentiful enough (an ammo drop, the dead, the hounds, a Juggernaut).
 
 
 ---

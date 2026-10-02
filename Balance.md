@@ -281,22 +281,20 @@ Down in the bunker's ops room (the signs lead to it from the yard): what's in ha
 
 ### On HOLDOUT's walls
 
-A gun off the wall comes loaded, with a full carry of its rounds; bought again at the same place, its rounds are topped up for half. A kit or a throwable is one of it.
+A gun off the wall comes loaded, with a full carry of its rounds; bought again at the same place, its rounds are topped up for half. A kit or a throwable is one of it. The cheap guns are by where a holdout starts and each in two places; the dear ones are deep in, once each. The heaviest (the LMG, the flamethrower, the RPK) and the rarest (the .44 Magnum, the bullpup) are on no wall, nor their rounds: a mystery drop's the only way to one, and an ammo drop, the dead, a hound round or a Juggernaut the only ways to feed it.
 
 | On the wall | Cost | Where |
 |---|---|---|
 | PISTOL | 250 | control room |
-| HUNTING RIFLE | 500 | control room, motor pool's mezzanine, east court |
-| .45 PISTOL | 600 | the alley by the barracks |
+| .45 PISTOL | 600 | control room, the alley by the barracks |
+| HUNTING RIFLE | 500 | motor pool's mezzanine |
 | MACHETE | 600 | by the gate |
-| SHOTGUN | 900 | the yard, motor pool's bay, station house |
+| SHOTGUN | 900 | the yard, motor pool's bay |
 | FIRE AXE | 1000 | generator pen |
-| MINI UZI | 1000 | east court, on the barracks' wall |
-| SMG | 1200 | equipment room, station house's lobby |
-| ASSAULT RIFLE | 1800 | barracks' dorm, broadcast floor |
-| AK-47 | 2200 | generator shed |
-| FLAMETHROWER | 2500 | motor pool's parts store |
-| LMG | 3000 | the bunker's armory |
+| MINI UZI | 1000 | equipment room, east court |
+| SMG | 1200 | generator shed, station house's lobby |
+| ASSAULT RIFLE | 1800 | broadcast floor |
+| AK-47 | 2200 | the bunker's armory |
 | BANDAGE | 200 | here and there |
 | MEDKIT | 600 | here and there |
 | MOLOTOV | 400 | motor pool's workshop |
@@ -350,7 +348,7 @@ Everyone in a holdout carries one. Pulled out (Q; a pad's View, held), the gun's
 | LMG | 4% |
 | RPK | 4% |
 
-The .44 Magnum, the bullpup and the RPK are on no wall: a mystery drop is the only way to one.
+The .44 Magnum, the bullpup, the RPK, the LMG and the flamethrower are on no wall: a mystery drop is the only way to one.
 
 - A **strafing run** is marked on the ground: its code sent, a strip **30 m long and 5 m wide** is outlined in red where the player looks, running straight away from them; the trigger sends it there (not under a roof). **3 s** later the plane's guns rake it end to end in **1 s**. Everything in it under open sky as the rounds pass takes **900** (plate's no help: all of the horde dies of it, a Juggernaut is badly hurt); a player in it takes **70** (armor first). Under a roof, nothing's touched. The kills are whoever called it's (their points), but charge no signal.
 - A **precision strike** is marked on the ground too: a red circle with a cross in it, **5 m** in radius, where the player looks; the trigger sends it there (not under a roof). **2 s** later one heavy shell comes straight down on it: no fire, a blow. Everything in the circle under open sky takes from **1200** at its middle to **500** at its edge (plate's no help) and is flung outward; a player in it takes **80** to **30** (armor first). The kills are whoever called it's (their points), but charge no signal.

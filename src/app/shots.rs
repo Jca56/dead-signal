@@ -98,12 +98,12 @@ const SHOTS: &[Shot] = &[
     Shot("stim_rush", -70.5, 10.5, 0, 288.0, -4.0),
     Shot("stim_bulwark", 45.0, -13.5, 0, 162.0, -4.0),
     Shot("stim_twitch", 70.5, 6.0, 1, 72.0, -4.0),
-    // What's new on the walls: the .45 in the alley, the Mini Uzi on the
-    // east court, the AK in the generator shed, Molotovs in the workshop,
-    // pipe bombs in the barracks' kitchen.
+    // On the walls: the .45 in the alley, the Mini Uzi on the east court,
+    // the SMG in the generator shed, Molotovs in the workshop, pipe bombs
+    // in the barracks' kitchen.
     Shot("wall_45", 14.6, -20.5, 0, 90.0, 0.0),
     Shot("wall_uzi", 57.4, -19.0, 0, 270.0, 0.0),
-    Shot("wall_ak", -27.4, -24.0, 0, 90.0, 0.0),
+    Shot("wall_shed", -27.4, -24.0, 0, 90.0, 0.0),
     Shot("wall_molotov", -59.0, 25.6, 0, 180.0, 0.0),
     Shot("wall_pipe_bomb", 42.0, -23.4, 0, 180.0, 0.0),
 ];

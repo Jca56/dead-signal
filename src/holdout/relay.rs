@@ -21,7 +21,7 @@
 //! ```
 //!
 //! The control room is the start: two windows on the woods, the pistol
-//! and the hunting rifle on its walls. A door (or the equipment room's,
+//! and the .45 on its walls. A door (or the equipment room's,
 //! through the back) opens the yard: the big loop round the mast, the
 //! shotgun on the transmitter's wall. From the yard, three ways on. West,
 //! the motor pool's roller door: its bay, the mezzanine over the workshop
@@ -30,7 +30,8 @@
 //! doors: its offices and newsroom, the broadcast floor upstairs (a dead
 //! end to hold, the assault rifle in its studio), and by a flight of
 //! stairs at either end the bunker, behind blast doors: no way in for
-//! the dead but those stairs (and the Amplifier in its ops room). North,
+//! the dead but those stairs (the AK in its armory, the Amplifier in its
+//! ops room). North,
 //! the barracks, its
 //! dorm upstairs, and out its far door the east court between it and the
 //! station. Every way in from above ground faces the woods.
@@ -93,39 +94,37 @@ pub const RELAY_STATION: Layout = Layout {
         Yard(-36, -29, 36, 29, YARD),
     ],
     buys: &[
-        // The old station's.
-        BuyAt(ns(12, -19.5), 0, Face::W, Wares::Weapon(Item::Rifle)),
+        // The guns: the cheap by where a holdout starts, the dear deep in.
+        // (The heaviest are on no wall: a mystery drop's.) The old
+        // station's: the pistol and the .45 in the control room, a Mini Uzi
+        // in the equipment room, a shotgun on the yard.
+        BuyAt(ns(12, -19.5), 0, Face::W, Wares::Weapon(Item::Pistol45)),
         BuyAt(ew(-29, 4.5), 0, Face::S, Wares::Weapon(Item::Pistol)),
         BuyAt(ns(-3, -27.5), 0, Face::E, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(-29, -12.0), 0, Face::S, Wares::Weapon(Item::Smg)),
+        BuyAt(ew(-29, -12.0), 0, Face::S, Wares::Weapon(Item::MiniUzi)),
         BuyAt(ew(-17, -4.5), 0, Face::N, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-17, -2.0), 0, Face::S, Wares::Weapon(Item::Shotgun)),
         BuyAt(ew(29, -14.0), 0, Face::N, Wares::Weapon(Item::Machete)),
         BuyAt(ns(-15, -13.0), 0, Face::W, Wares::Weapon(Item::FireAxe)),
         BuyAt(ew(-18, -32.25), 0, Face::S, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(-29, 27.333), 1, Face::S, Wares::Weapon(Item::AssaultRifle)),
         BuyAt(ns(23, -25.25), 0, Face::E, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-9, 33.111), 0, Face::N, Wares::Kit(Item::Bandage)),
-        // The motor pool's, the flamethrower in its parts store, the rifle
-        // up on its mezzanine; the west lot's, on the motor pool's wall.
+        // The motor pool's: a shotgun in its bay, the hunting rifle up on
+        // its mezzanine; the west lot's, on the motor pool's wall.
         BuyAt(ew(-5, -66.231), 0, Face::S, Wares::Weapon(Item::Shotgun)),
         BuyAt(ew(18, -60.385), 0, Face::S, Wares::Kit(Item::Bandage)),
         BuyAt(ew(29, -39.077), 0, Face::N, Wares::Kit(Item::Medkit)),
-        BuyAt(ns(-36, 23.75), 0, Face::W, Wares::Weapon(Item::Flamethrower)),
         BuyAt(ew(29, -45.231), 1, Face::N, Wares::Weapon(Item::Rifle)),
         BuyAt(ew(-5, -46.769), 0, Face::N, Wares::Kit(Item::Medkit)),
-        // The east court's, on the compound's wall.
-        BuyAt(ns(81, -23.0), 0, Face::W, Wares::Weapon(Item::Rifle)),
-        // The station house's: its lobby, its corridor, its newsroom, its
-        // rear hall; upstairs, the studio and the booth.
+        // The station house's: the SMG in its lobby, its corridor, its rear
+        // hall; upstairs, the assault rifle in the studio, and the booth.
         BuyAt(ns(48, 4.667), 0, Face::W, Wares::Weapon(Item::Smg)),
         BuyAt(ew(11, 62.0), 0, Face::S, Wares::Kit(Item::Bandage)),
-        BuyAt(ew(29, 62.0), 0, Face::N, Wares::Weapon(Item::Shotgun)),
         BuyAt(ns(75, 17.5), 0, Face::E, Wares::Kit(Item::Medkit)),
         BuyAt(ew(29, 62.0), 1, Face::N, Wares::Weapon(Item::AssaultRifle)),
         BuyAt(ns(62, 1.333), 1, Face::W, Wares::Kit(Item::Medkit)),
-        // The bunker's: the armory (the LMG), the ops room, the bunk room.
-        BuyAt(ew(29, 54.5), -1, Face::N, Wares::Weapon(Item::Lmg)),
+        // The bunker's: the armory (the AK), the ops room, the bunk room.
+        BuyAt(ew(29, 54.5), -1, Face::N, Wares::Weapon(Item::Ak47)),
         BuyAt(ew(20, 62.0), -1, Face::N, Wares::Kit(Item::Medkit)),
         BuyAt(ew(-2, 54.5), -1, Face::S, Wares::Kit(Item::Bandage)),
         // And in the ops room, between its doors: the Amplifier.
@@ -141,13 +140,13 @@ pub const RELAY_STATION: Layout = Layout {
         BuyAt(ew(29, 13.0), 0, Face::N, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(-36, -0.5), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
         BuyAt(ns(48, 23.75), 0, Face::W, Wares::Kit(Item::ArmorPlate)),
-        // More guns: a .45 in the alley by the barracks, a Mini Uzi on the
-        // barracks' wall on the east court, an AK in the generator shed.
-        // And what's thrown: Molotovs in the motor pool's workshop, pipe
-        // bombs in the barracks' kitchen.
+        // The cheap ones again, so one's always near: a .45 in the alley by
+        // the barracks, a Mini Uzi on the barracks' wall on the east court,
+        // an SMG in the generator shed. And what's thrown: Molotovs in the
+        // motor pool's workshop, pipe bombs in the barracks' kitchen.
         BuyAt(ns(18, -20.5), 0, Face::W, Wares::Weapon(Item::Pistol45)),
         BuyAt(ns(54, -19.0), 0, Face::E, Wares::Weapon(Item::MiniUzi)),
-        BuyAt(ns(-24, -24.0), 0, Face::W, Wares::Weapon(Item::Ak47)),
+        BuyAt(ns(-24, -24.0), 0, Face::W, Wares::Weapon(Item::Smg)),
         BuyAt(ew(29, -59.0), 0, Face::N, Wares::Kit(Item::Molotov)),
         BuyAt(ew(-20, 42.0), 0, Face::N, Wares::Kit(Item::PipeBomb)),
         // The med stations, one a stim: Lazarus in the control room, Rush

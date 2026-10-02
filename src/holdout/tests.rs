@@ -242,20 +242,36 @@ fn a_gun_off_the_wall_comes_loaded_with_its_rounds_and_more_rounds_cost_half() {
 }
 
 #[test]
-fn the_heavy_weapons_are_on_the_walls_with_fewer_belts_and_tanks_to_carry() {
-    let (mut world, mut h) = world_of(built());
-    for (kind, cost, carried) in [(Kind::Lmg, 3000, 400), (Kind::Flamethrower, 2500, 800)] {
-        let i = h.arena.buys.iter().position(|b| b.wares == Wares::Weapon(kind)).unwrap_or_else(|| panic!("no {kind:?} on a wall"));
-        assert_eq!(price(kind), cost);
+fn the_heavy_weapons_are_on_no_wall_and_come_with_fewer_belts_and_tanks_to_carry() {
+    let (_, mut h) = world_of(built());
+    for (kind, carried) in [(Kind::Lmg, 400), (Kind::Flamethrower, 800), (Kind::Rpk, 300)] {
+        assert!(!h.arena.buys.iter().any(|b| b.wares == Wares::Weapon(kind)), "{kind:?} is a mystery drop's");
+        // Taken from one, it's in hand with what's a full carry of its.
         let mut bag = Holdout::loadout();
-        h.wallets[0].points = cost;
-        let (_, _, took) = h.press(&mut world, 0, Aimed::Buy(i), &mut bag, None);
-        assert_eq!((took, h.wallets[0].points), (Some(Slot::Primary), 0), "{kind:?}");
+        assert_eq!(h.take(0, &mut bag, Stack::one(kind)), Some(Slot::Primary), "{kind:?}");
         let (ammo, most) = spare(kind, 0).unwrap();
         assert_eq!((most, bag.count(ammo)), (carried, carried), "{kind:?}");
     }
-    assert_eq!(h.arena.zones[h.arena.buys.iter().find(|b| b.wares == Wares::Weapon(Kind::Lmg)).unwrap().zone], "THE BUNKER");
-    assert_eq!(h.arena.zones[h.arena.buys.iter().find(|b| b.wares == Wares::Weapon(Kind::Flamethrower)).unwrap().zone], "MOTOR POOL");
+}
+
+#[test]
+fn the_cheap_guns_are_by_the_start_and_twice_over_and_the_dear_ones_deep_in_once() {
+    let (_, h) = world_of(built());
+    let zones = |kind: Kind| h.arena.buys.iter().filter(|b| b.wares == Wares::Weapon(kind)).map(|b| h.arena.zones[b.zone]).collect::<Vec<_>>();
+    assert_eq!(zones(Kind::Pistol), ["CONTROL ROOM"]);
+    assert_eq!(zones(Kind::Pistol45), ["CONTROL ROOM", "THE YARD"]);
+    assert_eq!(zones(Kind::MiniUzi), ["EQUIPMENT ROOM", "EAST COURT"]);
+    assert_eq!(zones(Kind::Shotgun), ["THE YARD", "MOTOR POOL"]);
+    assert_eq!(zones(Kind::Smg), ["STATION HOUSE", "GENERATOR PEN"]);
+    assert_eq!(zones(Kind::Rifle), ["MOTOR POOL"]);
+    assert_eq!(zones(Kind::AssaultRifle), ["BROADCAST FLOOR"]);
+    assert_eq!(zones(Kind::Ak47), ["THE BUNKER"]);
+    // Where a holdout starts there are the two pistols, and no other gun;
+    // and the dearest of them all is the furthest in.
+    let start: Vec<Kind> = h.arena.buys.iter().filter(|b| h.arena.zones[b.zone] == "CONTROL ROOM").filter_map(|b| if let Wares::Weapon(k) = b.wares { Some(k) } else { None }).collect();
+    assert_eq!(start, [Kind::Pistol45, Kind::Pistol]);
+    let dearest = h.arena.buys.iter().filter_map(|b| if let Wares::Weapon(k) = b.wares { Some(k) } else { None }).max_by_key(|k| price(*k));
+    assert_eq!(dearest, Some(Kind::Ak47));
 }
 
 #[test]
