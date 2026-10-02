@@ -37,6 +37,8 @@ const PER_HEADSHOT_KILL: u32 = 90;
 const PER_MELEE_KILL: u32 = 120;
 const PER_BOARD: u32 = 10;
 const PAID_BOARDS: u32 = 20;
+/// Points for killing a Juggernaut: whoever killed it, and everyone else.
+const PER_JUGGERNAUT: (u32, u32) = (1500, 500);
 /// Boards across each window, and seconds to nail one back.
 pub const BOARDS: u8 = 6;
 const NAIL_EVERY: f64 = 0.5;
@@ -204,21 +206,29 @@ impl Holdout {
 
     /// A step of the holdout, the players' feet at `feet`: the rounds on
     /// (the paid boards counted afresh each round), the points flown off.
-    /// What came of it: a round begun, or cleared.
-    pub fn update(&mut self, world: &mut World, feet: &[Vec3], dt: f64) -> Option<rounds::Event> {
+    /// What came of it: a round begun or cleared, a Juggernaut killed
+    /// (which pays everyone, whoever killed it the most).
+    pub fn update(&mut self, world: &mut World, feet: &[Vec3], dt: f64) -> Vec<rounds::Event> {
         for w in &mut self.wallets {
             for p in &mut w.pops {
                 p.1 += dt;
             }
             w.pops.retain(|p| p.1 < hud::POP_FOR);
         }
-        let event = self.rounds.update(world, &self.arena, &self.open, feet, dt);
-        if let Some(rounds::Event::Began(_)) = event {
+        let mut events = Vec::new();
+        for by in self.rounds.fallen(world) {
+            for (seat, w) in self.wallets.iter_mut().enumerate() {
+                w.earn(if by == Some(seat) { PER_JUGGERNAUT.0 } else { PER_JUGGERNAUT.1 });
+            }
+            events.push(rounds::Event::Felled(by));
+        }
+        events.extend(self.rounds.update(world, &self.arena, &self.open, feet, dt));
+        if events.iter().any(|e| matches!(e, rounds::Event::Began(_))) {
             for w in &mut self.wallets {
                 w.nailed = 0;
             }
         }
-        event
+        events
     }
 
     /// Every gun in `bag`'s slots, its rounds topped up to a full carry
@@ -287,10 +297,12 @@ impl Holdout {
     /// weapon just bought (to take it up).
     pub fn press(&mut self, world: &mut World, seat: usize, aimed: Aimed, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
         let Some(points) = self.wallets.get(seat).map(|w| w.points) else { return (None, None, None) };
+        // (The dev's: it all costs nothing.)
+        let free = world.get_resource::<crate::dev::Cheats>().is_some_and(|c| c.free);
         match aimed {
-            Aimed::Buy(i) => self.buy(i, seat, bag),
+            Aimed::Buy(i) => self.buy(i, seat, bag, free),
             Aimed::Door(i) => {
-                let cost = self.arena.doors[i].cost;
+                let cost = if free { 0 } else { self.arena.doors[i].cost };
                 if points < cost {
                     return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
                 }
@@ -302,7 +314,7 @@ impl Holdout {
         }
     }
 
-    fn buy(&mut self, i: usize, seat: usize, bag: &mut Bag) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
+    fn buy(&mut self, i: usize, seat: usize, bag: &mut Bag, free: bool) -> (Option<Sfx>, Option<&'static str>, Option<Slot>) {
         let (kind, cost, ammo_only) = match self.arena.buys[i].wares {
             Wares::Weapon(kind) if has(bag, kind) => match spare(kind) {
                 Some(_) => (kind, price(kind) / 2, true),
@@ -310,6 +322,7 @@ impl Holdout {
             },
             Wares::Weapon(kind) | Wares::Kit(kind) => (kind, price(kind), false),
         };
+        let cost = if free { 0 } else { cost };
         if self.wallets[seat].points < cost {
             return (Some(Sfx::DryFire), Some("NOT ENOUGH POINTS"), None);
         }
@@ -348,6 +361,22 @@ impl Holdout {
         let (a, b) = door.zones;
         self.open[a] = true;
         self.open[b] = true;
+    }
+
+    /// (The dev's.) Every door open.
+    pub fn open_all(&mut self, world: &mut World) {
+        for i in (0..self.arena.doors.len()).filter(|&i| !self.opened[i]).collect::<Vec<_>>() {
+            self.open_door(world, i);
+        }
+    }
+
+    /// (The dev's.) Every window boarded up again.
+    pub fn board_up(world: &mut World) {
+        if let Some(mut barriers) = world.get_resource_mut::<Barriers>() {
+            for b in &mut barriers.0 {
+                b.boards = BOARDS;
+            }
+        }
     }
 
     /// Player `seat`'s E held (or not) at `aimed`, for `dt`: nailing a

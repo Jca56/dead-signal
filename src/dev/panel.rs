@@ -20,18 +20,20 @@ enum Tab {
     Items,
     Dead,
     Cheats,
+    Holdout,
     World,
     Profile,
 }
 
 impl Tab {
-    const ALL: [Tab; 5] = [Tab::Items, Tab::Dead, Tab::Cheats, Tab::World, Tab::Profile];
+    const ALL: [Tab; 6] = [Tab::Items, Tab::Dead, Tab::Cheats, Tab::Holdout, Tab::World, Tab::Profile];
 
     fn label(self) -> &'static str {
         match self {
             Tab::Items => "ITEMS",
             Tab::Dead => "ZOMBIES",
             Tab::Cheats => "CHEATS",
+            Tab::Holdout => "HOLDOUT",
             Tab::World => "WORLD",
             Tab::Profile => "PROFILE",
         }
@@ -61,8 +63,10 @@ pub struct Asked {
 
 impl DevPanel {
     /// A frame of it: `cheats` switched here and there, the places on the
-    /// map (to go to) and whether there's a run to do things in.
-    pub fn frame(&mut self, ui: &mut Ui, icons: &Icons, cheats: &mut Cheats, places: &[String], in_run: bool, active: bool) -> Asked {
+    /// map (to go to) and whether there's a run to do things in (and
+    /// whether it's a holdout).
+    #[allow(clippy::too_many_arguments)]
+    pub fn frame(&mut self, ui: &mut Ui, icons: &Icons, cheats: &mut Cheats, places: &[String], in_run: bool, in_holdout: bool, active: bool) -> Asked {
         let s = ui.m.scale;
         let screen = ui.clip();
         ui.draw.rect(screen, Color::rgba(0.02, 0.02, 0.02, 0.8));
@@ -121,16 +125,6 @@ impl DevPanel {
                 if pressed(ui, "kill near", r, "KILL ALL WITHIN 60 M", &button, true, true, active) {
                     asked.action = Some(DevAction::KillNear(60.0));
                 }
-                // A holdout's rounds: this one over, and what's next.
-                let mut x = area.min.x;
-                for (label, action) in [("HOUNDS NEXT", DevAction::Round(0, Some(Wave::Hounds))), ("JUGGERNAUT NEXT", DevAction::Round(0, Some(Wave::Dead { boss: 1 }))), ("SKIP 5 ROUNDS", DevAction::Round(5, None))] {
-                    let bw = ui.measure(label, &button) + 40.0 * s;
-                    let r = Rect::from_min_size(Vec2::new(x, y + 114.0 * s), Vec2::new(bw, 64.0 * s));
-                    if pressed(ui, label, r, label, &button, true, false, active) {
-                        asked.action = Some(action);
-                    }
-                    x += bw + 20.0 * s;
-                }
             }
             Tab::Cheats => {
                 let mut y = area.min.y;
@@ -147,6 +141,43 @@ impl DevPanel {
                     ui.text_at(label, &button, Vec2::new(r.max.x + 30.0 * s, y + 4.0 * s), area.width(), style::BONE);
                     ui.text_at(hint, &note, Vec2::new(r.max.x + 30.0 * s, y + 36.0 * s), area.width(), style::DIM);
                     y += 92.0 * s;
+                }
+            }
+            Tab::Holdout if !in_holdout => {
+                ui.text_at("Only in a HOLDOUT run: start one from the title.", &note, area.min, area.width(), style::DIM);
+            }
+            Tab::Holdout => {
+                let mut y = area.min.y;
+                let r = Rect::from_min_size(Vec2::new(area.min.x, y), Vec2::new(180.0 * s, 64.0 * s));
+                if pressed(ui, "FREE BUYS", r, if cheats.free { "ON" } else { "OFF" }, &button, true, cheats.free, active) {
+                    cheats.free = !cheats.free;
+                }
+                ui.text_at("FREE BUYS", &button, Vec2::new(r.max.x + 30.0 * s, y + 4.0 * s), area.width(), style::BONE);
+                ui.text_at("What's on the walls and the doors cost nothing", &note, Vec2::new(r.max.x + 30.0 * s, y + 36.0 * s), area.width(), style::DIM);
+                y += 112.0 * s;
+                // What's had: points, the doors, rounds, the boards. Then the
+                // rounds: this one over (a Juggernaut stays), and what's next.
+                let rows: [(&str, &[(&str, DevAction)]); 2] = [
+                    ("TO HAND", &[("+ 5,000 POINTS", DevAction::Points(5000)), ("OPEN ALL DOORS", DevAction::OpenDoors), ("MAX AMMO", DevAction::MaxAmmo), ("BOARD UP EVERY WINDOW", DevAction::BoardUp)]),
+                    ("ROUNDS", &[("END THIS ROUND", DevAction::Round(0, None)), ("HOUNDS NEXT", DevAction::Round(0, Some(Wave::Hounds))), ("JUGGERNAUT NEXT", DevAction::Round(0, Some(Wave::Dead { boss: 1 }))), ("SKIP 5 ROUNDS", DevAction::Round(5, None))]),
+                ];
+                for (name, buttons) in rows {
+                    ui.text_at(name, &note, Vec2::new(area.min.x, y), area.width(), style::DIM);
+                    y += f64::from(note.line_height()) + 10.0 * s;
+                    let mut x = area.min.x;
+                    for &(label, action) in buttons {
+                        let bw = ui.measure(label, &button) + 40.0 * s;
+                        if x + bw > area.max.x {
+                            x = area.min.x;
+                            y += 76.0 * s;
+                        }
+                        let r = Rect::from_min_size(Vec2::new(x, y), Vec2::new(bw, 64.0 * s));
+                        if pressed(ui, label, r, label, &button, true, false, active) {
+                            asked.action = Some(action);
+                        }
+                        x += bw + 20.0 * s;
+                    }
+                    y += 100.0 * s;
                 }
             }
             Tab::World if !in_run => run_only(ui),

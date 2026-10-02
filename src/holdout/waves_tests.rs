@@ -2,7 +2,8 @@
 //! the rifts open inside it, near the player and a way to them; the hounds
 //! come; and clearing it fills the guns. A late round of the dead: its
 //! Rippers get in and to the player, and its Juggernaut by a hole in the
-//! wall.
+//! wall; and that Juggernaut stays as the rounds go on, till it's killed
+//! (which pays). And what the dev can do to a holdout.
 
 use lntrn_math::Vec3;
 
@@ -125,4 +126,56 @@ fn a_late_round_brings_rippers_to_the_player_and_a_juggernaut_in_by_a_hole_in_th
     let by = boss_by.expect("a Juggernaut came") as usize;
     assert_eq!(h.arena.windows[by].width, widest, "by the widest way in");
     assert!(boss_in, "it never got in");
+}
+
+#[test]
+fn a_juggernaut_stays_as_the_rounds_go_on_and_killing_it_pays_and_fills_the_guns() {
+    let (mut world, mut h) = world_of(built());
+    let at = feet(&mut world);
+    h.rounds.round = 11;
+    h.rounds.next = Wave::Dead { boss: 1 };
+    let mut events = Vec::new();
+    // Everything else shot as soon as it comes: the round ends without it.
+    for _ in 0..(70.0 / STEP) as usize {
+        events.extend(h.update(&mut world, &[at], STEP));
+        for mut z in world.query::<&mut Zombie>().iter_mut(&mut world).filter(|z| z.kind != Dead::Juggernaut) {
+            z.hurt(1e9, false, false, at);
+        }
+    }
+    // (The round after is the hounds', long due: it's there for that too.)
+    assert_eq!(events, vec![Event::Began(Wave::Dead { boss: 1 }), Event::Cleared(Wave::Dead { boss: 1 }), Event::Began(Wave::Hounds)]);
+    assert_eq!(h.rounds.round, 13);
+    let (boss, hp) = world.query::<(Entity, &Zombie)>().iter(&world).find(|(_, z)| z.kind == Dead::Juggernaut && !z.dead()).map(|(e, z)| (e, z.hp)).expect("still up");
+    assert_eq!(hp, rounds::toughness(12) * 15.0, "as tough as the round it came with");
+    // Killed at last: whoever did it is paid, and it's told of.
+    let before = h.wallets[0].points;
+    world.get_mut::<Zombie>(boss).unwrap().by = Some(0);
+    world.get_mut::<Zombie>(boss).unwrap().hurt(1e9, false, false, at);
+    assert_eq!(h.update(&mut world, &[at], STEP), vec![Event::Felled(Some(0))]);
+    assert_eq!(h.wallets[0].points, before + 1500);
+    assert!(h.update(&mut world, &[at], STEP).is_empty(), "once");
+}
+
+#[test]
+fn the_devs_holdout_cheats_open_the_doors_board_the_windows_and_make_it_all_free() {
+    let (mut world, mut h) = world_of(built());
+    world.resource_mut::<Barriers>().0[0].boards = 0;
+    Holdout::board_up(&mut world);
+    assert!(world.resource::<Barriers>().0.iter().all(|b| b.boards == BOARDS));
+    // Free: a door and a gun for nothing.
+    world.insert_resource(crate::dev::Cheats { free: true, ..Default::default() });
+    let mut bag = Holdout::loadout();
+    h.wallets[0].points = 0;
+    let gun = h.arena.buys.iter().position(|b| matches!(b.wares, Wares::Weapon(k) if k != Kind::Pistol)).unwrap();
+    let (_, said, took) = h.press(&mut world, 0, Aimed::Buy(gun), &mut bag);
+    assert!(said.is_none() && took.is_some() && h.wallets[0].points == 0, "{said:?}");
+    h.press(&mut world, 0, Aimed::Door(0), &mut bag);
+    assert!(h.door_open(0));
+    world.insert_resource(crate::dev::Cheats::default());
+    assert_eq!(h.press(&mut world, 0, Aimed::Door(1), &mut bag).1, Some("NOT ENOUGH POINTS"));
+    h.open_all(&mut world);
+    assert!((0..h.arena.doors.len()).all(|i| h.door_open(i)));
+    let start = feet(&mut world);
+    let nav = world.resource::<Nav>().0.as_ref().unwrap();
+    assert!(h.arena.windows.iter().all(|w| nav.connects(start, w.inside)), "all of it reached");
 }

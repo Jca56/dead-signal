@@ -4,7 +4,8 @@
 //! player in turn), never too many up at once. Later rounds bring Rippers
 //! and Spitters among them; now and then a Juggernaut comes too; and
 //! every few rounds isn't the dead at all but Hellhounds, out of the
-//! static (`zombie/rift.rs`). A round is over when all of it is dead; a
+//! static (`zombie/rift.rs`). A round is over when all of it is dead but
+//! its Juggernaut, which stays, round after round, till it's killed; a
 //! short breather (the radio saying what's next), and the next begins.
 
 use bevy_ecs::prelude::*;
@@ -66,6 +67,8 @@ pub enum Event {
     Began(Wave),
     /// The last of a round is dead (and the next is known: `Rounds::next`).
     Cleared(Wave),
+    /// A Juggernaut's been killed: whose kill it was (their seat).
+    Felled(Option<usize>),
 }
 
 /// How many of the dead a round brings.
@@ -106,7 +109,7 @@ pub fn hardiness(kind: Kind) -> f64 {
         Kind::Shambler => 1.0,
         Kind::Ripper => 0.5,
         Kind::Spitter => 0.75,
-        Kind::Juggernaut => 4.0,
+        Kind::Juggernaut => 15.0,
         Kind::Hound => 0.4,
     }
 }
@@ -180,13 +183,15 @@ pub struct Rounds {
     pub gloom: f64,
     /// What the next round's been told to be (the dev's doing).
     forced: Option<Wave>,
+    /// The Juggernauts brought in and not yet killed.
+    bosses: Vec<Entity>,
 }
 
 impl Rounds {
     pub fn new(seed: u32, players: usize) -> Self {
         let mut dice = Dice(seed | 1);
         let hounds_at = HOUNDS_FROM + dice.next() % 2;
-        Self { round: 0, wave: Wave::Dead { boss: 0 }, next: Wave::Dead { boss: 0 }, queue: Vec::new(), between: FIRST_WAIT, begun: 0.0, spawn_in: 0.0, dice, players, turn: 0, hounds_at, packs: 0, boss_at: BOSS_FROM, gloom: 0.0, forced: None }
+        Self { round: 0, wave: Wave::Dead { boss: 0 }, next: Wave::Dead { boss: 0 }, queue: Vec::new(), between: FIRST_WAIT, begun: 0.0, spawn_in: 0.0, dice, players, turn: 0, hounds_at, packs: 0, boss_at: BOSS_FROM, gloom: 0.0, forced: None, bosses: Vec::new() }
     }
 
     /// Whether it's a breather between rounds.
@@ -217,6 +222,19 @@ impl Rounds {
             Some(wave) if self.resting() => self.next = wave,
             wave => self.forced = wave,
         }
+    }
+
+    /// The Juggernauts killed since last asked: each, whose kill it was.
+    pub fn fallen(&mut self, world: &World) -> Vec<Option<usize>> {
+        let mut fallen = Vec::new();
+        self.bosses.retain(|&e| match world.get::<Zombie>(e) {
+            Some(z) if !z.dead() => true,
+            gone => {
+                fallen.push(gone.and_then(|z| z.by));
+                false
+            }
+        });
+        fallen
     }
 
     /// What `round` is to be: hounds, when their round's come; else the
@@ -272,7 +290,9 @@ impl Rounds {
             return Some(Event::Began(self.wave));
         }
         self.begun += dt;
-        let up = zombie::alive(world) + rift::pending(world);
+        // (A Juggernaut still up is no part of the count: it stays, and
+        // the rounds go on round it.)
+        let up = zombie::alive(world) - zombie::alive_of(world, Kind::Juggernaut) + rift::pending(world);
         if self.queue.is_empty() {
             if up == 0 {
                 self.between = BREATHER;
@@ -335,6 +355,9 @@ impl Rounds {
         let (roll, pick) = (self.dice.unit(), self.dice.unit());
         if let Some(mut z) = world.get_mut::<Zombie>(e) {
             ready(&mut z, self.round, i as u8, pace(self.round, roll, pick));
+        }
+        if kind == Kind::Juggernaut {
+            self.bosses.push(e);
         }
         true
     }

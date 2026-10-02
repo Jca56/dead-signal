@@ -272,6 +272,11 @@ pub fn alive(world: &mut World) -> usize {
     world.query::<&Zombie>().iter(world).filter(|z| !z.dead()).count()
 }
 
+/// How many of `kind` are up and about.
+pub fn alive_of(world: &mut World, kind: Kind) -> usize {
+    world.query::<&Zombie>().iter(world).filter(|z| !z.dead() && z.kind == kind).count()
+}
+
 /// The nearest Shambler along a ray within `max`: which, how far, the head.
 #[cfg(test)]
 pub fn raycast(world: &mut World, from: Vec3, dir: Vec3, max: f64) -> Option<(Entity, f64, bool)> {

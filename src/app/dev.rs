@@ -41,7 +41,8 @@ impl DeadSignal {
         let places: Vec<String> = self.map.as_ref().map_or_else(Vec::new, |m| m.sites.iter().map(|s| s.kind.label().to_string()).collect());
         let mut cheats = *self.game.world.resource::<Cheats>();
         let in_run = self.screen == Screen::Run;
-        let asked = self.dev.frame(ui, &self.icons, &mut cheats, &places, in_run, active);
+        let in_holdout = in_run && self.run.holdout.is_some();
+        let asked = self.dev.frame(ui, &self.icons, &mut cheats, &places, in_run, in_holdout, active);
         *self.game.world.resource_mut::<Cheats>() = cheats;
         if let Some(action) = asked.action {
             self.dev_do(action);
@@ -104,6 +105,28 @@ impl DeadSignal {
                 }
             }
             DevAction::Round(skip, wave) => self.run.dev_round(&mut self.game, wave, skip),
+            DevAction::Points(n) => {
+                for w in self.run.holdout.iter_mut().flat_map(|h| &mut h.wallets) {
+                    w.points += n;
+                }
+            }
+            DevAction::OpenDoors => {
+                if let Some(h) = &mut self.run.holdout {
+                    h.open_all(&mut self.game.world);
+                }
+            }
+            DevAction::MaxAmmo => {
+                if self.run.holdout.is_some() {
+                    for seat in &mut self.run.seats {
+                        crate::holdout::Holdout::max_ammo(&mut seat.bag);
+                    }
+                }
+            }
+            DevAction::BoardUp => {
+                if self.run.holdout.is_some() {
+                    crate::holdout::Holdout::board_up(&mut self.game.world);
+                }
+            }
             DevAction::Teleport(i) => {
                 let Some(site) = self.map.as_ref().and_then(|m| m.sites.get(i)) else { return };
                 let middle = site.plot.world(Vec2::ZERO);

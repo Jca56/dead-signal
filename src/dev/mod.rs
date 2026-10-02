@@ -2,7 +2,8 @@
 //! with developer mode on (Settings → GAME), so no real save is ever
 //! touched. F1 opens the panel (`panel.rs`): anything into the bag, any of
 //! the dead in front of you, cheats, a trip anywhere on the map, money and
-//! levels; and an on-screen readout of what's going on. The panel only
+//! levels; a holdout's points, doors, boards and rounds; and an on-screen
+//! readout of what's going on. The panel only
 //! says what's wanted; the app does it (`app/dev.rs`).
 
 pub mod panel;
@@ -28,6 +29,8 @@ pub struct Cheats {
     pub ignored: bool,
     /// Any hit on one of the dead kills it.
     pub one_shot: bool,
+    /// In a holdout, what's on the walls and the doors cost nothing.
+    pub free: bool,
 }
 
 /// What's wanted of the world, from the panel.
@@ -43,6 +46,12 @@ pub enum DevAction {
     /// A holdout's round over: so many rounds passed over, and the next
     /// one hounds, or with a Juggernaut (or as it would have been).
     Round(u32, Option<Wave>),
+    /// A holdout's: this many points to everyone; every door open; every
+    /// gun's spare rounds full; every window boarded up again.
+    Points(u32),
+    OpenDoors,
+    MaxAmmo,
+    BoardUp,
     /// To the middle of the place with this number.
     Teleport(usize),
     RevealExits,

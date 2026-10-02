@@ -91,6 +91,8 @@
   - [ ] Playtest, and what it turns up.
 - [ ] The special dead in HOLDOUT
   - [x] Rippers (from round 6) and Spitters (from round 9) among a round's dead; a Juggernaut with round 10 and every 5 or so after; the radio warns of each in the breather.
+  - [x] A Juggernaut stays as the rounds go on, till it's whittled down: points and full ammo for killing it.
+  - [x] The dev's HOLDOUT tab: free buys, points, every door, max ammo, the boards back up, and the rounds (end one, hounds next, a Juggernaut next, skip five).
   - [x] The Hellhound: a burning dog on a rig of its own, out of a rift of static. Its bite sets you alight, fire's nothing to it, and it leaves a fire where it falls.
   - [x] Hound rounds (5 or 6, then every 4 or 5): the air goes bad, hounds only, and full ammo for clearing it.
   - [ ] Playtest, and what it turns up.

@@ -35,11 +35,12 @@ impl Run {
         self.holdout = Some(holdout);
     }
 
-    /// (The dev's.) Everything up in a holdout dead and this round over,
+    /// (The dev's.) Everything up in a holdout dead (but a Juggernaut,
+    /// which stays as it would) and this round over,
     /// `skip` rounds passed over, and the next to be `wave` (if any's said).
     pub fn dev_round(&mut self, game: &mut Game, wave: Option<Wave>, skip: u32) {
         let Some(h) = &mut self.holdout else { return };
-        for mut z in game.world.query::<&mut crate::zombie::brain::Zombie>().iter_mut(&mut game.world) {
+        for mut z in game.world.query::<&mut crate::zombie::brain::Zombie>().iter_mut(&mut game.world).filter(|z| z.kind != crate::zombie::kind::Kind::Juggernaut) {
             z.hurt(f64::INFINITY, false, false, Vec3::ZERO);
         }
         crate::zombie::rift::clear(&mut game.world);
@@ -61,31 +62,36 @@ impl Run {
             h.score(seat.n, &seat.stats);
             seat.stats.biggest_horde = seat.stats.biggest_horde.max(alive);
         }
-        match h.update(&mut game.world, &feet, dt) {
-            // A new round: the radio crackles (and the hounds are heard).
-            Some(Event::Began(wave)) => {
-                combat.play(Sfx::Static, 0.9);
-                if wave == Wave::Hounds {
-                    combat.play(Sfx::Howl, 0.9);
-                }
-            }
-            Some(Event::Cleared(wave)) => {
-                // The last hound dead: everyone's guns are full again.
-                if wave == Wave::Hounds {
-                    combat.play(Sfx::Pickup, 1.0);
-                    for seat in self.seats.iter_mut().filter(|s| !s.out) {
-                        Holdout::max_ammo(&mut seat.bag);
-                        seat.note = Some(("MAX AMMO", NOTE_FOR));
+        let mut refill = false;
+        for event in h.update(&mut game.world, &feet, dt) {
+            match event {
+                // A new round: the radio crackles (and the hounds are heard).
+                Event::Began(wave) => {
+                    combat.play(Sfx::Static, 0.9);
+                    if wave == Wave::Hounds {
+                        combat.play(Sfx::Howl, 0.9);
                     }
                 }
-                // What's next is heard, far off, before the radio says it.
-                match h.rounds.next {
-                    Wave::Hounds => combat.play(Sfx::Howl, 0.5),
-                    Wave::Dead { boss: 1.. } => combat.play(Sfx::Bellow, 0.4),
-                    Wave::Dead { .. } => {}
+                Event::Cleared(wave) => {
+                    // The last hound dead: everyone's guns are full again.
+                    refill |= wave == Wave::Hounds;
+                    // What's next is heard, far off, before the radio says it.
+                    match h.rounds.next {
+                        Wave::Hounds => combat.play(Sfx::Howl, 0.5),
+                        Wave::Dead { boss: 1.. } => combat.play(Sfx::Bellow, 0.4),
+                        Wave::Dead { .. } => {}
+                    }
                 }
+                // A Juggernaut down at last: the same, with its points.
+                Event::Felled(_) => refill = true,
             }
-            None => {}
+        }
+        if refill {
+            combat.play(Sfx::Pickup, 1.0);
+            for seat in self.seats.iter_mut().filter(|s| !s.out) {
+                Holdout::max_ammo(&mut seat.bag);
+                seat.note = Some(("MAX AMMO", NOTE_FOR));
+            }
         }
         crate::holdout::props::sync(&mut game.world, h);
     }
